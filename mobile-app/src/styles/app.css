@@ -1,0 +1,246 @@
+/* ===========================================
+   UI INDUSTRIAL — ALTOS CONTRASTES
+   formulario táctil estilo app nativa
+=========================================== */
+
+:root {
+  --bg: #0d1117;
+  --bg2: #161b22;
+  --text: #e6edf3;
+  --primary: #2f81f7;
+  --danger: #ff4d4d;
+  --ok: #4caf50;
+
+  --radius: 12px;
+  --pad: 14px;
+  --input-h: 46px;
+
+  font-size: 16px;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: "Inter", sans-serif;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Contenedor principal */
+.page {
+  padding: 18px;
+  max-width: 600px;
+  margin: 0 auto;
+  animation: fadeIn 0.25s ease;
+}
+
+/* Títulos */
+.titulo {
+  font-size: 1.6rem;
+  font-weight: 700;
+  margin-bottom: 20px;
+}
+
+/* Subtítulos */
+.subtitulo {
+  margin-top: 26px;
+  font-size: 1.2rem;
+  font-weight: 600;
+}
+
+/* Inputs */
+input, select, textarea {
+  width: 100%;
+  background: var(--bg2);
+  border: 1px solid #30363d;
+  color: var(--text);
+  border-radius: var(--radius);
+  padding: var(--pad);
+  height: var(--input-h);
+  font-size: 1rem;
+  margin-bottom: 12px;
+  transition: border 0.2s;
+}
+
+input:focus, textarea:focus, select:focus {
+  border-color: var(--primary);
+  outline: none;
+}
+
+/* Textarea mayor */
+textarea {
+  height: auto;
+  line-height: 1.4rem;
+  min-height: 90px;
+}
+
+/* Botones */
+button {
+  width: 100%;
+  padding: 14px;
+  background: var(--primary);
+  color: white;
+  font-size: 1.05rem;
+  border-radius: var(--radius);
+  border: none;
+  cursor: pointer;
+  margin-top: 10px;
+  transition: 0.15s;
+}
+
+button:active {
+  transform: scale(0.97);
+}
+
+.btn-add {
+  background: #238636;
+}
+
+.btn-x {
+  background: var(--danger);
+  width: auto;
+  padding: 8px 10px;
+  font-size: 0.9rem;
+}
+
+.btn-enviar {
+  background: var(--primary);
+  margin-top: 20px;
+}
+
+/* Filas de técnicos / materiales */
+.fila-tecnico,
+.fila-mat {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+/* Animación general */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+
+/* ==========================================
+   NAVBAR MÓVIL INDUSTRIAL (estilo app nativa)
+========================================== */
+
+.navbar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 65px;
+  background: #161b22;
+  display: flex;
+  justify-content: space-around;
+  align-items: center;
+  border-top: 1px solid #30363d;
+  z-index: 100;
+}
+
+.navbar button {
+  background: none;
+  border: none;
+  color: #8b949e;
+  font-size: 1.8rem;
+  flex: 1;
+  height: 100%;
+  cursor: pointer;
+  transition: 0.15s;
+}
+
+.navbar button.active {
+  color: white;
+  transform: scale(1.15);
+}
+
+.view {
+  padding-bottom: 80px; /* espacio para navbar */
+}
+
+/* ==========================================================
+   DASHBOARD
+========================================================== */
+
+.filtros-box {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 15px;
+}
+
+.filtros-box input {
+    width: 140px;
+}
+
+.tabla-ot {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.fila-ot {
+    background: #1d242d;
+    border: 1px solid #2e353e;
+    padding: 12px;
+    border-radius: 8px;
+}
+
+.fila-ot b {
+    color: #60a5fa;
+}
+
+.ot-tec {
+    color: #a5f3fc;
+}
+
+.ot-veh {
+    color: #fcd34d;
+}
+
+.sin-datos {
+    text-align: center;
+    color: #aaa;
+    padding: 20px 0;
+}
+
+/* Layout general */
+.layout {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+}
+
+/* Área de contenido */
+.content {
+    flex: 1;
+    overflow-y: auto;
+    padding-bottom: 70px; /* espacio para la barra */
+}
+
+/* Barra inferior */
+.nav-bottom {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 60px;
+    background: #1e1e1e;
+    border-top: 1px solid #333;
+    display: flex;
+    justify-content: space-around;
+    align-items: center;
+}
+
+.nav-bottom button {
+    border: none;
+    background: none;
+    color: #bbb;
+    font-size: 26px;
+}
+
+.nav-bottom .active {
+    color: #4fc3f7;
+}

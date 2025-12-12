@@ -1,0 +1,86 @@
+/* =======================================
+   SmartSelect — UI táctil industrial
+======================================= */
+
+.smartselect {
+  margin-bottom: 14px;
+}
+
+.smartselect-display {
+  background: var(--bg2);
+  border: 1px solid #30363d;
+  padding: var(--pad);
+  border-radius: var(--radius);
+  height: var(--input-h);
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  color: var(--text);
+}
+
+.smartselect-panel {
+  position: absolute;
+  background: var(--bg2);
+  border: 1px solid #30363d;
+  border-radius: var(--radius);
+  margin-top: 6px;
+  width: calc(100% - 6px);
+  padding: 10px;
+  z-index: 50;
+  max-height: 270px;
+  overflow-y: auto;
+  animation: fadeIn 0.15s ease;
+}
+
+.smartselect-search {
+  width: 100%;
+  background: #0f141a;
+  border: 1px solid #30363d;
+  color: var(--text);
+  padding: 10px;
+  margin-bottom: 10px;
+  border-radius: var(--radius);
+}
+
+.smartselect-group {
+  margin-bottom: 8px;
+}
+
+.smartselect-title {
+  color: #9aa0a6;
+  font-size: 0.8rem;
+  margin-bottom: 8px;
+}
+
+.smartselect-item {
+  padding: 12px;
+  border-radius: var(--radius);
+  background: #1d242d;
+  margin-bottom: 6px;
+  cursor: pointer;
+  transition: 0.1s;
+}
+
+.smartselect-item:hover {
+  background: #22303c;
+}
+
+.smartselect-item.fav {
+  background: #2b3a47;
+}
+
+.smartselect-item.fav:hover {
+  background: #324351;
+}
+
+.smartselect-empty {
+  color: #7d8590;
+  padding: 14px;
+  text-align: center;
+  font-size: 0.9rem;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: scale(0.98); }
+  to   { opacity: 1; transform: scale(1); }
+}
