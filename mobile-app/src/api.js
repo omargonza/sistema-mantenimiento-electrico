@@ -2,13 +2,18 @@
 //  CONFIGURACIÓN DE API (DEV/PROD) — ROBUSTA Y AUTOMÁTICA
 // ==========================================================
 
-const isProd = import.meta.env.MODE === "production";
+const mode = import.meta.env.MODE; // "development" | "production"
 
-export const API =
-  import.meta.env.VITE_BACKEND_URL ||
-  (isProd
-    ? "https://orden-mant.onrender.com"
-    : "http://127.0.0.1:8000");
+//  UN SOLO nombre de env var para todo el proyecto:
+const envUrl = import.meta.env.VITE_API_URL; // <- Render + local
+
+const fallback =
+  mode === "production"
+    ? "https://ot-backend-pro.onrender.com" // <- backend real en Render
+    : "http://127.0.0.1:8000";
+
+// Normaliza: sin espacios y sin "/" final
+export const API = (envUrl || fallback).trim().replace(/\/$/, "");
 
 // ==========================================================
 //  UTILIDAD: TIMEOUT PARA EVITAR FETCH COLGADO
@@ -33,7 +38,7 @@ async function fetchRetry(url, options, retries = 3) {
   } catch (err) {
     if (retries <= 0) throw err;
 
-    const delay = 500 * Math.pow(2, 3 - retries); // 500 → 1000 → 2000 ms
+    const delay = 500 * Math.pow(2, 3 - retries);
     console.warn(`Retry en ${delay}ms…`);
 
     await new Promise((res) => setTimeout(res, delay));
@@ -45,7 +50,10 @@ async function fetchRetry(url, options, retries = 3) {
 //  ENVÍO DE ORDEN — GENERA PDF
 // ==========================================================
 export async function enviarOT(payload, silent = false) {
-  console.log(">>> PAYLOAD ENVIADO AL BACKEND:", JSON.stringify(payload, null, 2));
+  if (!silent) {
+    console.log(">>> API BASE:", API);
+    console.log(">>> PAYLOAD:", JSON.stringify(payload, null, 2));
+  }
 
   if (!navigator.onLine) {
     if (!silent) console.warn("Sin conexión → No puedo enviar OT");
@@ -54,60 +62,51 @@ export async function enviarOT(payload, silent = false) {
     throw e;
   }
 
-  try {
-    const res = await fetchRetry(`${API}/api/ordenes/pdf/`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
+  const res = await fetchRetry(`${API}/api/ordenes/pdf/`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
 
-    // ✅ Si falla, armar Error con status REAL
-    if (!res.ok) {
-      let bodyText = "";
-      try {
-        bodyText = await res.text();
-      } catch {}
+  if (!res.ok) {
+    let bodyText = "";
+    try { bodyText = await res.text(); } catch {}
 
-      const e = new Error(`Backend respondió ${res.status}`);
-      e.status = res.status;          // ✅ clave para cortar loop
-      e.body = bodyText;              // opcional: ver detalle
-      if (!silent) console.error("❌", e.message, bodyText);
-      throw e;
-    }
-
-    return await res.blob(); // ✅ PDF listo
-  } catch (err) {
-    if (!silent) console.error("Error enviando OT:", err?.message || err);
-    throw err; // ✅ relanzar manteniendo status
+    const e = new Error(`Backend respondió ${res.status}`);
+    e.status = res.status;
+    e.body = bodyText;
+    if (!silent) console.error("❌", e.message, bodyText);
+    throw e;
   }
+
+  return await res.blob();
 }
 
 // ==========================================================
-//  SINCRONIZACIÓN DE ORDENES PENDIENTES — BACKGROUND SAFE
+//  SINCRONIZACIÓN DE ORDENES PENDIENTES
 // ==========================================================
 
 export async function syncPendientes(lista, silent = true) {
   if (!navigator.onLine) {
     if (!silent) console.warn("Sin conexión → No puedo sincronizar");
-    throw new Error("offline");
+    const e = new Error("offline");
+    e.status = 0;
+    throw e;
   }
 
-  try {
-    const res = await fetchRetry(`${API}/api/ordenes/sync/`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ordenes: lista }),
-    });
+  const res = await fetchRetry(`${API}/api/ordenes/sync/`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ordenes: lista }),
+  });
 
-    if (!res.ok) {
-      const msg = `Error sincronizando (HTTP ${res.status})`;
-      if (!silent) console.error(msg);
-      throw new Error(msg);
-    }
-
-    return await res.json();
-  } catch (err) {
-    if (!silent) console.error("Sync error:", err.message);
-    throw err;
+  if (!res.ok) {
+    const msg = `Error sincronizando (HTTP ${res.status})`;
+    if (!silent) console.error(msg);
+    const e = new Error(msg);
+    e.status = res.status;
+    throw e;
   }
+
+  return await res.json();
 }
