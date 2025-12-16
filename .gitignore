@@ -21,3 +21,24 @@ build/
 # OS
 .DS_Store
 Thumbs.db
+
+# Python / Django
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.log
+*.sqlite3
+
+# Virtualenvs (CRÍTICO)
+venv/
+.venv/
+ot-backend/venv/
+ot-backend/.venv/
+
+# Django generated folders (si se generan local o en build)
+static/
+staticfiles/
+media/
+
+ot-backend/package-lock.json
