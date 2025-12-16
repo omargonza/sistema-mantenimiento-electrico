@@ -6,14 +6,14 @@ import dj_database_url
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 # =========================================================
-#  FLAGS / ENV
+#  ENV / FLAGS
 # =========================================================
-# En Render: setear DJANGO_SECRET_KEY, DJANGO_DEBUG=False
 SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "dev-secret-key")
 DEBUG = os.getenv("DJANGO_DEBUG", "True").lower() == "true"
 
-# En Render: ALLOWED_HOSTS=tu-backend.onrender.com
-_allowed = os.getenv("ALLOWED_HOSTS", "*" if DEBUG else "")
+# Hosts
+# En Render setear: ALLOWED_HOSTS=ot-backend-prod.onrender.com
+_allowed = os.getenv("ALLOWED_HOSTS", "*" if DEBUG else "localhost,127.0.0.1")
 ALLOWED_HOSTS = [h.strip() for h in _allowed.split(",") if h.strip()]
 
 # =========================================================
@@ -26,11 +26,9 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
-
     # API
     "rest_framework",
     "corsheaders",
-
     # App
     "orders",
 ]
@@ -40,14 +38,10 @@ INSTALLED_APPS = [
 # =========================================================
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
-
-    # Static en producción (Render) sin servidor extra
-    "whitenoise.middleware.WhiteNoiseMiddleware",
-
-    # CORS primero
+    "whitenoise.middleware.WhiteNoiseMiddleware",  # static en prod
+    # CORS
     "corsheaders.middleware.CorsMiddleware",
     "django.middleware.common.CommonMiddleware",
-
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
@@ -81,15 +75,19 @@ WSGI_APPLICATION = "core.wsgi.application"
 # =========================================================
 #  DATABASE
 # =========================================================
-# En Render ponés DATABASE_URL (Neon/Supabase/etc).
-# Si no existe, usa sqlite (dev).
-DATABASE_URL = os.getenv("DATABASE_URL", "")
+# Prod: Render setea DATABASE_URL (Postgres)
+# Dev: sqlite si no hay DATABASE_URL
+DATABASE_URL = os.getenv("DATABASE_URL", "").strip()
+
 if DATABASE_URL:
+    # Render Postgres suele requerir SSL
+    ssl_require = os.getenv("DB_SSL_REQUIRE", "True").lower() == "true"
+
     DATABASES = {
         "default": dj_database_url.parse(
             DATABASE_URL,
             conn_max_age=600,
-            ssl_require=True,
+            ssl_require=ssl_require,
         )
     }
 else:
@@ -103,27 +101,19 @@ else:
 # =========================================================
 #  CORS / CSRF
 # =========================================================
-# En producción NO uses allow all.
-# En Render seteás:
-#   CORS_ALLOWED_ORIGINS=https://tu-frontend.onrender.com
-#   CSRF_TRUSTED_ORIGINS=https://tu-frontend.onrender.com
 if DEBUG:
     CORS_ALLOW_ALL_ORIGINS = True
     CORS_ALLOW_CREDENTIALS = True
 else:
     CORS_ALLOW_ALL_ORIGINS = False
     CORS_ALLOW_CREDENTIALS = True
-
     cors_env = os.getenv("CORS_ALLOWED_ORIGINS", "")
     CORS_ALLOWED_ORIGINS = [x.strip() for x in cors_env.split(",") if x.strip()]
 
 csrf_env = os.getenv("CSRF_TRUSTED_ORIGINS", "")
 CSRF_TRUSTED_ORIGINS = [x.strip() for x in csrf_env.split(",") if x.strip()]
 
-CORS_ALLOW_METHODS = [
-    "GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"
-]
-
+CORS_ALLOW_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
 CORS_ALLOW_HEADERS = [
     "content-type",
     "authorization",
@@ -138,7 +128,6 @@ CORS_ALLOW_HEADERS = [
 STATIC_URL = "/static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
 
-# WhiteNoise storage (cache + hashes)
 STORAGES = {
     "staticfiles": {
         "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
@@ -156,6 +145,19 @@ if not DEBUG:
     SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
+
+    # Opcional: si querés forzar HTTPS (recomendado)
+    SECURE_SSL_REDIRECT = os.getenv("SECURE_SSL_REDIRECT", "True").lower() == "true"
+
+# =========================================================
+#  LOGGING (para ver errores claros en Render)
+# =========================================================
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "handlers": {"console": {"class": "logging.StreamHandler"}},
+    "root": {"handlers": ["console"], "level": "INFO"},
+}
 
 # =========================================================
 #  DEFAULTS
