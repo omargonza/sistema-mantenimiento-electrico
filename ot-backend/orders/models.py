@@ -19,3 +19,12 @@ class OrdenTrabajo(models.Model):
     luminaria_equipos = models.TextField(blank=True)
 
     creado = models.DateTimeField(auto_now_add=True)
+     # Auditoría / Legal
+    observaciones = models.TextField(blank=True)
+    conformidad = models.CharField(max_length=40, blank=True)  # "Conforme" / "No conforme" / "Parcial"
+    firma_tecnico = models.CharField(max_length=120, blank=True)
+    firma_supervisor = models.CharField(max_length=120, blank=True)
+
+    # Evidencias (guardamos paths en disco, no base64)
+    fotos = models.JSONField(default=list, blank=True)  # lista de paths
+    firma_tecnico_path = models.CharField(max_length=300, blank=True)

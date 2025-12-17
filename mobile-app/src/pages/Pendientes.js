@@ -31,10 +31,17 @@ export default function Pendientes() {
 
       {lista.map((p) => (
         <div key={p.id} className="pending-card">
+          {p.data?.evidencias_pendientes && (
+            <div className="offline-banner">
+              Evidencias pendientes: esta OT se guardó sin firma/fotos (offline).
+            </div>
+          )}
+
           <pre>{JSON.stringify(p.data, null, 2)}</pre>
           <button onClick={() => enviar(p.id, p.data)}>Enviar Ahora</button>
         </div>
       ))}
+
 
       {lista.length === 0 && <p>No hay órdenes pendientes.</p>}
     </div>

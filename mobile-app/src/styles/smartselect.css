@@ -1,86 +1,149 @@
-/* =======================================
-   SmartSelect — UI táctil industrial
-======================================= */
+/* SmartSelect PRO — Bottom Sheet nativo, liviano */
 
-.smartselect {
-  margin-bottom: 14px;
+.smartselect{ margin-top: 10px; }
+
+.smartselect > label{
+  display:block;
+  margin: 0 0 6px;
+  font-size: .86rem;
+  font-weight: 700;
+  color: var(--muted);
 }
 
-.smartselect-display {
-  background: var(--bg2);
-  border: 1px solid #30363d;
-  padding: var(--pad);
-  border-radius: var(--radius);
-  height: var(--input-h);
-  display: flex;
-  align-items: center;
-  cursor: pointer;
-  color: var(--text);
-}
-
-.smartselect-panel {
-  position: absolute;
-  background: var(--bg2);
-  border: 1px solid #30363d;
-  border-radius: var(--radius);
-  margin-top: 6px;
-  width: calc(100% - 6px);
-  padding: 10px;
-  z-index: 50;
-  max-height: 270px;
-  overflow-y: auto;
-  animation: fadeIn 0.15s ease;
-}
-
-.smartselect-search {
+.smartselect-display{
+  height: var(--h);
   width: 100%;
-  background: #0f141a;
-  border: 1px solid #30363d;
+  display:flex;
+  align-items:center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 0 14px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.03));
   color: var(--text);
-  padding: 10px;
-  margin-bottom: 10px;
-  border-radius: var(--radius);
-}
-
-.smartselect-group {
-  margin-bottom: 8px;
-}
-
-.smartselect-title {
-  color: #9aa0a6;
-  font-size: 0.8rem;
-  margin-bottom: 8px;
-}
-
-.smartselect-item {
-  padding: 12px;
-  border-radius: var(--radius);
-  background: #1d242d;
-  margin-bottom: 6px;
   cursor: pointer;
-  transition: 0.1s;
+  user-select: none;
 }
 
-.smartselect-item:hover {
-  background: #22303c;
+.ss-placeholder{ color: rgba(154,164,178,.75); font-weight: 700; }
+.ss-value{ color: var(--text); font-weight: 800; }
+.ss-chevron{ opacity: .8; }
+
+/* Overlay */
+.ss-overlay{
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  background: rgba(0,0,0,.55);
+  display:flex;
+  align-items:flex-end;
+  justify-content:center;
+  padding: 12px;
 }
 
-.smartselect-item.fav {
-  background: #2b3a47;
+/* Sheet */
+.ss-sheet{
+  width: min(720px, 100%);
+  background: rgba(17,27,46,.98);
+  border: 1px solid rgba(255,255,255,.12);
+  border-radius: 18px;
+  box-shadow: 0 14px 34px rgba(0,0,0,.45);
+  overflow: hidden;
 }
 
-.smartselect-item.fav:hover {
-  background: #324351;
+.ss-handle{
+  width: 52px;
+  height: 5px;
+  border-radius: 999px;
+  background: rgba(255,255,255,.18);
+  margin: 10px auto 6px;
 }
 
-.smartselect-empty {
-  color: #7d8590;
+.ss-head{
+  display:flex;
+  align-items:center;
+  justify-content: space-between;
+  padding: 10px 14px 10px;
+  border-bottom: 1px solid rgba(255,255,255,.08);
+}
+
+.ss-title{
+  font-weight: 900;
+  letter-spacing: .2px;
+}
+
+.ss-close{
+  border: 1px solid rgba(255,255,255,.14);
+  background: rgba(255,255,255,.06);
+  color: var(--text);
+  border-radius: 12px;
+  height: 38px;
+  padding: 0 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.ss-search{
+  margin: 10px 14px 12px;
+  height: 48px;
+  width: calc(100% - 28px);
+  border-radius: 14px;
+  border: 1px solid rgba(255,255,255,.14);
+  background: rgba(15,23,42,.95);
+  color: var(--text);
+  padding: 0 14px;
+  outline: none;
+}
+
+.ss-search:focus{
+  border-color: rgba(47,129,247,.70);
+  box-shadow: var(--focus);
+}
+
+.ss-list{
+  max-height: min(60vh, 520px);
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 0 0 10px;
+}
+
+.ss-group-title{
+  padding: 10px 14px;
+  font-size: .86rem;
+  font-weight: 900;
+  color: rgba(232,238,247,.90);
+  background: rgba(255,255,255,.04);
+  border-top: 1px solid rgba(255,255,255,.08);
+  border-bottom: 1px solid rgba(255,255,255,.08);
+}
+
+.ss-item{
+  width: 100%;
+  text-align: left;
   padding: 14px;
-  text-align: center;
-  font-size: 0.9rem;
+  border: none;
+  border-bottom: 1px solid rgba(255,255,255,.07);
+  background: transparent;
+  color: var(--text);
+  font-size: 1rem;
+  cursor: pointer;
 }
 
-@keyframes fadeIn {
-  from { opacity: 0; transform: scale(0.98); }
-  to   { opacity: 1; transform: scale(1); }
+.ss-item:active{ background: rgba(47,129,247,.14); }
+
+.ss-fav{ background: rgba(250,204,21,.06); }
+.ss-fav:active{ background: rgba(250,204,21,.14); }
+
+.ss-empty{
+  padding: 16px 14px;
+  color: rgba(154,164,178,.95);
+  font-weight: 800;
+}
+
+.ss-hint{
+  padding: 10px 14px;
+  color: rgba(154,164,178,.90);
+  font-size: .85rem;
+  font-weight: 700;
 }

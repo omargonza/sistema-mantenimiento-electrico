@@ -52,13 +52,27 @@ async function fetchRetry(url, options, retries = 3) {
 export async function enviarOT(payload, silent = false) {
   if (!silent) {
     console.log(">>> API BASE:", API);
-    console.log(">>> PAYLOAD:", JSON.stringify(payload, null, 2));
   }
 
   if (!navigator.onLine) {
     if (!silent) console.warn("Sin conexión → No puedo enviar OT");
     const e = new Error("offline");
     e.status = 0;
+    throw e;
+  }
+
+  // ✅ Guardia de peso (evita mandar JSON enorme)
+  // Aproximación: 1 char ~ 1 byte en ASCII (base64 es ASCII)
+  let approxBytes = 0;
+  try {
+    approxBytes = JSON.stringify(payload).length;
+  } catch {}
+  const MAX_BYTES = 4_000_000; // ~4MB para ir seguro (podés subir a 6-8MB)
+  if (approxBytes > MAX_BYTES) {
+    const e = new Error("Payload demasiado grande (fotos/firma). Reducí cantidad o compresión.");
+    e.status = 413;
+    e.body = `approxBytes=${approxBytes}`;
+    if (!silent) console.error("❌", e.message, e.body);
     throw e;
   }
 
