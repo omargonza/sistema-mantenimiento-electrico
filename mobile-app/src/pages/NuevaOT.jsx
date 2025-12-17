@@ -69,7 +69,7 @@ const TABLEROS = [
   "Peaje Debenedetti ASC", "Peaje Campana Troncal"
 ];
 
-const CONFORMIDADES = ["Conforme", "No conforme", "Parcial"];
+
 
 /* =======================================================
    FORMULARIO INICIAL
@@ -90,7 +90,7 @@ const initialForm = {
   luminaria: "",
 
   // Auditoría / Legal
-  conformidad: "Conforme",
+
   observaciones: "",
   firmaTecnico: "",
   firmaSupervisor: "",
@@ -129,7 +129,7 @@ function guardarHistorialOT(payload) {
     tecnico: payload.tecnicos?.[0]?.nombre || "—",
 
     // Auditoría
-    conformidad: payload.conformidad,
+   
     observaciones: payload.observaciones,
     firma_tecnico: payload.firma_tecnico,
     firma_supervisor: payload.firma_supervisor,
@@ -169,7 +169,7 @@ function normalizarPayloadOT(form) {
     luminaria_equipos: form.luminaria || "",
 
     // Auditoría
-    conformidad: form.conformidad || "",
+  
     observaciones: form.observaciones || "",
     firma_tecnico: form.firmaTecnico || "",
     firma_supervisor: form.firmaSupervisor || "",
@@ -218,7 +218,7 @@ export default function NuevaOT() {
     // Auditoría mínima
     if (!form.firmaTecnico.trim()) return "Falta la aclaración (nombre) del técnico.";
     // firma digital es opcional, pero recomendable:
-    // if (!form.firmaTecnicoImg) return "Falta la firma digital del técnico.";
+    if (!form.firmaTecnicoImg) return "Falta la firma digital del técnico.";
 
     return null;
   }
@@ -518,7 +518,7 @@ export default function NuevaOT() {
           />
 
           <input
-            placeholder="Unidad"
+            placeholder="Unidad/Mtrs"
             value={m.unidad}
             onChange={(e) =>
               setForm({
@@ -553,20 +553,7 @@ export default function NuevaOT() {
         ➕ Agregar material
       </button>
 
-      {/* =========================
-          AUDITORÍA / LEGAL
-      ========================== */}
-      <h3 className="subtitulo">Auditoría</h3>
-
-      <label>Conformidad</label>
-      <select
-        value={form.conformidad}
-        onChange={(e) => setForm({ ...form, conformidad: e.target.value })}
-      >
-        {CONFORMIDADES.map((c) => (
-          <option key={c} value={c}>{c}</option>
-        ))}
-      </select>
+   
 
       <label>Observaciones</label>
       <textarea
