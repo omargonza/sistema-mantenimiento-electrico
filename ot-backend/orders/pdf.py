@@ -195,10 +195,7 @@ def generar_pdf(data):
         else:
             right.append(P("Aclaración: ____________________", SMALL))
 
-        if doc_id:
-            right.append(P(f"Doc/DNI: <b>{doc_id}</b>", SMALL))
-        else:
-            right.append(P("Doc/DNI: ____________________", SMALL))
+       
 
         block = Table(
             [[
@@ -321,27 +318,13 @@ def generar_pdf(data):
     # =========================
     # LEGAL / AUDITORÍA
     # =========================
-    story.append(Paragraph("OBSERVACIONES Y CONFORMIDAD", H2))
+   
 
     story.append(bloque_texto(
         "Observaciones",
         data.get("observaciones"),
         empty="(Sin observaciones)"
     ))
-
-    conformidad = safe(data.get("conformidad")).strip() or "-"
-    conf_table = Table([[P("CONFORMIDAD", LABEL), P(conformidad, VALUE)]], colWidths=[3.6*cm, doc.width-3.6*cm])
-    conf_table.setStyle(TableStyle([
-        ("BACKGROUND", (0,0), (-1,-1), theme["panel"]),
-        ("BOX", (0,0), (-1,-1), 1, theme["border"]),
-        ("LEFTPADDING", (0,0), (-1,-1), 9),
-        ("RIGHTPADDING", (0,0), (-1,-1), 9),
-        ("TOPPADDING", (0,0), (-1,-1), 8),
-        ("BOTTOMPADDING", (0,0), (-1,-1), 8),
-        ("VALIGN", (0,0), (-1,-1), "MIDDLE"),
-    ]))
-    story.append(conf_table)
-    story.append(Spacer(1, 10))
 
     # Firmas
     story.append(Paragraph("FIRMAS", H2))
@@ -389,7 +372,7 @@ def generar_pdf(data):
     # =========================
     # Header/Footer por página (canvas)
     # =========================
-    logo_path = os.path.join(os.path.dirname(__file__), "logo.png")
+    logo_path = os.path.join(os.path.dirname(__file__), "apple-touch-icon.png")
 
     def on_page(canv, _doc):
         canv.saveState()

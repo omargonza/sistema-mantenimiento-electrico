@@ -21,7 +21,6 @@ class OrdenTrabajo(models.Model):
     creado = models.DateTimeField(auto_now_add=True)
      # Auditoría / Legal
     observaciones = models.TextField(blank=True)
-    conformidad = models.CharField(max_length=40, blank=True)  # "Conforme" / "No conforme" / "Parcial"
     firma_tecnico = models.CharField(max_length=120, blank=True)
     firma_supervisor = models.CharField(max_length=120, blank=True)
 

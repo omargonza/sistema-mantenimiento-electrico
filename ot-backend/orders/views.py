@@ -104,7 +104,7 @@ class OrdenPDFView(APIView):
         os.makedirs(evidence_abs_folder, exist_ok=True)
 
         # 1) Extraer inputs "solo request" (si tu serializer los define como write_only)
-        #    Si todavía no actualizaste serializer, estos pop simplemente devuelven "" / []
+        #    Si todavía no se actualizo  serializer, estos pop simplemente devuelven "" / []
         firma_b64 = data.pop("firma_tecnico_img", "")
         fotos_b64 = data.pop("fotos_b64", []) or []
         print_mode = bool(data.pop("print_mode", False))
