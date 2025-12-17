@@ -1,15 +1,17 @@
+# orders/pdf.py
 from io import BytesIO
 import os
 from datetime import datetime
+
+from django.conf import settings
 
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import cm
 from reportlab.lib import colors
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.platypus import (
-    SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, KeepTogether, PageBreak
+    SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, KeepTogether, Image
 )
-
 
 # =========================
 # TEMA PREMIUM (DUAL MODE)
@@ -18,39 +20,46 @@ def get_theme(data):
     PRINT_MODE = bool((data or {}).get("print_mode"))
 
     if PRINT_MODE:
-        # ---- MODO IMPRESIÓN (B/N seguro) ----
+        # ---- IMPRESIÓN (B/N seguro) ----
         return {
             "bg": colors.white,
-            "panel": colors.whitesmoke,
-            "panel2": colors.HexColor("#f6f6f6"),
+            "panel": colors.HexColor("#f7f7f7"),
+            "panel2": colors.HexColor("#ededed"),
             "text": colors.black,
-            "muted": colors.HexColor("#555555"),
-            "primary": colors.black,
-            "primary2": colors.black,
-            "border": colors.HexColor("#999999"),
+            "muted": colors.HexColor("#333333"),
+            "border": colors.HexColor("#666666"),
             "row_alt": colors.HexColor("#f0f0f0"),
-            "chip_bg": colors.white,
-            "chip_text": colors.black,
-            "pill_border": colors.HexColor("#999999"),
             "prose_bg": colors.white,
+            "accent": colors.black,
         }
-    else:
-        # ---- MODO PANTALLA (oscuro premium) ----
-        return {
-            "bg": colors.HexColor("#020617"),
-            "panel": colors.HexColor("#0f172a"),
-            "panel2": colors.HexColor("#111b2e"),
-            "text": colors.HexColor("#e5e7eb"),
-            "muted": colors.HexColor("#9ca3af"),
-            "primary": colors.HexColor("#2563eb"),
-            "primary2": colors.HexColor("#38bdf8"),
-            "border": colors.HexColor("#334155"),
-            "row_alt": colors.HexColor("#0b1220"),
-            "chip_bg": colors.HexColor("#0b1220"),
-            "chip_text": colors.HexColor("#a5f3fc"),
-            "pill_border": colors.HexColor("#334155"),
-            "prose_bg": colors.HexColor("#0b1220"),
-        }
+
+    # ---- PANTALLA (más contraste) ----
+    return {
+        "bg": colors.HexColor("#020617"),
+        "panel": colors.HexColor("#0b1220"),
+        "panel2": colors.HexColor("#0f1a2b"),
+        "text": colors.HexColor("#f8fafc"),
+        "muted": colors.HexColor("#cbd5e1"),
+        "border": colors.HexColor("#334155"),
+        "row_alt": colors.HexColor("#0a1020"),
+        "prose_bg": colors.HexColor("#070d18"),
+        "accent": colors.HexColor("#38bdf8"),
+    }
+
+
+def _abs_media(rel_path: str) -> str:
+    if not rel_path:
+        return ""
+    return os.path.join(settings.MEDIA_ROOT, rel_path.replace("/", os.sep))
+
+
+def _img_flowable(abs_path: str, w_cm: float, h_cm: float, h_align="LEFT"):
+    """Crea Image si existe el archivo. Si no, devuelve None."""
+    if not abs_path or not os.path.exists(abs_path):
+        return None
+    im = Image(abs_path, width=w_cm * cm, height=h_cm * cm)
+    im.hAlign = h_align
+    return im
 
 
 def generar_pdf(data):
@@ -58,7 +67,6 @@ def generar_pdf(data):
     theme = get_theme(data)
 
     buffer = BytesIO()
-
     doc = SimpleDocTemplate(
         buffer,
         pagesize=A4,
@@ -73,56 +81,61 @@ def generar_pdf(data):
     styles = getSampleStyleSheet()
 
     # =========================
-    # Estilos tipográficos
+    # TIPOGRAFÍA (más legible)
     # =========================
     H2 = ParagraphStyle(
         "H2",
         parent=styles["Normal"],
         fontName="Helvetica-Bold",
-        fontSize=10,
-        leading=12,
-        textColor=theme["text"],
+        fontSize=10.8,
+        leading=13,
+        textColor=theme["text"] if data.get("print_mode") else theme["muted"],
         spaceBefore=10,
         spaceAfter=6,
     )
+
     LABEL = ParagraphStyle(
         "LABEL",
         parent=styles["Normal"],
         fontName="Helvetica-Bold",
-        fontSize=8,
-        leading=10,
+        fontSize=8.6,
+        leading=10.5,
         textColor=theme["muted"],
     )
+
     VALUE = ParagraphStyle(
         "VALUE",
         parent=styles["Normal"],
-        fontName="Helvetica",
-        fontSize=9.5,
-        leading=12,
+        fontName="Helvetica-Bold" if not data.get("print_mode") else "Helvetica",
+        fontSize=10.2,
+        leading=12.8,
         textColor=theme["text"],
     )
+
     BODY = ParagraphStyle(
         "BODY",
         parent=styles["Normal"],
         fontName="Helvetica",
-        fontSize=9.2,
-        leading=13,
+        fontSize=9.8,
+        leading=14,
         textColor=theme["text"],
     )
+
     MUTED = ParagraphStyle(
         "MUTED",
         parent=styles["Normal"],
         fontName="Helvetica-Oblique",
-        fontSize=8.2,
+        fontSize=8.3,
         leading=11,
         textColor=theme["muted"],
     )
+
     SMALL = ParagraphStyle(
         "SMALL",
         parent=styles["Normal"],
         fontName="Helvetica",
-        fontSize=8.4,
-        leading=10.5,
+        fontSize=8.6,
+        leading=10.8,
         textColor=theme["text"],
     )
 
@@ -136,96 +149,77 @@ def generar_pdf(data):
         return datetime.now().strftime("%Y-%m-%d %H:%M")
 
     # =========================
-    # Helper: Card (panel)
+    # Card (panel)
     # =========================
-    def card(elements, pad=10):
+    def card(elements, pad=11):
         t = Table([[elements]], colWidths=[doc.width])
-        t.setStyle(
-            TableStyle(
-                [
-                    ("BACKGROUND", (0, 0), (-1, -1), theme["panel"]),
-                    ("BOX", (0, 0), (-1, -1), 1, theme["border"]),
-                    ("LEFTPADDING", (0, 0), (-1, -1), pad),
-                    ("RIGHTPADDING", (0, 0), (-1, -1), pad),
-                    ("TOPPADDING", (0, 0), (-1, -1), pad),
-                    ("BOTTOMPADDING", (0, 0), (-1, -1), pad),
-                ]
-            )
-        )
+        t.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, -1), theme["panel"]),
+            ("BOX", (0, 0), (-1, -1), 1, theme["border"]),
+            ("LEFTPADDING", (0, 0), (-1, -1), pad),
+            ("RIGHTPADDING", (0, 0), (-1, -1), pad),
+            ("TOPPADDING", (0, 0), (-1, -1), pad),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), pad),
+        ]))
         return t
 
     # =========================
-    # Helper: bloque texto (prose)
+    # Bloque de texto (prose)
     # =========================
     def bloque_texto(titulo, valor, empty="-"):
         contenido = safe(valor).strip() or empty
         inner = Table([[P(contenido, BODY)]], colWidths=[doc.width - 18])
-        inner.setStyle(
-            TableStyle(
-                [
-                    ("BACKGROUND", (0, 0), (-1, -1), theme["prose_bg"]),
-                    ("BOX", (0, 0), (-1, -1), 1, theme["border"]),
-                    ("LEFTPADDING", (0, 0), (-1, -1), 9),
-                    ("RIGHTPADDING", (0, 0), (-1, -1), 9),
-                    ("TOPPADDING", (0, 0), (-1, -1), 8),
-                    ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
-                ]
-            )
-        )
-        return KeepTogether([Paragraph(titulo.upper(), H2), inner, Spacer(1, 6)])
+        inner.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, -1), theme["prose_bg"]),
+            ("BOX", (0, 0), (-1, -1), 1, theme["border"]),
+            ("LEFTPADDING", (0, 0), (-1, -1), 10),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 10),
+            ("TOPPADDING", (0, 0), (-1, -1), 9),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 9),
+        ]))
+        return KeepTogether([
+            Paragraph(titulo.upper(), H2),
+            inner,
+            Spacer(1, 7)
+        ])
 
     # =========================
-    # Helper: línea para firma
+    # Firmas (sin DNI/DOC)
     # =========================
-    def linea_firma(titulo, nombre="", doc_id=""):
-        # Grilla con línea y aclaración
-        nombre = safe(nombre).strip()
-        doc_id = safe(doc_id).strip()
-
-        # "línea" como celda con borde inferior
-        line = Table([[P(" ", SMALL)]], colWidths=[doc.width * 0.55])
+    def linea_firma(titulo, aclaracion=""):
+        line = Table([[P(" ", SMALL)]], colWidths=[doc.width * 0.46])
         line.setStyle(TableStyle([
-            ("LINEBELOW", (0,0), (-1,-1), 1, theme["border"]),
-            ("BOTTOMPADDING", (0,0), (-1,-1), 8),
+            ("LINEBELOW", (0, 0), (-1, -1), 1.4, theme["border"]),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 10),
         ]))
 
-        right = []
-        if nombre:
-            right.append(P(f"Aclaración: <b>{nombre}</b>", SMALL))
-        else:
-            right.append(P("Aclaración: ____________________", SMALL))
-
-       
+        right = P(
+            f"Aclaración: <b>{safe(aclaracion).strip() or '____________________'}</b>",
+            SMALL
+        )
 
         block = Table(
-            [[
-                P(titulo.upper(), LABEL),
-                line,
-                right
-            ]],
-            colWidths=[doc.width*0.18, doc.width*0.37, doc.width*0.45],
+            [[P(titulo.upper(), LABEL), line, right]],
+            colWidths=[doc.width * 0.20, doc.width * 0.48, doc.width * 0.32],
         )
         block.setStyle(TableStyle([
-            ("VALIGN", (0,0), (-1,-1), "TOP"),
-            ("LEFTPADDING", (0,0), (-1,-1), 0),
-            ("RIGHTPADDING", (0,0), (-1,-1), 0),
-            ("TOPPADDING", (0,0), (-1,-1), 2),
-            ("BOTTOMPADDING", (0,0), (-1,-1), 2),
+            ("VALIGN", (0, 0), (-1, -1), "TOP"),
+            ("LEFTPADDING", (0, 0), (-1, -1), 0),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+            ("TOPPADDING", (0, 0), (-1, -1), 2),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
         ]))
         return block
 
     story = []
 
     # =========================
-    # RESUMEN (card) — incluye vehículo y km si vienen
+    # RESUMEN (card)
     # =========================
-    km_ini = safe(data.get("km_ini") or data.get("kmIni")).strip()
-    km_fin = safe(data.get("km_fin") or data.get("kmFin")).strip()
+    km_ini = safe(data.get("km_inicial")).strip()
+    km_fin = safe(data.get("km_final")).strip()
     vehiculo = safe(data.get("vehiculo")).strip()
-
-    km_text = ""
-    if km_ini or km_fin:
-        km_text = f"{km_ini or '-'} → {km_fin or '-'}"
+    km_text = f"{km_ini or '-'} → {km_fin or '-'}" if (km_ini or km_fin) else "-"
 
     resumen_rows = [
         [P("FECHA", LABEL), P(safe(data.get("fecha")), VALUE),
@@ -233,7 +227,7 @@ def generar_pdf(data):
         [P("TABLERO", LABEL), P(safe(data.get("tablero")), VALUE),
          P("CIRCUITO", LABEL), P(safe(data.get("circuito")), VALUE)],
         [P("VEHÍCULO", LABEL), P(vehiculo or "-", VALUE),
-         P("KM (INI→FIN)", LABEL), P(km_text or "-", VALUE)],
+         P("KM (INI→FIN)", LABEL), P(km_text, VALUE)],
     ]
 
     resumen = Table(
@@ -245,21 +239,21 @@ def generar_pdf(data):
         hAlign="LEFT",
     )
     resumen.setStyle(TableStyle([
-        ("VALIGN", (0,0), (-1,-1), "TOP"),
-        ("BOTTOMPADDING", (0,0), (-1,-1), 6),
-        ("TOPPADDING", (0,0), (-1,-1), 2),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 7),
+        ("TOPPADDING", (0, 0), (-1, -1), 3),
     ]))
 
     story.append(card([resumen], pad=12))
-    story.append(Spacer(1, 10))
+    story.append(Spacer(1, 11))
 
     # =========================
-    # TAREAS (auditables)
+    # TAREAS
     # =========================
-    story.append(bloque_texto("Tarea pedida", data.get("tarea_pedida") or data.get("tareaPedida")))
-    story.append(bloque_texto("Tarea realizada", data.get("tarea_realizada") or data.get("tareaRealizada")))
-    story.append(bloque_texto("Tarea pendiente", data.get("tarea_pendiente") or data.get("tareaPendiente")))
-    story.append(bloque_texto("Luminarias / equipos", data.get("luminaria_equipos") or data.get("luminaria")))
+    story.append(bloque_texto("Tarea pedida", data.get("tarea_pedida")))
+    story.append(bloque_texto("Tarea realizada", data.get("tarea_realizada")))
+    story.append(bloque_texto("Tarea pendiente", data.get("tarea_pendiente")))
+    story.append(bloque_texto("Luminarias / equipos", data.get("luminaria_equipos")))
     story.append(Spacer(1, 6))
 
     # =========================
@@ -274,19 +268,19 @@ def generar_pdf(data):
 
         table = Table(rows, colWidths=[4.0 * cm, doc.width - 4.0 * cm])
         table.setStyle(TableStyle([
-            ("BACKGROUND", (0,0), (-1,0), theme["panel2"]),
-            ("TEXTCOLOR", (0,0), (-1,0), theme["muted"]),
-            ("BOX", (0,0), (-1,-1), 1, theme["border"]),
-            ("INNERGRID", (0,0), (-1,-1), 0.5, theme["border"]),
-            ("ROWBACKGROUNDS", (0,1), (-1,-1), [theme["panel"], theme["row_alt"]]),
-            ("LEFTPADDING", (0,0), (-1,-1), 9),
-            ("RIGHTPADDING", (0,0), (-1,-1), 9),
-            ("TOPPADDING", (0,0), (-1,-1), 8),
-            ("BOTTOMPADDING", (0,0), (-1,-1), 8),
-            ("VALIGN", (0,0), (-1,-1), "MIDDLE"),
+            ("BACKGROUND", (0, 0), (-1, 0), theme["panel2"]),
+            ("TEXTCOLOR", (0, 0), (-1, 0), theme["muted"]),
+            ("BOX", (0, 0), (-1, -1), 1, theme["border"]),
+            ("INNERGRID", (0, 0), (-1, -1), 0.6, theme["border"]),
+            ("ROWBACKGROUNDS", (0, 1), (-1, -1), [theme["panel"], theme["row_alt"]]),
+            ("LEFTPADDING", (0, 0), (-1, -1), 10),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 10),
+            ("TOPPADDING", (0, 0), (-1, -1), 9),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 9),
+            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
         ]))
         story.append(table)
-        story.append(Spacer(1, 10))
+        story.append(Spacer(1, 11))
 
     # =========================
     # MATERIALES
@@ -296,54 +290,102 @@ def generar_pdf(data):
         story.append(Paragraph("MATERIALES", H2))
         rows = [[P("MATERIAL", LABEL), P("CANT.", LABEL), P("UNIDAD", LABEL)]]
         for m in materiales:
-            rows.append([P(safe(m.get("material")), VALUE), P(safe(m.get("cant")), VALUE), P(safe(m.get("unidad")), VALUE)])
+            rows.append([
+                P(safe(m.get("material")), VALUE),
+                P(safe(m.get("cant")), VALUE),
+                P(safe(m.get("unidad")), VALUE),
+            ])
 
         table = Table(rows, colWidths=[doc.width - 6.0 * cm, 3.0 * cm, 3.0 * cm])
         table.setStyle(TableStyle([
-            ("BACKGROUND", (0,0), (-1,0), theme["panel2"]),
-            ("TEXTCOLOR", (0,0), (-1,0), theme["muted"]),
-            ("BOX", (0,0), (-1,-1), 1, theme["border"]),
-            ("INNERGRID", (0,0), (-1,-1), 0.5, theme["border"]),
-            ("ROWBACKGROUNDS", (0,1), (-1,-1), [theme["panel"], theme["row_alt"]]),
-            ("ALIGN", (1,1), (-1,-1), "CENTER"),
-            ("LEFTPADDING", (0,0), (-1,-1), 9),
-            ("RIGHTPADDING", (0,0), (-1,-1), 9),
-            ("TOPPADDING", (0,0), (-1,-1), 8),
-            ("BOTTOMPADDING", (0,0), (-1,-1), 8),
-            ("VALIGN", (0,0), (-1,-1), "MIDDLE"),
+            ("BACKGROUND", (0, 0), (-1, 0), theme["panel2"]),
+            ("TEXTCOLOR", (0, 0), (-1, 0), theme["muted"]),
+            ("BOX", (0, 0), (-1, -1), 1, theme["border"]),
+            ("INNERGRID", (0, 0), (-1, -1), 0.6, theme["border"]),
+            ("ROWBACKGROUNDS", (0, 1), (-1, -1), [theme["panel"], theme["row_alt"]]),
+            ("ALIGN", (1, 1), (-1, -1), "CENTER"),
+            ("LEFTPADDING", (0, 0), (-1, -1), 10),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 10),
+            ("TOPPADDING", (0, 0), (-1, -1), 9),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 9),
+            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
         ]))
         story.append(table)
-        story.append(Spacer(1, 10))
+        story.append(Spacer(1, 11))
 
     # =========================
-    # LEGAL / AUDITORÍA
+    # OBSERVACIONES
     # =========================
-   
-
     story.append(bloque_texto(
         "Observaciones",
         data.get("observaciones"),
         empty="(Sin observaciones)"
     ))
 
-    # Firmas
+    # =========================
+    # FIRMAS + FIRMA DIGITAL REAL
+    # =========================
     story.append(Paragraph("FIRMAS", H2))
-    story.append(linea_firma(
-        "Firma técnico",
-        nombre=data.get("firma_tecnico") or "",
-        doc_id=data.get("dni_tecnico") or ""
-    ))
-    story.append(Spacer(1, 8))
-    story.append(linea_firma(
-        "Firma supervisor",
-        nombre=data.get("firma_supervisor") or "",
-        doc_id=data.get("dni_supervisor") or ""
-    ))
+
+    # Firma técnica digital (path relativo guardado en DB o enviado al pdf_data)
+    firma_rel = (data.get("firma_tecnico_path") or "").strip()
+    firma_abs = _abs_media(firma_rel) if firma_rel else ""
+
+    firma_img = _img_flowable(firma_abs, w_cm=7.0, h_cm=2.4)  # tamaño “premium”
+
+    bloque_tec = [linea_firma("Firma técnico", aclaracion=data.get("firma_tecnico") or "")]
+    if firma_img:
+        bloque_tec += [Spacer(1, 6), firma_img]
+    story.append(KeepTogether(bloque_tec))
     story.append(Spacer(1, 10))
 
-    # Datos de auditoría / trazabilidad
-    story.append(Paragraph("DATOS DE AUDITORÍA", H2))
+    story.append(linea_firma("Firma supervisor", aclaracion=data.get("firma_supervisor") or ""))
+    story.append(Spacer(1, 12))
 
+    # =========================
+    # EVIDENCIAS (FOTOS) — hasta 4 (2x2)
+    # =========================
+    fotos_rel = data.get("fotos_paths") or data.get("fotos") or []
+    fotos_rel = list(fotos_rel)[:4]
+
+    fotos_abs = []
+    for rel in fotos_rel:
+        ap = _abs_media(rel)
+        if ap and os.path.exists(ap):
+            fotos_abs.append(ap)
+
+    if fotos_abs:
+        story.append(Paragraph("EVIDENCIAS (FOTOS)", H2))
+
+        cells = []
+        for ap in fotos_abs:
+            cells.append(_img_flowable(ap, w_cm=8.2, h_cm=6.0, h_align="CENTER"))
+
+        while len(cells) < 4:
+            cells.append(Paragraph("", BODY))
+
+        grid = Table(
+            [[cells[0], cells[1]],
+             [cells[2], cells[3]]],
+            colWidths=[doc.width / 2 - 4, doc.width / 2 - 4],
+        )
+        grid.setStyle(TableStyle([
+            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+            ("LEFTPADDING", (0, 0), (-1, -1), 4),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 4),
+            ("TOPPADDING", (0, 0), (-1, -1), 4),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+            ("BOX", (0, 0), (-1, -1), 1, theme["border"]),
+            ("INNERGRID", (0, 0), (-1, -1), 0.6, theme["border"]),
+            ("BACKGROUND", (0, 0), (-1, -1), theme["panel"]),
+        ]))
+        story.append(grid)
+        story.append(Spacer(1, 12))
+
+    # =========================
+    # DATOS DE AUDITORÍA
+    # =========================
+    story.append(Paragraph("DATOS DE AUDITORÍA", H2))
     id_ot = safe(data.get("id_ot") or data.get("id") or "").strip() or "-"
     audit_rows = [
         [P("ID OT", LABEL), P(id_ot, VALUE),
@@ -359,18 +401,16 @@ def generar_pdf(data):
         ],
     )
     audit.setStyle(TableStyle([
-        ("VALIGN", (0,0), (-1,-1), "TOP"),
-        ("BOTTOMPADDING", (0,0), (-1,-1), 6),
-        ("TOPPADDING", (0,0), (-1,-1), 2),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 7),
+        ("TOPPADDING", (0, 0), (-1, -1), 3),
     ]))
     story.append(card([audit], pad=12))
     story.append(Spacer(1, 6))
-
-    # Nota final
     story.append(Paragraph("Sistema de Mantenimiento Eléctrico — Desarrollado por conurbaDEV", MUTED))
 
     # =========================
-    # Header/Footer por página (canvas)
+    # Header/Footer por página
     # =========================
     logo_path = os.path.join(os.path.dirname(__file__), "apple-touch-icon.png")
 
@@ -378,15 +418,15 @@ def generar_pdf(data):
         canv.saveState()
         w, h = A4
 
-        # Topbar
+        # barra superior
         canv.setFillColor(theme["bg"])
         canv.rect(0, h - 2.9 * cm, w, 2.9 * cm, stroke=0, fill=1)
 
-        # Acento superior
-        canv.setFillColor(theme["primary"])
+        # acento
+        canv.setFillColor(theme["accent"])
         canv.rect(0, h - 2.9 * cm, w, 0.18 * cm, stroke=0, fill=1)
 
-        # Logo
+        # logo
         if os.path.exists(logo_path):
             canv.drawImage(
                 logo_path,
@@ -398,44 +438,13 @@ def generar_pdf(data):
                 mask="auto",
             )
 
-        # Títulos
         canv.setFillColor(theme["text"])
         canv.setFont("Helvetica-Bold", 12)
         canv.drawString(3.5 * cm, h - 1.55 * cm, "SECTOR MANTENIMIENTO ELÉCTRICO")
         canv.setFont("Helvetica", 10)
         canv.drawString(3.5 * cm, h - 2.05 * cm, "ORDEN DE TRABAJO")
 
-        # Chips: fecha / tablero / ubicación (audit-friendly)
-        fecha = safe(data.get("fecha")).strip()
-        tablero = safe(data.get("tablero")).strip()
-        ubic = safe(data.get("ubicacion")).strip()
-
-        chips = []
-        if fecha:
-            chips.append(f"FECHA: {fecha}")
-        if tablero:
-            chips.append(f"TABLERO: {tablero}")
-        if ubic:
-            chips.append(f"UBICACIÓN: {ubic}")
-
-        if chips:
-            # Dibujar 1 o 2 chips máximos por espacio (prioridad: fecha, tablero)
-            chips = chips[:2]
-            chip_w = 6.1 * cm
-            chip_h = 0.70 * cm
-            x = w - 1.6 * cm - chip_w
-            y0 = h - 1.75 * cm
-
-            for i, text in enumerate(chips):
-                y = y0 - (i * (chip_h + 0.18 * cm))
-                canv.setFillColor(theme["chip_bg"])
-                canv.setStrokeColor(theme["pill_border"])
-                canv.roundRect(x, y, chip_w, chip_h, 10, stroke=1, fill=1)
-                canv.setFillColor(theme["chip_text"])
-                canv.setFont("Helvetica-Bold", 8.2)
-                canv.drawCentredString(x + chip_w / 2, y + 0.22 * cm, text)
-
-        # Footer + paginado
+        # footer
         canv.setFillColor(theme["muted"])
         canv.setFont("Helvetica-Oblique", 8)
         canv.drawString(1.6 * cm, 1.2 * cm, "Sistema de Mantenimiento Eléctrico — Desarrollado por conurbaDEV")
@@ -444,5 +453,4 @@ def generar_pdf(data):
         canv.restoreState()
 
     doc.build(story, onFirstPage=on_page, onLaterPages=on_page)
-
     return buffer.getvalue()

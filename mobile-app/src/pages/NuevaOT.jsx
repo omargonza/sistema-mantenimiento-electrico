@@ -45,7 +45,7 @@ async function fileToCompressedDataURL(file, maxW = 1280, quality = 0.72) {
   canvas.height = h;
 
   const ctx = canvas.getContext("2d");
-  // fondo blanco para fotos (evita transparencia rara)
+  // fondo blanco para fotos (evita transparencias raras)
   ctx.fillStyle = "#fff";
   ctx.fillRect(0, 0, w, h);
   ctx.drawImage(img, 0, 0, w, h);
@@ -69,7 +69,7 @@ const TABLEROS = [
   "Peaje Debenedetti ASC", "Peaje Campana Troncal"
 ];
 
-
+const MAX_FOTOS = 4;
 
 /* =======================================================
    FORMULARIO INICIAL
@@ -90,18 +90,17 @@ const initialForm = {
   luminaria: "",
 
   // Auditoría / Legal
-
   observaciones: "",
   firmaTecnico: "",
   firmaSupervisor: "",
 
   // Firma digital (PNG base64)
-  firmaTecnicoImg: "",
+  firmaTecnicoB64: "",
 
   // Fotos (JPG base64 comprimidas)
-  fotos: [], // max 4
+  fotosB64: [], // array de dataURL (jpg) máx 4
 
-  // Para impresión B/N si querés (opcional)
+  // Modo impresión B/N (opcional)
   printMode: false,
 };
 
@@ -129,7 +128,6 @@ function guardarHistorialOT(payload) {
     tecnico: payload.tecnicos?.[0]?.nombre || "—",
 
     // Auditoría
-   
     observaciones: payload.observaciones,
     firma_tecnico: payload.firma_tecnico,
     firma_supervisor: payload.firma_supervisor,
@@ -140,6 +138,9 @@ function guardarHistorialOT(payload) {
   localStorage.setItem("ot_historial", JSON.stringify([nueva, ...prev]));
 }
 
+/* =======================================================
+   NORMALIZACIÓN PAYLOAD (SIN DUPLICADOS)
+======================================================= */
 function normalizarPayloadOT(form) {
   const tableroFinal =
     form.tablero || (Array.isArray(form.tableros) ? form.tableros[0] : "") || "";
@@ -168,17 +169,16 @@ function normalizarPayloadOT(form) {
 
     luminaria_equipos: form.luminaria || "",
 
-    // Auditoría
-  
+    // ✅ Evidencias (request)
+    firma_tecnico_img: form.firmaTecnicoB64 || "",
+    fotos_b64: Array.isArray(form.fotosB64) ? form.fotosB64.slice(0, MAX_FOTOS) : [],
+
+    // ✅ Auditoría / Legal
     observaciones: form.observaciones || "",
     firma_tecnico: form.firmaTecnico || "",
     firma_supervisor: form.firmaSupervisor || "",
 
-    // Firma + fotos (solo request para PDF)
-    firma_tecnico_img: form.firmaTecnicoImg || "",
-    fotos_b64: Array.isArray(form.fotos) ? form.fotos.slice(0, 4) : [],
-
-    // Modo impresión opcional
+    // ✅ Modo impresión opcional
     print_mode: Boolean(form.printMode),
   };
 }
@@ -217,8 +217,7 @@ export default function NuevaOT() {
 
     // Auditoría mínima
     if (!form.firmaTecnico.trim()) return "Falta la aclaración (nombre) del técnico.";
-    // firma digital es opcional, pero recomendable:
-    if (!form.firmaTecnicoImg) return "Falta la firma digital del técnico.";
+    if (!form.firmaTecnicoB64) return "Falta la firma digital del técnico.";
 
     return null;
   }
@@ -269,44 +268,62 @@ export default function NuevaOT() {
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    setForm((p) => ({ ...p, firmaTecnicoImg: "" }));
+    setForm((p) => ({ ...p, firmaTecnicoB64: "" }));
   }
 
   function guardarFirma() {
     const canvas = sigRef.current;
     if (!canvas) return;
-    // PNG (firma) -> base64
+    // PNG -> base64
     const dataUrl = canvas.toDataURL("image/png");
-    setForm((p) => ({ ...p, firmaTecnicoImg: dataUrl }));
+    setForm((p) => ({ ...p, firmaTecnicoB64: dataUrl }));
     showToast("ok", "Firma digital capturada.");
   }
 
   /* =======================================================
-     FOTOS (máx 4, comprimidas)
+     FOTOS (acumula hasta 4, comprimidas)
   ======================================================== */
-  async function handleFotos(e) {
-    const files = Array.from(e.target.files || []).slice(0, 4);
+  async function onAddFotos(e) {
+    const files = Array.from(e.target.files || []);
     if (!files.length) return;
+
+    const cupo = MAX_FOTOS - (form.fotosB64?.length || 0);
+    const take = files.slice(0, Math.max(0, cupo));
+
+    if (!take.length) {
+      showToast("warn", `Máximo ${MAX_FOTOS} fotos.`);
+      e.target.value = "";
+      return;
+    }
 
     setLoading(true);
     try {
-      const out = [];
-      for (const f of files) {
-        out.push(await fileToCompressedDataURL(f, 1280, 0.72));
+      const nuevas = [];
+      for (const f of take) {
+        const b64 = await fileToCompressedDataURL(f, 1280, 0.72);
+        nuevas.push(b64);
       }
-      setForm((p) => ({ ...p, fotos: out }));
-      showToast("ok", `Fotos cargadas: ${out.length}/4`);
+
+      setForm((prev) => ({
+        ...prev,
+        fotosB64: [...(prev.fotosB64 || []), ...nuevas].slice(0, MAX_FOTOS),
+      }));
+
+      showToast("ok", `Fotos cargadas: ${Math.min((form.fotosB64?.length || 0) + nuevas.length, MAX_FOTOS)}/${MAX_FOTOS}`);
     } catch (err) {
       console.warn(err);
       showToast("warn", "No se pudieron procesar las fotos.");
     } finally {
       setLoading(false);
-      e.target.value = "";
+      e.target.value = ""; // permite re-seleccionar la misma foto
     }
   }
 
   function borrarFoto(idx) {
-    setForm((p) => ({ ...p, fotos: p.fotos.filter((_, i) => i !== idx) }));
+    setForm((prev) => ({
+      ...prev,
+      fotosB64: (prev.fotosB64 || []).filter((_, i) => i !== idx),
+    }));
   }
 
   /* =======================================================
@@ -329,7 +346,7 @@ export default function NuevaOT() {
     try {
       try {
         vibrar?.(30);
-      } catch { }
+      } catch {}
 
       const blob = await enviarOT(payload);
 
@@ -353,16 +370,14 @@ export default function NuevaOT() {
       delete payloadLiviano.firma_tecnico_img;
       delete payloadLiviano.fotos_b64;
 
-      // marcamos que hay evidencias pendientes (para auditoría)
       payloadLiviano.evidencias_pendientes = true;
 
       await guardarPendiente({ data: payloadLiviano });
 
-
-
-
-
-      showToast("warn", "Sin conexión o servidor no disponible. La OT se guardó para enviar más tarde (sin firma/fotos). Reintentar cuando haya señal.");
+      showToast(
+        "warn",
+        "Sin conexión o servidor no disponible. La OT se guardó para enviar más tarde (sin firma/fotos). Reintentar cuando haya señal."
+      );
     } finally {
       setLoading(false);
     }
@@ -553,8 +568,6 @@ export default function NuevaOT() {
         ➕ Agregar material
       </button>
 
-   
-
       <label>Observaciones</label>
       <textarea
         rows={3}
@@ -592,6 +605,7 @@ export default function NuevaOT() {
           onTouchMove={(e) => { e.preventDefault(); moveDraw(e); }}
           onTouchEnd={(e) => { e.preventDefault(); endDraw(); }}
         />
+
         <div style={{ display: "flex", gap: 10, marginTop: 10 }}>
           <button type="button" className="btn-add" onClick={guardarFirma}>
             💾 Guardar firma
@@ -601,13 +615,18 @@ export default function NuevaOT() {
           </button>
         </div>
 
-        {form.firmaTecnicoImg && (
+        {form.firmaTecnicoB64 && (
           <div style={{ marginTop: 10 }}>
             <div className="text-muted" style={{ marginBottom: 6 }}>Vista previa:</div>
             <img
-              src={form.firmaTecnicoImg}
+              src={form.firmaTecnicoB64}
               alt="Firma técnico"
-              style={{ width: "100%", maxWidth: 520, borderRadius: 10, border: "1px solid rgba(148,163,184,.25)" }}
+              style={{
+                width: "100%",
+                maxWidth: 520,
+                borderRadius: 10,
+                border: "1px solid rgba(148,163,184,.25)"
+              }}
             />
           </div>
         )}
@@ -620,47 +639,55 @@ export default function NuevaOT() {
         placeholder="Nombre y apellido"
       />
 
-      {/* Fotos */}
-      <label>Fotos del trabajo (máx 4)</label>
+      {/* Evidencias (Fotos) */}
+      <h3 className="subtitulo">Evidencias (Fotos)</h3>
+
       <input
         type="file"
         accept="image/*"
-        capture="environment"
         multiple
-        onChange={handleFotos}
+        capture="environment"
+        onChange={onAddFotos}
       />
 
-      {form.fotos.length > 0 && (
-        <div className="card" style={{ marginTop: 10 }}>
-          <div className="text-muted" style={{ marginBottom: 8 }}>
-            Adjuntas: {form.fotos.length}/4 (comprimidas)
+      {(form.fotosB64?.length || 0) > 0 && (
+        <>
+          <div className="card" style={{ marginTop: 10 }}>
+            <div className="text-muted" style={{ marginBottom: 8 }}>
+              Adjuntas: {(form.fotosB64?.length || 0)}/{MAX_FOTOS} (comprimidas)
+            </div>
+
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+              {(form.fotosB64 || []).map((src, idx) => (
+                <div key={idx} style={{ position: "relative" }}>
+                  <img
+                    src={src}
+                    alt={`Foto ${idx + 1}`}
+                    style={{
+                      width: "100%",
+                      borderRadius: 12,
+                      border: "1px solid rgba(148,163,184,.25)",
+                    }}
+                  />
+                  <button
+                    type="button"
+                    className="btn-x"
+                    style={{ position: "absolute", top: 6, right: 6 }}
+                    onClick={() => borrarFoto(idx)}
+                    aria-label="Eliminar foto"
+                    title="Eliminar foto"
+                  >
+                    ❌
+                  </button>
+                </div>
+              ))}
+            </div>
           </div>
 
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-            {form.fotos.map((src, idx) => (
-              <div key={idx} style={{ position: "relative" }}>
-                <img
-                  src={src}
-                  alt={`Foto ${idx + 1}`}
-                  style={{
-                    width: "100%",
-                    borderRadius: 12,
-                    border: "1px solid rgba(148,163,184,.25)"
-                  }}
-                />
-                <button
-                  type="button"
-                  className="btn-x"
-                  style={{ position: "absolute", top: 8, right: 8 }}
-                  onClick={() => borrarFoto(idx)}
-                  aria-label="Quitar foto"
-                >
-                  ❌
-                </button>
-              </div>
-            ))}
-          </div>
-        </div>
+          <p className="text-muted" style={{ marginTop: 8 }}>
+            Máximo {MAX_FOTOS} fotos. Se comprimen automáticamente para no hacer pesado el PDF.
+          </p>
+        </>
       )}
 
       {/* Opción impresión */}
@@ -686,4 +713,3 @@ export default function NuevaOT() {
     </div>
   );
 }
-
