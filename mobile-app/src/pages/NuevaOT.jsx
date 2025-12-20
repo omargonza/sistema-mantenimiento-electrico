@@ -1,3 +1,7 @@
+
+import { useNavigate } from "react-router-dom";
+
+
 import { useRef, useState } from "react";
 import SmartSelect from "../components/SmartSelect";
 import NumericInput from "../components/NumericInput";
@@ -7,6 +11,8 @@ import { vibrar } from "../utils/haptics";
 import "../styles/app.css";
 import useFormStore from "../hooks/useFormStore";
 import Toast from "../components/Toast";
+import TableroAutocomplete from "../components/TableroAutocomplete";
+
 
 /* =======================================================
    UTILIDADES: cache para autocompletado
@@ -78,6 +84,7 @@ const initialForm = {
   fecha: new Date().toISOString().slice(0, 10),
   ubicacion: "",
   tablero: "",
+  zona: "",
   circuito: "",
   vehiculo: "",
   kmIni: "",
@@ -196,12 +203,16 @@ function normalizarPayloadOT(form) {
 }
 
 export default function NuevaOT() {
+  const navigate = useNavigate();
+
   const { guardarPendiente } = useOfflineQueue();
 
   const [form, setForm] = useState(initialForm);
 
   // autoguardado + clear
   const { clear: clearForm } = useFormStore("ot_form_cache", form, setForm, initialForm);
+
+
 
   // UI state
   const [loading, setLoading] = useState(false);
@@ -439,12 +450,42 @@ export default function NuevaOT() {
         onChange={(e) => setForm({ ...form, ubicacion: e.target.value })}
       />
 
-      <SmartSelect
-        label="Tablero"
-        options={sugeridosTableros}
-        value={form.tablero}
-        onChange={(v) => setForm({ ...form, tablero: v })}
+      {/* TABLERO — AUTOCOMPLETE PRO */}
+      <label>Tablero</label>
+      <TableroAutocomplete
+        placeholder="Seleccionar tablero…"
+        onSelect={(t) =>
+          setForm({
+            ...form,
+            tablero: t.nombre,
+            zona: t.zona,
+          })
+        }
       />
+      {form.tablero && (
+        <button
+          type="button"
+          className="btn-outline"
+          style={{ marginTop: 8 }}
+          onClick={() =>
+            navigate(`/historial?tablero=${encodeURIComponent(form.tablero)}`)
+          }
+        >
+          📜 Ver historial de este tablero
+        </button>
+      )}
+
+
+
+
+      {/* ZONA (opcional, solo lectura) */}
+      {form.zona && (
+        <div className="muted" style={{ marginTop: 6 }}>
+          Zona: {form.zona}
+        </div>
+      )}
+
+
 
       <label>Circuito</label>
       <input
@@ -462,10 +503,16 @@ export default function NuevaOT() {
       />
 
       <label>Kilómetro Inicial</label>
-      <NumericInput value={form.kmIni} onChange={(v) => setForm({ ...form, kmIni: v })} />
+      <NumericInput
+        value={form.kmIni}
+        onChange={(v) => setForm({ ...form, kmIni: v })}
+      />
 
       <label>Kilómetro Final</label>
-      <NumericInput value={form.kmFin} onChange={(v) => setForm({ ...form, kmFin: v })} />
+      <NumericInput
+        value={form.kmFin}
+        onChange={(v) => setForm({ ...form, kmFin: v })}
+      />
 
       {kmTotal !== null && (
         <div className="card" style={{ marginTop: 10, padding: 12 }}>
@@ -475,8 +522,6 @@ export default function NuevaOT() {
           </div>
         </div>
       )}
-
-
 
       <h3 className="subtitulo">Técnicos</h3>
 
@@ -488,7 +533,9 @@ export default function NuevaOT() {
             onChange={(v) =>
               setForm({
                 ...form,
-                tecnicos: form.tecnicos.map((t, i) => (i === idx ? { ...t, legajo: v } : t)),
+                tecnicos: form.tecnicos.map((t, i) =>
+                  i === idx ? { ...t, legajo: v } : t
+                ),
               })
             }
           />
@@ -499,7 +546,9 @@ export default function NuevaOT() {
             onChange={(e) =>
               setForm({
                 ...form,
-                tecnicos: form.tecnicos.map((t, i) => (i === idx ? { ...t, nombre: e.target.value } : t)),
+                tecnicos: form.tecnicos.map((t, i) =>
+                  i === idx ? { ...t, nombre: e.target.value } : t
+                ),
               })
             }
           />
@@ -508,7 +557,12 @@ export default function NuevaOT() {
             <button
               type="button"
               className="btn-x"
-              onClick={() => setForm({ ...form, tecnicos: form.tecnicos.filter((_, i) => i !== idx) })}
+              onClick={() =>
+                setForm({
+                  ...form,
+                  tecnicos: form.tecnicos.filter((_, i) => i !== idx),
+                })
+              }
             >
               ❌
             </button>
@@ -519,7 +573,12 @@ export default function NuevaOT() {
       <button
         type="button"
         className="btn-add"
-        onClick={() => setForm({ ...form, tecnicos: [...form.tecnicos, { legajo: "", nombre: "" }] })}
+        onClick={() =>
+          setForm({
+            ...form,
+            tecnicos: [...form.tecnicos, { legajo: "", nombre: "" }],
+          })
+        }
       >
         ➕ Agregar técnico
       </button>
@@ -527,7 +586,10 @@ export default function NuevaOT() {
       <h3 className="subtitulo">Tareas</h3>
 
       <label>Tarea pedida</label>
-      <input value={form.tareaPedida} onChange={(e) => setForm({ ...form, tareaPedida: e.target.value })} />
+      <input
+        value={form.tareaPedida}
+        onChange={(e) => setForm({ ...form, tareaPedida: e.target.value })}
+      />
 
       <label>Tarea realizada</label>
       <textarea
@@ -544,7 +606,10 @@ export default function NuevaOT() {
       />
 
       <label>Luminarias / Equipos</label>
-      <input value={form.luminaria} onChange={(e) => setForm({ ...form, luminaria: e.target.value })} />
+      <input
+        value={form.luminaria}
+        onChange={(e) => setForm({ ...form, luminaria: e.target.value })}
+      />
 
       <h3 className="subtitulo">Materiales</h3>
 
@@ -556,7 +621,9 @@ export default function NuevaOT() {
             onChange={(e) =>
               setForm({
                 ...form,
-                materiales: form.materiales.map((mat, i) => (i === idx ? { ...mat, material: e.target.value } : mat)),
+                materiales: form.materiales.map((mat, i) =>
+                  i === idx ? { ...mat, material: e.target.value } : mat
+                ),
               })
             }
           />
@@ -567,7 +634,9 @@ export default function NuevaOT() {
             onChange={(v) =>
               setForm({
                 ...form,
-                materiales: form.materiales.map((mat, i) => (i === idx ? { ...mat, cant: v } : mat)),
+                materiales: form.materiales.map((mat, i) =>
+                  i === idx ? { ...mat, cant: v } : mat
+                ),
               })
             }
           />
@@ -578,7 +647,9 @@ export default function NuevaOT() {
             onChange={(e) =>
               setForm({
                 ...form,
-                materiales: form.materiales.map((mat, i) => (i === idx ? { ...mat, unidad: e.target.value } : mat)),
+                materiales: form.materiales.map((mat, i) =>
+                  i === idx ? { ...mat, unidad: e.target.value } : mat
+                ),
               })
             }
           />
@@ -587,7 +658,12 @@ export default function NuevaOT() {
             <button
               type="button"
               className="btn-x"
-              onClick={() => setForm({ ...form, materiales: form.materiales.filter((_, i) => i !== idx) })}
+              onClick={() =>
+                setForm({
+                  ...form,
+                  materiales: form.materiales.filter((_, i) => i !== idx),
+                })
+              }
             >
               ❌
             </button>
@@ -641,9 +717,18 @@ export default function NuevaOT() {
           onMouseMove={moveDraw}
           onMouseUp={endDraw}
           onMouseLeave={endDraw}
-          onTouchStart={(e) => { e.preventDefault(); startDraw(e); }}
-          onTouchMove={(e) => { e.preventDefault(); moveDraw(e); }}
-          onTouchEnd={(e) => { e.preventDefault(); endDraw(); }}
+          onTouchStart={(e) => {
+            e.preventDefault();
+            startDraw(e);
+          }}
+          onTouchMove={(e) => {
+            e.preventDefault();
+            moveDraw(e);
+          }}
+          onTouchEnd={(e) => {
+            e.preventDefault();
+            endDraw();
+          }}
         />
 
         <div style={{ display: "flex", gap: 10, marginTop: 10 }}>
@@ -657,7 +742,9 @@ export default function NuevaOT() {
 
         {form.firmaTecnicoB64 && (
           <div style={{ marginTop: 10 }}>
-            <div className="text-muted" style={{ marginBottom: 6 }}>Vista previa:</div>
+            <div className="text-muted" style={{ marginBottom: 6 }}>
+              Vista previa:
+            </div>
             <img
               src={form.firmaTecnicoB64}
               alt="Firma técnico"
@@ -665,7 +752,7 @@ export default function NuevaOT() {
                 width: "100%",
                 maxWidth: 520,
                 borderRadius: 10,
-                border: "1px solid rgba(148,163,184,.25)"
+                border: "1px solid rgba(148,163,184,.25)",
               }}
             />
           </div>

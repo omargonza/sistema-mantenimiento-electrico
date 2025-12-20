@@ -354,3 +354,42 @@ label.campo > input.input:focus {
   top: 6px;
   right: 6px;
 }
+
+.timeline-item {
+  padding: 12px;
+  border-bottom: 1px solid #334155;
+}
+
+.fecha {
+  font-size: 0.8rem;
+  color: #9ca3af;
+}
+
+.circuito {
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.desc {
+  margin-top: 4px;
+  font-size: 0.95rem;
+}
+.dropdown {
+  position: absolute;
+  z-index: 10;
+  background: #0b1220;
+  border: 1px solid #334155;
+  width: 100%;
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.dropdown-item {
+  padding: 10px;
+  border-bottom: 1px solid #1e293b;
+}
+
+.dropdown-item:hover {
+  background: #1e293b;
+  cursor: pointer;
+}

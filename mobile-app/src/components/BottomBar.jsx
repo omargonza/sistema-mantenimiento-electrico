@@ -14,6 +14,12 @@ export default function BottomBar() {
         <div>➕</div>
         <span>Nueva OT</span>
       </NavLink>
+
+      {/* HISTORIAL */}
+      <NavLink className="bottom-btn" to="/historial">
+        <div>📜</div>
+        <span>Historial</span>
+      </NavLink>
     </nav>
   );
 }
