@@ -8,6 +8,7 @@ export default function NumericInput({ label, value, onChange, placeholder }) {
         className="input"
         value={value}
         placeholder={placeholder}
+         min="0"
         onChange={(e) => onChange(e.target.value)}
       />
     </div>

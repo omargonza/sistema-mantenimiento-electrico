@@ -119,6 +119,7 @@ function guardarHistorialOT(payload) {
     vehiculo: payload.vehiculo || "",
     km_inicial: payload.km_inicial,
     km_final: payload.km_final,
+    km_total: payload.km_total, // ✅
     tecnicos: payload.tecnicos,
     materiales: payload.materiales,
     luminaria_equipos: payload.luminaria_equipos,
@@ -126,6 +127,8 @@ function guardarHistorialOT(payload) {
     tarea_realizada: payload.tarea_realizada,
     tarea_pendiente: payload.tarea_pendiente,
     tecnico: payload.tecnicos?.[0]?.nombre || "—",
+
+
 
     // Auditoría
     observaciones: payload.observaciones,
@@ -156,9 +159,18 @@ function normalizarPayloadOT(form) {
     tablero: tableroFinal,
     circuito: circuitoFinal,
     vehiculo: form.vehiculo || "",
+    km_inicial: form.kmIni === "" ? null : Number(form.kmIni),
+    km_final: form.kmFin === "" ? null : Number(form.kmFin),
 
-    km_inicial: form.kmIni || null,
-    km_final: form.kmFin || null,
+    // ✅ nuevo: km_total
+    km_total:
+      form.kmIni !== "" &&
+        form.kmFin !== "" &&
+        Number.isFinite(Number(form.kmIni)) &&
+        Number.isFinite(Number(form.kmFin))
+        ? Number(form.kmFin) - Number(form.kmIni)
+        : null,
+
 
     tecnicos: form.tecnicos || [],
     materiales: form.materiales || [],
@@ -206,12 +218,14 @@ export default function NuevaOT() {
   /* =======================================================
      VALIDACIÓN
   ======================================================== */
+
   function validarCampos() {
     if (!form.ubicacion.trim()) return "La ubicación es obligatoria.";
     if (!form.tablero.trim()) return "Debe seleccionar un tablero.";
     if (!form.vehiculo.trim()) return "Debe seleccionar un vehículo.";
 
-    if (form.kmIni && form.kmFin && Number(form.kmFin) < Number(form.kmIni)) {
+    // km coherente (una sola vez)
+    if (form.kmIni !== "" && form.kmFin !== "" && Number(form.kmFin) < Number(form.kmIni)) {
       return "El km final no puede ser menor que el inicial.";
     }
 
@@ -219,8 +233,23 @@ export default function NuevaOT() {
     if (!form.firmaTecnico.trim()) return "Falta la aclaración (nombre) del técnico.";
     if (!form.firmaTecnicoB64) return "Falta la firma digital del técnico.";
 
-    return null;
+    return null; // ✅ “no hay error”
   }
+  // =========================
+  // KM TOTAL (calculado)
+  // =========================
+  const kmIniNum = Number(form.kmIni);
+  const kmFinNum = Number(form.kmFin);
+
+  const kmTotal =
+    form.kmIni !== "" &&
+      form.kmFin !== "" &&
+      Number.isFinite(kmIniNum) &&
+      Number.isFinite(kmFinNum)
+      ? kmFinNum - kmIniNum
+      : null;
+
+
 
   /* =======================================================
      FIRMA (canvas)
@@ -346,7 +375,7 @@ export default function NuevaOT() {
     try {
       try {
         vibrar?.(30);
-      } catch {}
+      } catch { }
 
       const blob = await enviarOT(payload);
 
@@ -437,6 +466,17 @@ export default function NuevaOT() {
 
       <label>Kilómetro Final</label>
       <NumericInput value={form.kmFin} onChange={(v) => setForm({ ...form, kmFin: v })} />
+
+      {kmTotal !== null && (
+        <div className="card" style={{ marginTop: 10, padding: 12 }}>
+          <div className="text-muted">Kilómetros recorridos</div>
+          <div style={{ fontSize: 18, fontWeight: 800 }}>
+            {kmTotal.toFixed(2)} km
+          </div>
+        </div>
+      )}
+
+
 
       <h3 className="subtitulo">Técnicos</h3>
 

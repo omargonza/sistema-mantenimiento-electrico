@@ -9,6 +9,8 @@ class OrdenTrabajo(models.Model):
 
     km_inicial = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     km_final = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    km_total = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+
 
     tecnicos = models.JSONField(default=list)
     materiales = models.JSONField(default=list)

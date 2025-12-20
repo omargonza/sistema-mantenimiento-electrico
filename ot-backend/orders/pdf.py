@@ -12,6 +12,8 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.platypus import (
     SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, KeepTogether, Image
 )
+from django.contrib.staticfiles import finders
+from reportlab.lib.utils import ImageReader
 
 # =========================
 # TEMA PREMIUM (DUAL MODE)
@@ -60,6 +62,15 @@ def _img_flowable(abs_path: str, w_cm: float, h_cm: float, h_align="LEFT"):
     im = Image(abs_path, width=w_cm * cm, height=h_cm * cm)
     im.hAlign = h_align
     return im
+
+def _static_abs(static_rel: str) -> str:
+    """
+    Devuelve el path absoluto real de un archivo en staticfiles.
+    Funciona en desarrollo y producción (collectstatic).
+    """
+    p = finders.find(static_rel)
+    return p or ""
+
 
 
 def generar_pdf(data):
@@ -213,22 +224,34 @@ def generar_pdf(data):
 
     story = []
 
-    # =========================
+      # =========================
     # RESUMEN (card)
     # =========================
     km_ini = safe(data.get("km_inicial")).strip()
     km_fin = safe(data.get("km_final")).strip()
     vehiculo = safe(data.get("vehiculo")).strip()
+
     km_text = f"{km_ini or '-'} → {km_fin or '-'}" if (km_ini or km_fin) else "-"
+
+    # ✅ KM TOTAL
+    km_total = data.get("km_total")
+    km_total_text = f"{km_total} km" if km_total not in (None, "", 0) else "-"
 
     resumen_rows = [
         [P("FECHA", LABEL), P(safe(data.get("fecha")), VALUE),
          P("UBICACIÓN", LABEL), P(safe(data.get("ubicacion")), VALUE)],
+
         [P("TABLERO", LABEL), P(safe(data.get("tablero")), VALUE),
          P("CIRCUITO", LABEL), P(safe(data.get("circuito")), VALUE)],
+
         [P("VEHÍCULO", LABEL), P(vehiculo or "-", VALUE),
          P("KM (INI→FIN)", LABEL), P(km_text, VALUE)],
+
+        [P("KM TOTAL", LABEL), P(km_total_text, VALUE),
+         P("", LABEL), P("", VALUE)],
     ]
+
+
 
     resumen = Table(
         resumen_rows,
@@ -412,45 +435,72 @@ def generar_pdf(data):
     # =========================
     # Header/Footer por página
     # =========================
-    logo_path = os.path.join(os.path.dirname(__file__), "apple-touch-icon.png")
+    logo_path = _static_abs("orders/rayo.png")
+
 
     def on_page(canv, _doc):
-        canv.saveState()
-        w, h = A4
+     canv.saveState()
+     w, h = A4
 
-        # barra superior
-        canv.setFillColor(theme["bg"])
-        canv.rect(0, h - 2.9 * cm, w, 2.9 * cm, stroke=0, fill=1)
+    # =========================
+    # Barra superior
+    # =========================
+     canv.setFillColor(theme["bg"])
+     canv.rect(0, h - 2.9 * cm, w, 2.9 * cm, stroke=0, fill=1)
 
-        # acento
-        canv.setFillColor(theme["accent"])
-        canv.rect(0, h - 2.9 * cm, w, 0.18 * cm, stroke=0, fill=1)
+    # =========================
+    # Acento gris plomo metalizado
+    # =========================
+     accent_header = colors.HexColor("#9ca3af")  # plomo/acero claro
+     canv.setFillColor(accent_header)
+     canv.rect(0, h - 2.9 * cm, w, 0.18 * cm, stroke=0, fill=1)
 
-        # logo
-        if os.path.exists(logo_path):
-            canv.drawImage(
-                logo_path,
-                1.6 * cm,
-                h - 2.55 * cm,
-                width=1.6 * cm,
-                height=1.6 * cm,
-                preserveAspectRatio=True,
-                mask="auto",
-            )
+    # =========================
+    # Logo corporativo (rayo) — grande
+    # =========================
+     if logo_path and os.path.exists(logo_path):
+        size = 1.85 * cm
+        x = 1.6 * cm
+        y = h - 2.70 * cm
+        canv.drawImage(
+            ImageReader(logo_path),
+            x,
+            y,
+            width=size,
+            height=size,
+            preserveAspectRatio=True,
+            mask="auto",
+        )
 
-        canv.setFillColor(theme["text"])
-        canv.setFont("Helvetica-Bold", 12)
-        canv.drawString(3.5 * cm, h - 1.55 * cm, "SECTOR MANTENIMIENTO ELÉCTRICO")
-        canv.setFont("Helvetica", 10)
-        canv.drawString(3.5 * cm, h - 2.05 * cm, "ORDEN DE TRABAJO")
+    # =========================
+    # Títulos
+    # =========================
+     canv.setFillColor(theme["text"])
+     canv.setFont("Helvetica-Bold", 12)
+     canv.drawString(3.5 * cm, h - 1.55 * cm, "SECTOR MANTENIMIENTO ELÉCTRICO")
 
-        # footer
-        canv.setFillColor(theme["muted"])
-        canv.setFont("Helvetica-Oblique", 8)
-        canv.drawString(1.6 * cm, 1.2 * cm, "Sistema de Mantenimiento Eléctrico — Desarrollado por conurbaDEV")
-        canv.drawRightString(w - 1.6 * cm, 1.2 * cm, f"Página {_doc.page}")
+     canv.setFont("Helvetica", 10)
+     canv.drawString(3.5 * cm, h - 2.05 * cm, "ORDEN DE TRABAJO")
 
-        canv.restoreState()
+    # =========================
+    # Footer
+    # =========================
+     canv.setFillColor(theme["muted"])
+     canv.setFont("Helvetica-Oblique", 8)
+     canv.drawString(
+        1.6 * cm,
+        1.2 * cm,
+        "Sistema de Mantenimiento Eléctrico — Desarrollado por conurbaDEV",
+    )
+     canv.drawRightString(
+        w - 1.6 * cm,
+        1.2 * cm,
+        f"Página {_doc.page}",
+    )
+
+     canv.restoreState()
+
 
     doc.build(story, onFirstPage=on_page, onLaterPages=on_page)
     return buffer.getvalue()
+
