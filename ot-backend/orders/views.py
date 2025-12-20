@@ -1,4 +1,4 @@
-# views.py
+# orders/views.py
 import os
 import base64
 
@@ -14,6 +14,8 @@ from .models import OrdenTrabajo
 from .serializers import OrdenTrabajoSerializer
 from .pdf import generar_pdf
 
+from historial.services import registrar_historial_desde_ot
+
 
 # =========================
 # Helpers
@@ -27,12 +29,14 @@ def _b64_to_bytes(s: str) -> bytes:
     s = (s or "").strip()
     if not s:
         return b""
+
     if s.startswith("data:image/"):
         try:
             _, b64 = s.split(",", 1)
             return base64.b64decode(b64)
         except Exception:
             return b""
+
     try:
         return base64.b64decode(s)
     except Exception:
@@ -46,10 +50,13 @@ def _save_b64_image(abs_folder: str, filename: str, b64: str) -> str:
     raw = _b64_to_bytes(b64)
     if not raw:
         return ""
+
     os.makedirs(abs_folder, exist_ok=True)
     path = os.path.join(abs_folder, filename)
+
     with open(path, "wb") as f:
         f.write(raw)
+
     return path
 
 
@@ -59,6 +66,7 @@ def _rel_media_path(abs_path: str) -> str:
     """
     if not abs_path:
         return ""
+
     rel = os.path.relpath(abs_path, settings.MEDIA_ROOT)
     return rel.replace("\\", "/")
 
@@ -76,11 +84,14 @@ class OrdenListCreateView(APIView):
         serializer = OrdenTrabajoSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         ot = serializer.save()
-        return Response(OrdenTrabajoSerializer(ot).data, status=status.HTTP_201_CREATED)
+        return Response(
+            OrdenTrabajoSerializer(ot).data,
+            status=status.HTTP_201_CREATED
+        )
 
 
 # =========================
-# API: Generar PDF + Auditoría
+# API: Generar PDF + Auditoría + Historial
 # =========================
 class OrdenPDFView(APIView):
     def post(self, request):
@@ -90,43 +101,59 @@ class OrdenPDFView(APIView):
             print("ERRORES SERIALIZER OT:", serializer.errors)
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-        # Copia dict para poder hacer pop sin tocar validated_data
+        # Copia segura de validated_data
         data = dict(serializer.validated_data)
 
         ahora = timezone.now()
         year = ahora.strftime("%Y")
         month = ahora.strftime("%m")
 
-        # Carpeta única por OT para evidencias (firma/fotos)
+        # Carpeta única por OT para evidencias
         ot_ts = int(ahora.timestamp())
-        evidence_rel_folder = os.path.join("ordenes", year, month, f"evid_{ot_ts}")
-        evidence_abs_folder = os.path.join(settings.MEDIA_ROOT, evidence_rel_folder)
+        evidence_rel_folder = os.path.join(
+            "ordenes", year, month, f"evid_{ot_ts}"
+        )
+        evidence_abs_folder = os.path.join(
+            settings.MEDIA_ROOT, evidence_rel_folder
+        )
         os.makedirs(evidence_abs_folder, exist_ok=True)
 
-        # 1) Extraer inputs "solo request" (si tu serializer los define como write_only)
-        #    Si todavía no se actualizo  serializer, estos pop simplemente devuelven "" / []
+        # =========================
+        # 1) Datos SOLO del request
+        # =========================
         firma_b64 = data.pop("firma_tecnico_img", "")
         fotos_b64 = data.pop("fotos_b64", []) or []
         print_mode = bool(data.pop("print_mode", False))
 
-        # 2) Guardar firma técnico (archivo)
-        firma_abs = ""
+        # =========================
+        # 2) Guardar firma técnico
+        # =========================
         firma_rel = ""
         if firma_b64:
-            firma_abs = _save_b64_image(evidence_abs_folder, "firma_tecnico.png", firma_b64)
+            firma_abs = _save_b64_image(
+                evidence_abs_folder,
+                "firma_tecnico.png",
+                firma_b64
+            )
             firma_rel = _rel_media_path(firma_abs)
 
-        # 3) Guardar fotos (máximo 4) como archivos
+        # =========================
+        # 3) Guardar fotos (máx 4)
+        # =========================
         fotos_rel = []
         for idx, fb64 in enumerate(list(fotos_b64)[:4], start=1):
-            p_abs = _save_b64_image(evidence_abs_folder, f"foto_{idx}.jpg", fb64)
+            p_abs = _save_b64_image(
+                evidence_abs_folder,
+                f"foto_{idx}.jpg",
+                fb64
+            )
             p_rel = _rel_media_path(p_abs)
             if p_rel:
                 fotos_rel.append(p_rel)
 
-        # 4) Persistir OT en DB (auditoría)
-        #    Guardamos paths (no base64)
-        #    Requiere campos en el modelo: firma_tecnico_path (CharField) y fotos (JSONField)
+        # =========================
+        # 4) Persistir OT (SIEMPRE)
+        # =========================
         if firma_rel:
             data["firma_tecnico_path"] = firma_rel
         if fotos_rel:
@@ -134,19 +161,38 @@ class OrdenPDFView(APIView):
 
         ot = OrdenTrabajo.objects.create(**data)
 
-        # 5) Preparar data para PDF:
-        #    - sumamos id_ot
-        #    - pasamos paths para que el PDF los use (más liviano que base64)
+        # =========================
+        # 4.1) Registrar historial (memoria del tablero)
+        # =========================
+        try:
+            registrar_historial_desde_ot({
+                "tablero": ot.tablero,
+                "zona": getattr(ot, "zona", ""),
+                "circuito": ot.circuito,
+                "tarea_realizada": ot.tarea_realizada,
+                "tarea_pedida": ot.tarea_pedida,
+            })
+        except Exception as e:
+            # Nunca romper la OT ni el PDF por el historial
+            print("ERROR HISTORIAL:", e)
+
+        # =========================
+        # 5) Preparar data para PDF
+        # =========================
         pdf_data = dict(data)
         pdf_data["print_mode"] = print_mode
         pdf_data["id_ot"] = f"OT-{ot.id:06d}"
         pdf_data["firma_tecnico_path"] = firma_rel
         pdf_data["fotos_paths"] = fotos_rel
 
+        # =========================
         # 6) Generar PDF
+        # =========================
         pdf_bytes = generar_pdf(pdf_data)
 
-        # 7) Guardar PDF (como ya hacías) en carpeta mensual
+        # =========================
+        # 7) Guardar PDF
+        # =========================
         pdf_folder = os.path.join(settings.MEDIA_ROOT, "ordenes", year, month)
         os.makedirs(pdf_folder, exist_ok=True)
 
@@ -158,7 +204,9 @@ class OrdenPDFView(APIView):
         with open(filepath, "wb") as f:
             f.write(pdf_bytes)
 
+        # =========================
         # 8) Responder PDF
+        # =========================
         resp = HttpResponse(pdf_bytes, content_type="application/pdf")
         resp["Content-Disposition"] = f'attachment; filename="{filename}"'
         return resp
