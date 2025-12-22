@@ -452,16 +452,27 @@ export default function NuevaOT() {
 
       {/* TABLERO — AUTOCOMPLETE PRO */}
       <label>Tablero</label>
+
       <TableroAutocomplete
+        value={form.tablero} // ✅ mantiene sincronizado input ↔ state
         placeholder="Seleccionar tablero…"
-        onSelect={(t) =>
-          setForm({
-            ...form,
+        onSelect={(t) => {
+          setForm((prev) => ({
+            ...prev,
             tablero: t.nombre,
             zona: t.zona,
-          })
-        }
+          }));
+        }}
       />
+
+      {/* ZONA visible (solo lectura) */}
+      {form.zona && (
+        <div className="muted" style={{ marginTop: 6 }}>
+          Zona: {form.zona}
+        </div>
+      )}
+
+      {/* Botón historial del tablero seleccionado */}
       {form.tablero && (
         <button
           type="button"
@@ -474,6 +485,7 @@ export default function NuevaOT() {
           📜 Ver historial de este tablero
         </button>
       )}
+
 
 
 

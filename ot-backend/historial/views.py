@@ -4,6 +4,10 @@ from rest_framework.response import Response
 from .models import Tablero
 from .serializers import TableroSerializer
 
+from rest_framework.permissions import AllowAny
+
+
+
 
 class TablerosListView(APIView):
     """
@@ -45,3 +49,28 @@ class HistorialPorTablero(APIView):
                 for h in historial
             ]
         })
+
+
+
+class TableroAutocompleteView(APIView):
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        q = (request.query_params.get("q") or "").strip()
+        limit = int(request.query_params.get("limit") or 20)
+        limit = max(5, min(limit, 30))  # cap
+
+        qs = Tablero.objects.all()
+
+        # Búsqueda simple y robusta
+        if q:
+            # normaliza espacios múltiples
+            q = " ".join(q.split())
+            qs = qs.filter(nombre__icontains=q)
+
+        # Solo traemos lo necesario (muy liviano)
+        data = list(
+            qs.order_by("nombre")
+              .values("nombre", "zona")[:limit]
+        )
+        return Response(data)

@@ -1,15 +1,19 @@
 from django.db import models
 
-
 class Tablero(models.Model):
     nombre = models.CharField(max_length=120, unique=True)
     zona = models.CharField(max_length=120)
 
     class Meta:
         ordering = ["nombre"]
+        indexes = [
+            models.Index(fields=["nombre"]),
+            models.Index(fields=["zona"]),
+        ]
 
     def __str__(self):
         return f"{self.nombre} ({self.zona})"
+
 
 
 class HistorialTarea(models.Model):

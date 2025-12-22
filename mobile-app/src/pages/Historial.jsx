@@ -1,15 +1,21 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
+
 import TableroAutocomplete from "../components/TableroAutocomplete";
 import { obtenerHistorial } from "../services/historialApi";
 
 export default function Historial() {
+  const [searchParams] = useSearchParams();
+
+  const [tableroSel, setTableroSel] = useState("");
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
   const buscar = async (tablero) => {
-    if (!tablero) return;
+    if (!tablero?.nombre) return;
 
+    setTableroSel(tablero.nombre);
     setLoading(true);
     setError("");
     setData(null);
@@ -24,11 +30,21 @@ export default function Historial() {
     }
   };
 
+  // 🔁 Auto-búsqueda si viene tablero por query param
+  useEffect(() => {
+    const t = searchParams.get("tablero");
+    if (t) {
+      buscar({ nombre: t });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   return (
     <div className="page">
       <h1 className="titulo">Historial por tablero</h1>
 
       <TableroAutocomplete
+        value={tableroSel}
         placeholder="Buscar tablero…"
         onSelect={buscar}
       />
