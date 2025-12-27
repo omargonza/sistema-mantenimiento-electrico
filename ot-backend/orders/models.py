@@ -4,8 +4,11 @@ class OrdenTrabajo(models.Model):
     fecha = models.DateField()
     ubicacion = models.CharField(max_length=200)
     tablero = models.CharField(max_length=100)
+    zona = models.CharField(max_length=200, blank=True, default="") 
+    
     circuito = models.CharField(max_length=100, blank=True)
     vehiculo = models.CharField(max_length=50, blank=True)
+    
 
     km_inicial = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     km_final = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)

@@ -4,6 +4,8 @@
 =========================================== */
 
 /* ===== Tokens base (alineados a detalle.css) ===== */
+
+ 
 :root {
   --bg: #020617;                 /* fondo profundo */
   --bg2: rgba(15, 23, 42, 0.92); /* panel */

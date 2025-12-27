@@ -1,5 +1,6 @@
 # orders/views.py
 import os
+import re
 import base64
 
 from django.conf import settings
@@ -44,9 +45,7 @@ def _b64_to_bytes(s: str) -> bytes:
 
 
 def _save_b64_image(abs_folder: str, filename: str, b64: str) -> str:
-    """
-    Guarda archivo dentro de abs_folder y devuelve path absoluto o "" si falla.
-    """
+    """Guarda archivo dentro de abs_folder y devuelve path absoluto o "" si falla."""
     raw = _b64_to_bytes(b64)
     if not raw:
         return ""
@@ -61,14 +60,21 @@ def _save_b64_image(abs_folder: str, filename: str, b64: str) -> str:
 
 
 def _rel_media_path(abs_path: str) -> str:
-    """
-    Convierte path absoluto dentro de MEDIA_ROOT a path relativo (para guardar en DB).
-    """
+    """Convierte path absoluto dentro de MEDIA_ROOT a path relativo (para guardar en DB)."""
     if not abs_path:
         return ""
 
     rel = os.path.relpath(abs_path, settings.MEDIA_ROOT)
     return rel.replace("\\", "/")
+
+
+def _safe_filename(s: str) -> str:
+    """Evita caracteres inválidos (Windows/FS) y limita longitud."""
+    s = (s or "").strip()
+    s = s.replace("/", "-").replace("\\", "-")
+    s = re.sub(r'[:*"<>|?]', "", s)
+    s = re.sub(r"\s+", " ", s)
+    return (s[:80] or "OT")
 
 
 # =========================
@@ -84,10 +90,7 @@ class OrdenListCreateView(APIView):
         serializer = OrdenTrabajoSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         ot = serializer.save()
-        return Response(
-            OrdenTrabajoSerializer(ot).data,
-            status=status.HTTP_201_CREATED
-        )
+        return Response(OrdenTrabajoSerializer(ot).data, status=status.HTTP_201_CREATED)
 
 
 # =========================
@@ -110,12 +113,8 @@ class OrdenPDFView(APIView):
 
         # Carpeta única por OT para evidencias
         ot_ts = int(ahora.timestamp())
-        evidence_rel_folder = os.path.join(
-            "ordenes", year, month, f"evid_{ot_ts}"
-        )
-        evidence_abs_folder = os.path.join(
-            settings.MEDIA_ROOT, evidence_rel_folder
-        )
+        evidence_rel_folder = os.path.join("ordenes", year, month, f"evid_{ot_ts}")
+        evidence_abs_folder = os.path.join(settings.MEDIA_ROOT, evidence_rel_folder)
         os.makedirs(evidence_abs_folder, exist_ok=True)
 
         # =========================
@@ -130,11 +129,7 @@ class OrdenPDFView(APIView):
         # =========================
         firma_rel = ""
         if firma_b64:
-            firma_abs = _save_b64_image(
-                evidence_abs_folder,
-                "firma_tecnico.png",
-                firma_b64
-            )
+            firma_abs = _save_b64_image(evidence_abs_folder, "firma_tecnico.png", firma_b64)
             firma_rel = _rel_media_path(firma_abs)
 
         # =========================
@@ -142,11 +137,7 @@ class OrdenPDFView(APIView):
         # =========================
         fotos_rel = []
         for idx, fb64 in enumerate(list(fotos_b64)[:4], start=1):
-            p_abs = _save_b64_image(
-                evidence_abs_folder,
-                f"foto_{idx}.jpg",
-                fb64
-            )
+            p_abs = _save_b64_image(evidence_abs_folder, f"foto_{idx}.jpg", fb64)
             p_rel = _rel_media_path(p_abs)
             if p_rel:
                 fotos_rel.append(p_rel)
@@ -157,7 +148,7 @@ class OrdenPDFView(APIView):
         if firma_rel:
             data["firma_tecnico_path"] = firma_rel
         if fotos_rel:
-            data["fotos"] = fotos_rel
+            data["fotos"] = fotos_rel  # ✅ coincide con tu modelo
 
         ot = OrdenTrabajo.objects.create(**data)
 
@@ -183,7 +174,7 @@ class OrdenPDFView(APIView):
         pdf_data["print_mode"] = print_mode
         pdf_data["id_ot"] = f"OT-{ot.id:06d}"
         pdf_data["firma_tecnico_path"] = firma_rel
-        pdf_data["fotos_paths"] = fotos_rel
+        pdf_data["fotos_paths"] = fotos_rel  # ✅ solo para el PDF
 
         # =========================
         # 6) Generar PDF
@@ -196,8 +187,8 @@ class OrdenPDFView(APIView):
         pdf_folder = os.path.join(settings.MEDIA_ROOT, "ordenes", year, month)
         os.makedirs(pdf_folder, exist_ok=True)
 
-        fecha = pdf_data.get("fecha", "")
-        tablero = (pdf_data.get("tablero") or "OT").replace("/", "-")
+        fecha = _safe_filename(str(pdf_data.get("fecha", "")))
+        tablero = _safe_filename(str(pdf_data.get("tablero") or "OT"))
         filename = f"OT_{fecha}_{tablero}_{ot.id}.pdf"
         filepath = os.path.join(pdf_folder, filename)
 
