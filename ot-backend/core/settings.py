@@ -101,6 +101,13 @@ else:
             "NAME": BASE_DIR / "db.sqlite3",
         }
     }
+import logging
+
+logger = logging.getLogger(__name__)
+logger.info("DATABASE_URL present: %s", bool(DATABASE_URL))
+logger.info("DB ENGINE: %s", DATABASES["default"].get("ENGINE"))
+logger.info("DB NAME: %s", DATABASES["default"].get("NAME"))
+logger.info("DB HOST: %s", DATABASES["default"].get("HOST"))
 
 # =========================================================
 #  CORS / CSRF
