@@ -1,6 +1,7 @@
 from pathlib import Path
 import os
 from dotenv import load_dotenv
+
 load_dotenv()
 
 import dj_database_url
@@ -32,7 +33,7 @@ INSTALLED_APPS = [
     "rest_framework",
     "corsheaders",
     # App
-    "orders",
+    "orders.apps.OrdersConfig",
     "historial",
 ]
 
@@ -166,3 +167,6 @@ LOGGING = {
 #  DEFAULTS
 # =========================================================
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+TIME_ZONE = "America/Argentina/Buenos_Aires"
+USE_TZ = True

@@ -1,6 +1,4 @@
-
 import { useNavigate } from "react-router-dom";
-
 
 import { useRef, useState } from "react";
 import SmartSelect from "../components/SmartSelect";
@@ -12,7 +10,6 @@ import "../styles/app.css";
 import useFormStore from "../hooks/useFormStore";
 import Toast from "../components/Toast";
 import TableroAutocomplete from "../components/TableroAutocomplete";
-
 
 /* =======================================================
    UTILIDADES: cache para autocompletado
@@ -64,15 +61,39 @@ async function fileToCompressedDataURL(file, maxW = 1280, quality = 0.72) {
 /* =======================================================
    LISTAS
 ======================================================= */
-const VEHICULOS = ["AB101RS", "AE026TH", "AE026VN", "AF836WI", "AF078KP", "AH223LS", "AA801TV"];
+const VEHICULOS = [
+  "AB101RS",
+  "AE026TH",
+  "AE026VN",
+  "AF836WI",
+  "AF078KP",
+  "AH223LS",
+  "AA801TV",
+];
 
 const TABLEROS = [
-  "TI 1400", "TI 1300", "TI 1200", "TI 1100", "TI 1000",
-  "TI 900", "TI 800", "TI 700", "TI 600", "TI 500",
-  "TI 400", "TI 300", "TI 200", "TI 100",
-  "Tablero Cámara 1", "Tablero Cámara 2",
-  "Ibarrola", "Tuyuti", "Madrid", "San Cayetano",
-  "Peaje Debenedetti ASC", "Peaje Campana Troncal"
+  "TI 1400",
+  "TI 1300",
+  "TI 1200",
+  "TI 1100",
+  "TI 1000",
+  "TI 900",
+  "TI 800",
+  "TI 700",
+  "TI 600",
+  "TI 500",
+  "TI 400",
+  "TI 300",
+  "TI 200",
+  "TI 100",
+  "Tablero Cámara 1",
+  "Tablero Cámara 2",
+  "Ibarrola",
+  "Tuyuti",
+  "Madrid",
+  "San Cayetano",
+  "Peaje Debenedetti ASC",
+  "Peaje Campana Troncal",
 ];
 
 const MAX_FOTOS = 4;
@@ -136,8 +157,6 @@ function guardarHistorialOT(payload) {
     tarea_pendiente: payload.tarea_pendiente,
     tecnico: payload.tecnicos?.[0]?.nombre || "—",
 
-
-
     // Auditoría
     observaciones: payload.observaciones,
     firma_tecnico: payload.firma_tecnico,
@@ -154,16 +173,20 @@ function guardarHistorialOT(payload) {
 ======================================================= */
 function normalizarPayloadOT(form) {
   const tableroFinal =
-    form.tablero || (Array.isArray(form.tableros) ? form.tableros[0] : "") || "";
+    form.tablero ||
+    (Array.isArray(form.tableros) ? form.tableros[0] : "") ||
+    "";
 
   const circuitoFinal =
     form.circuito ||
-    (Array.isArray(form.circuitos) ? form.circuitos.join(", ") : form.circuitos) ||
+    (Array.isArray(form.circuitos)
+      ? form.circuitos.join(", ")
+      : form.circuitos) ||
     "";
 
   return {
     fecha: form.fecha,
-    ubicacion: form.ubicacion,
+    ubicacion: form.ubicacion || "",
     tablero: tableroFinal,
     zona: form.zona || "",
     circuito: circuitoFinal,
@@ -174,12 +197,11 @@ function normalizarPayloadOT(form) {
     // ✅ nuevo: km_total
     km_total:
       form.kmIni !== "" &&
-        form.kmFin !== "" &&
-        Number.isFinite(Number(form.kmIni)) &&
-        Number.isFinite(Number(form.kmFin))
+      form.kmFin !== "" &&
+      Number.isFinite(Number(form.kmIni)) &&
+      Number.isFinite(Number(form.kmFin))
         ? Number(form.kmFin) - Number(form.kmIni)
         : null,
-
 
     tecnicos: form.tecnicos || [],
     materiales: form.materiales || [],
@@ -192,7 +214,9 @@ function normalizarPayloadOT(form) {
 
     // ✅ Evidencias (request)
     firma_tecnico_img: form.firmaTecnicoB64 || "",
-    fotos_b64: Array.isArray(form.fotosB64) ? form.fotosB64.slice(0, MAX_FOTOS) : [],
+    fotos_b64: Array.isArray(form.fotosB64)
+      ? form.fotosB64.slice(0, MAX_FOTOS)
+      : [],
 
     // ✅ Auditoría / Legal
     observaciones: form.observaciones || "",
@@ -212,13 +236,20 @@ export default function NuevaOT() {
   const [form, setForm] = useState(initialForm);
 
   // autoguardado + clear
-  const { clear: clearForm } = useFormStore("ot_form_cache", form, setForm, initialForm);
-
-
+  const { clear: clearForm } = useFormStore(
+    "ot_form_cache",
+    form,
+    setForm,
+    initialForm
+  );
 
   // UI state
   const [loading, setLoading] = useState(false);
-  const [toast, setToast] = useState({ open: false, type: "info", message: "" });
+  const [toast, setToast] = useState({
+    open: false,
+    type: "info",
+    message: "",
+  });
 
   // Firma canvas
   const sigRef = useRef(null);
@@ -233,17 +264,22 @@ export default function NuevaOT() {
   ======================================================== */
 
   function validarCampos() {
-    if (!form.ubicacion.trim()) return "La ubicación es obligatoria.";
+    if (!form.zona.trim()) return "La zona es obligatoria.";
     if (!form.tablero.trim()) return "Debe seleccionar un tablero.";
     if (!form.vehiculo.trim()) return "Debe seleccionar un vehículo.";
 
     // km coherente (una sola vez)
-    if (form.kmIni !== "" && form.kmFin !== "" && Number(form.kmFin) < Number(form.kmIni)) {
+    if (
+      form.kmIni !== "" &&
+      form.kmFin !== "" &&
+      Number(form.kmFin) < Number(form.kmIni)
+    ) {
       return "El km final no puede ser menor que el inicial.";
     }
 
     // Auditoría mínima
-    if (!form.firmaTecnico.trim()) return "Falta la aclaración (nombre) del técnico.";
+    if (!form.firmaTecnico.trim())
+      return "Falta la aclaración (nombre) del técnico.";
     if (!form.firmaTecnicoB64) return "Falta la firma digital del técnico.";
 
     return null; // ✅ “no hay error”
@@ -256,13 +292,11 @@ export default function NuevaOT() {
 
   const kmTotal =
     form.kmIni !== "" &&
-      form.kmFin !== "" &&
-      Number.isFinite(kmIniNum) &&
-      Number.isFinite(kmFinNum)
+    form.kmFin !== "" &&
+    Number.isFinite(kmIniNum) &&
+    Number.isFinite(kmFinNum)
       ? kmFinNum - kmIniNum
       : null;
-
-
 
   /* =======================================================
      FIRMA (canvas)
@@ -351,7 +385,13 @@ export default function NuevaOT() {
         fotosB64: [...(prev.fotosB64 || []), ...nuevas].slice(0, MAX_FOTOS),
       }));
 
-      showToast("ok", `Fotos cargadas: ${Math.min((form.fotosB64?.length || 0) + nuevas.length, MAX_FOTOS)}/${MAX_FOTOS}`);
+      showToast(
+        "ok",
+        `Fotos cargadas: ${Math.min(
+          (form.fotosB64?.length || 0) + nuevas.length,
+          MAX_FOTOS
+        )}/${MAX_FOTOS}`
+      );
     } catch (err) {
       console.warn(err);
       showToast("warn", "No se pudieron procesar las fotos.");
@@ -388,7 +428,7 @@ export default function NuevaOT() {
     try {
       try {
         vibrar?.(30);
-      } catch { }
+      } catch {}
 
       const blob = await enviarOT(payload);
 
@@ -444,12 +484,19 @@ export default function NuevaOT() {
         value={form.fecha}
         onChange={(e) => setForm({ ...form, fecha: e.target.value })}
       />
-
       <label>Ubicación</label>
       <input
         type="text"
+        placeholder="Ej: Poste 23 / KM 12.4 / Peaje / Referencia…"
         value={form.ubicacion}
         onChange={(e) => setForm({ ...form, ubicacion: e.target.value })}
+      />
+
+      <label>zona</label>
+      <input
+        type="text"
+        value={form.zona}
+        onChange={(e) => setForm({ ...form, zona: e.target.value })}
       />
 
       {/* TABLERO — AUTOCOMPLETE PRO */}
@@ -487,19 +534,6 @@ export default function NuevaOT() {
           📜 Ver historial de este tablero
         </button>
       )}
-
-
-
-
-
-      {/* ZONA (opcional, solo lectura) */}
-      {form.zona && (
-        <div className="muted" style={{ marginTop: 6 }}>
-          Zona: {form.zona}
-        </div>
-      )}
-
-
 
       <label>Circuito</label>
       <input
@@ -691,7 +725,10 @@ export default function NuevaOT() {
         onClick={() =>
           setForm({
             ...form,
-            materiales: [...form.materiales, { material: "", cant: "", unidad: "" }],
+            materiales: [
+              ...form.materiales,
+              { material: "", cant: "", unidad: "" },
+            ],
           })
         }
       >
@@ -795,10 +832,16 @@ export default function NuevaOT() {
         <>
           <div className="card" style={{ marginTop: 10 }}>
             <div className="text-muted" style={{ marginBottom: 8 }}>
-              Adjuntas: {(form.fotosB64?.length || 0)}/{MAX_FOTOS} (comprimidas)
+              Adjuntas: {form.fotosB64?.length || 0}/{MAX_FOTOS} (comprimidas)
             </div>
 
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "1fr 1fr",
+                gap: 10,
+              }}
+            >
               {(form.fotosB64 || []).map((src, idx) => (
                 <div key={idx} style={{ position: "relative" }}>
                   <img
@@ -826,7 +869,8 @@ export default function NuevaOT() {
           </div>
 
           <p className="text-muted" style={{ marginTop: 8 }}>
-            Máximo {MAX_FOTOS} fotos. Se comprimen automáticamente para no hacer pesado el PDF.
+            Máximo {MAX_FOTOS} fotos. Se comprimen automáticamente para no hacer
+            pesado el PDF.
           </p>
         </>
       )}
@@ -835,7 +879,9 @@ export default function NuevaOT() {
       <label style={{ marginTop: 14 }}>Modo impresión (B/N)</label>
       <select
         value={form.printMode ? "1" : "0"}
-        onChange={(e) => setForm({ ...form, printMode: e.target.value === "1" })}
+        onChange={(e) =>
+          setForm({ ...form, printMode: e.target.value === "1" })
+        }
       >
         <option value="0">Pantalla premium</option>
         <option value="1">Impresión B/N</option>
