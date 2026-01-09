@@ -1,21 +1,23 @@
 from pathlib import Path
 import os
+import logging
 from dotenv import load_dotenv
+import dj_database_url
+
+# =========================================================
+#  BASE / ENV
+# =========================================================
+BASE_DIR = Path(__file__).resolve().parent.parent
 
 load_dotenv()
 
-import dj_database_url
-
-BASE_DIR = Path(__file__).resolve().parent.parent
-
 # =========================================================
-#  ENV / FLAGS
+#  FLAGS
 # =========================================================
 SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "dev-secret-key")
 DEBUG = os.getenv("DJANGO_DEBUG", "True").lower() == "true"
 
 # Hosts
-# En Render setear: ALLOWED_HOSTS=ot-backend-prod.onrender.com
 _allowed = os.getenv("ALLOWED_HOSTS", "*" if DEBUG else "localhost,127.0.0.1")
 ALLOWED_HOSTS = [h.strip() for h in _allowed.split(",") if h.strip()]
 
@@ -29,10 +31,10 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
-    # API
+    # Third-party
     "rest_framework",
     "corsheaders",
-    # App
+    # Local apps
     "orders.apps.OrdersConfig",
     "historial",
 ]
@@ -42,8 +44,7 @@ INSTALLED_APPS = [
 # =========================================================
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
-    "whitenoise.middleware.WhiteNoiseMiddleware",  # static en prod
-    # CORS
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     "corsheaders.middleware.CorsMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
@@ -79,31 +80,42 @@ WSGI_APPLICATION = "core.wsgi.application"
 # =========================================================
 #  DATABASE
 # =========================================================
-# Prod: Render setea DATABASE_URL (Postgres)
-# Dev: sqlite si no hay DATABASE_URL
 DATABASE_URL = os.getenv("DATABASE_URL", "").strip()
 
 if DATABASE_URL:
-    # Render Postgres suele requerir SSL
-    ssl_require = os.getenv("DB_SSL_REQUIRE", "True").lower() == "true"
-
     DATABASES = {
         "default": dj_database_url.parse(
             DATABASE_URL,
             conn_max_age=600,
-            ssl_require=ssl_require,
+            ssl_require=True,
         )
     }
 else:
+    if not DEBUG:
+        raise RuntimeError("DATABASE_URL is required in production")
     DATABASES = {
         "default": {
             "ENGINE": "django.db.backends.sqlite3",
             "NAME": BASE_DIR / "db.sqlite3",
         }
     }
-import logging
 
-logger = logging.getLogger(__name__)
+# =========================================================
+#  LOGGING (Render friendly)
+# =========================================================
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "handlers": {
+        "console": {"class": "logging.StreamHandler"},
+    },
+    "root": {
+        "handlers": ["console"],
+        "level": "INFO",
+    },
+}
+
+logger = logging.getLogger("startup")
 logger.info("DATABASE_URL present: %s", bool(DATABASE_URL))
 logger.info("DB ENGINE: %s", DATABASES["default"].get("ENGINE"))
 logger.info("DB NAME: %s", DATABASES["default"].get("NAME"))
@@ -152,23 +164,10 @@ MEDIA_ROOT = BASE_DIR / "media"
 #  SECURITY (PROD)
 # =========================================================
 if not DEBUG:
-    # Render está detrás de proxy HTTPS
     SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
-
-    # Opcional: si querés forzar HTTPS (recomendado)
-    SECURE_SSL_REDIRECT = os.getenv("SECURE_SSL_REDIRECT", "True").lower() == "true"
-
-# =========================================================
-#  LOGGING (para ver errores claros en Render)
-# =========================================================
-LOGGING = {
-    "version": 1,
-    "disable_existing_loggers": False,
-    "handlers": {"console": {"class": "logging.StreamHandler"}},
-    "root": {"handlers": ["console"], "level": "INFO"},
-}
+    SECURE_SSL_REDIRECT = True
 
 # =========================================================
 #  DEFAULTS
