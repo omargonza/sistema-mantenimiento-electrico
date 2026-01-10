@@ -1,21 +1,17 @@
 /* ===========================================
    APP.CSS — ESTÉTICA DETALLE (DASHBOARD AZUL)
-   Nueva OT / Formulario táctil estilo app nativa
+   Nueva OT / Historial / Formulario táctil
 =========================================== */
 
-/* ===== Tokens base (alineados a detalle.css) ===== */
-
- 
 :root {
-  --bg: #020617;                 /* fondo profundo */
-  --bg2: rgba(15, 23, 42, 0.92); /* panel */
-  --card: radial-gradient(circle at top left, #1e293b, #020617);
+  --bg: #020617;
+  --bg2: rgba(15, 23, 42, 0.92);
 
   --text: #e5e7eb;
   --muted: #9ca3af;
 
-  --primary: #2563eb;            /* azul */
-  --primary2: #38bdf8;           /* celeste */
+  --primary: #2563eb;
+  --primary2: #38bdf8;
   --danger: #ef4444;
   --ok: #22c55e;
   --warning: #f59e0b;
@@ -33,7 +29,35 @@
   --shadow: 0 12px 25px rgba(15, 23, 42, 0.85);
   --focus: 0 0 0 3px rgba(56, 189, 248, 0.22);
 
+  /* Chips (tags) */
+  --chip-bg: rgba(15, 23, 42, 0.52);
+  --chip-border: rgba(148, 163, 184, 0.32);
+  --chip-hover: rgba(15, 23, 42, 0.72);
+  --chip-active-bg: rgba(37, 99, 235, 0.18);
+  --chip-active-border: rgba(56, 189, 248, 0.55);
+
   font-size: 16px;
+}
+:root {
+  /* Ajustá si tu barra mide distinto */
+  --bottom-nav-h: 74px;
+}
+
+/* Cualquier pantalla con bottom-nav fija necesita “aire” abajo */
+.page,
+.detalle-page,
+.dashboard-page,
+.historial-page {
+  padding-bottom: calc(
+    var(--bottom-nav-h) + 20px + env(safe-area-inset-bottom)
+  );
+}
+
+/* Si tu bottom bar es fixed, confirmá altura real */
+.bottom-nav,
+.nav-bottom,
+.tabbar {
+  height: var(--bottom-nav-h);
 }
 
 /* ===== Reset ===== */
@@ -43,19 +67,28 @@
   box-sizing: border-box;
 }
 
-html, body {
+html,
+body {
   height: auto !important;
   overflow-y: auto !important;
 }
 
 body {
   margin: 0;
-  background:
-    radial-gradient(900px 600px at 15% 0%, rgba(56, 189, 248, 0.12), transparent 55%),
-    radial-gradient(900px 600px at 90% 20%, rgba(37, 99, 235, 0.12), transparent 55%),
+  background: radial-gradient(
+      900px 600px at 15% 0%,
+      rgba(56, 189, 248, 0.12),
+      transparent 55%
+    ),
+    radial-gradient(
+      900px 600px at 90% 20%,
+      rgba(37, 99, 235, 0.12),
+      transparent 55%
+    ),
     var(--bg);
   color: var(--text);
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    sans-serif;
   -webkit-tap-highlight-color: transparent;
 }
 
@@ -64,14 +97,15 @@ body {
   overflow: visible !important;
 }
 
-/* ===== Page (contenedor) ===== */
+/* ===== Page ===== */
 .page {
-  padding: 0.75rem 1rem 8.5rem; /* aire abajo para CTA + toast */
+  padding: 0.75rem 1rem 8.5rem;
   max-width: 640px;
   margin: 0 auto;
   min-height: 100vh;
   overflow: visible !important;
   animation: fadeIn 0.2s ease;
+  padding-bottom: calc(8.5rem + env(safe-area-inset-bottom));
 }
 
 /* ===== Títulos ===== */
@@ -92,7 +126,7 @@ body {
   text-transform: uppercase;
 }
 
-/* ===== Labels sueltos (los que usás directo en la page) ===== */
+/* ===== Labels directos ===== */
 .page > label {
   display: block;
   margin: 0.75rem 0 0.35rem;
@@ -103,12 +137,30 @@ body {
   font-weight: 600;
 }
 
-/* ===== Inputs/Select/Textarea base ===== */
+/* ===== Utilidades ===== */
+.text-muted,
+.muted {
+  color: var(--muted);
+}
+.mt {
+  margin-top: 1rem;
+}
+
+/* Error (Historial) */
+.error {
+  color: #fecaca;
+  background: rgba(127, 29, 29, 0.35);
+  border: 1px solid rgba(248, 113, 113, 0.55);
+  padding: 10px 12px;
+  border-radius: 12px;
+}
+
+/* ===== Inputs / Select / Textarea ===== */
 input,
 select,
 textarea {
   width: 100%;
-  background: rgba(15, 23, 42, 0.90);
+  background: rgba(15, 23, 42, 0.9);
   color: var(--text);
   border: 1px solid var(--border2);
   border-radius: 0.9rem;
@@ -144,18 +196,17 @@ textarea:focus {
   box-shadow: var(--focus);
 }
 
-/* ===== NumericInput: tu componente usa .campo + .input ===== */
+/* ===== NumericInput (.campo + .input) ===== */
 .campo {
   display: block;
   margin-top: 0.75rem;
 }
 
-/* Si todavía tenés versión wrapper label.campo, lo soportamos */
 label.campo {
   display: block;
   margin-top: 0.75rem;
   padding: 0;
-  font-size: 0; /* evita saltos */
+  font-size: 0;
 }
 
 .input,
@@ -165,7 +216,7 @@ label.campo > input.input {
   padding: 0 0.85rem;
   border-radius: 0.9rem;
   border: 1px solid var(--border2);
-  background: rgba(15, 23, 42, 0.90);
+  background: rgba(15, 23, 42, 0.9);
   color: var(--text);
   outline: none;
   font-size: 0.95rem;
@@ -177,7 +228,7 @@ label.campo > input.input:focus {
   box-shadow: var(--focus);
 }
 
-/* ===== SmartSelect display calzado como input ===== */
+/* ===== SmartSelect ===== */
 .smartselect {
   margin-top: 0.75rem;
 }
@@ -198,79 +249,47 @@ label.campo > input.input:focus {
   padding: 0 0.85rem;
   border-radius: 0.9rem;
   border: 1px solid var(--border2);
-  background: rgba(15, 23, 42, 0.90);
+  background: rgba(15, 23, 42, 0.9);
   color: var(--text);
 }
 
-/* ===== Filas Técnicos / Materiales (cards como detalle) ===== */
-.fila-tecnico,
-.fila-mat {
-  margin-top: 0.65rem;
-  padding: 0.65rem;
-  border-radius: 1rem;
-  background: rgba(15, 23, 42, 0.90);
-  border: 1px solid rgba(51, 65, 85, 0.9);
-  box-shadow: 0 8px 18px rgba(2, 6, 23, 0.55);
-  display: grid;
-  gap: 0.6rem;
-  align-items: center;
+/* ===========================================
+   CARD — base
+=========================================== */
+.card {
+  border-radius: var(--radius);
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  background: linear-gradient(
+    180deg,
+    rgba(15, 23, 42, 0.92),
+    rgba(2, 6, 23, 0.92)
+  );
+  box-shadow: 0 10px 22px rgba(2, 6, 23, 0.55);
+  padding: 12px;
 }
 
-/* grid técnico: legajo + nombre + borrar */
-.fila-tecnico {
-  grid-template-columns: 140px 1fr 44px;
-}
+/* ===========================================
+   BOTONES
+=========================================== */
 
-/* grid material: material + cant + unidad + borrar */
-.fila-mat {
-  grid-template-columns: 1fr 110px 120px 44px;
-}
-
-/* eliminar márgenes que rompen el grid */
-.fila-tecnico input,
-.fila-mat input,
-.fila-tecnico .input,
-.fila-mat .input,
-.fila-tecnico label.campo,
-.fila-mat label.campo {
-  margin: 0 !important;
-}
-
-/* responsive */
-@media (max-width: 560px) {
-  .fila-tecnico { grid-template-columns: 1fr 1fr 44px; }
-  .fila-mat { grid-template-columns: 1fr 90px 90px 44px; }
-}
-
-@media (max-width: 420px) {
-  .fila-tecnico { grid-template-columns: 1fr 44px; }
-  .fila-tecnico > :nth-child(1),
-  .fila-tecnico > :nth-child(2) { grid-column: 1 / 2; }
-  .fila-tecnico .btn-x { grid-column: 2 / 3; grid-row: 1 / 3; height: 100%; }
-
-  .fila-mat { grid-template-columns: 1fr 44px; }
-  .fila-mat > :nth-child(1),
-  .fila-mat > :nth-child(2),
-  .fila-mat > :nth-child(3) { grid-column: 1 / 2; }
-  .fila-mat .btn-x { grid-column: 2 / 3; grid-row: 1 / 4; height: 100%; }
-}
-
-/* ===== Botón X (borrar) ===== */
+/* Botón X */
 .btn-x {
   width: 44px;
   height: 44px;
   border-radius: 0.85rem;
   border: 1px solid rgba(248, 113, 113, 0.65);
-  background: rgba(127, 29, 29, 0.40);
+  background: rgba(127, 29, 29, 0.4);
   color: #fecaca;
   cursor: pointer;
   display: inline-flex;
   align-items: center;
   justify-content: center;
 }
-.btn-x:active { transform: translateY(1px); }
+.btn-x:active {
+  transform: translateY(1px);
+}
 
-/* ===== Agregar técnico/material ===== */
+/* Agregar */
 .btn-add {
   margin-top: 0.85rem;
   width: 100%;
@@ -283,9 +302,36 @@ label.campo > input.input:focus {
   color: var(--text);
   cursor: pointer;
 }
-.btn-add:active { transform: translateY(1px); }
+.btn-add:active {
+  transform: translateY(1px);
+}
 
-/* ===== CTA final: Generar PDF (estilo detalle footer primario) ===== */
+/* Outline (botones reales) */
+.btn-outline {
+  height: 46px;
+  border-radius: 999px;
+  padding: 0 14px;
+  border: 1px solid rgba(148, 163, 184, 0.45);
+  background: rgba(15, 23, 42, 0.55);
+  color: var(--text);
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform 0.06s ease, border-color 0.12s ease,
+    background 0.12s ease;
+}
+.btn-outline:hover {
+  border-color: rgba(56, 189, 248, 0.55);
+  background: rgba(15, 23, 42, 0.7);
+}
+.btn-outline:active {
+  transform: translateY(1px);
+}
+.btn-outline:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* CTA final */
 .btn-enviar {
   margin-top: 1rem;
   width: 100%;
@@ -299,44 +345,176 @@ label.campo > input.input:focus {
   background: linear-gradient(90deg, var(--primary), var(--primary2));
   box-shadow: 0 14px 30px rgba(37, 99, 235, 0.25);
   cursor: pointer;
+
+  position: sticky;
+  bottom: 12px;
+  margin-top: 14px;
 }
 .btn-enviar:disabled {
   opacity: 0.65;
   cursor: not-allowed;
   box-shadow: none;
 }
-.btn-enviar:active:not(:disabled) { transform: translateY(1px); }
-
-/* ===== Utilidades ===== */
-.text-muted { color: var(--muted); }
-.mt { margin-top: 1rem; }
-
-/* ===== Animación suave ===== */
-@keyframes fadeIn {
-  from { opacity: 0; transform: translateY(4px); }
-  to { opacity: 1; transform: translateY(0); }
+.btn-enviar:active:not(:disabled) {
+  transform: translateY(1px);
 }
 
-/* Barra de acción inferior tipo app (opcional, PRO móvil) */
-.btn-enviar{
-  position: sticky;
-  bottom: 12px;
-  margin-top: 14px;
+/* ===========================================
+   CHIPS (TAGS) — Circuitos frecuentes
+   - Compactos, táctiles, no “botón grande”
+=========================================== */
+.chips {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
 }
 
-/* Respeta notch / barra de gesto */
-.page{
-  padding-bottom: calc(8.5rem + env(safe-area-inset-bottom));
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+
+  height: 34px; /* compacto */
+  padding: 0 10px;
+  border-radius: 999px;
+
+  border: 1px solid var(--chip-border);
+  background: var(--chip-bg);
+  color: #e5e7eb;
+
+  font-weight: 800;
+  font-size: 0.82rem;
+  letter-spacing: 0.01em;
+
+  cursor: pointer;
+  user-select: none;
+
+  transition: transform 0.06s ease, background 0.12s ease,
+    border-color 0.12s ease;
 }
 
-.foto-grid{
+.chip:hover {
+  background: var(--chip-hover);
+  border-color: rgba(56, 189, 248, 0.45);
+}
+
+.chip:active {
+  transform: translateY(1px);
+}
+
+.chip--active {
+  background: var(--chip-active-bg);
+  border-color: var(--chip-active-border);
+  box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.12);
+}
+
+.chip-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+
+  min-width: 22px;
+  height: 22px;
+  padding: 0 6px;
+  border-radius: 999px;
+
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  background: rgba(2, 6, 23, 0.55);
+  color: rgba(229, 231, 235, 0.9);
+
+  font-size: 0.72rem;
+  font-weight: 900;
+}
+
+/* Si querés “chip apagado” cuando carga */
+.chip--disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+/* ===========================================
+   Filas Técnicos / Materiales
+=========================================== */
+.fila-tecnico,
+.fila-mat {
+  margin-top: 0.65rem;
+  padding: 0.65rem;
+  border-radius: 1rem;
+  background: rgba(15, 23, 42, 0.9);
+  border: 1px solid rgba(51, 65, 85, 0.9);
+  box-shadow: 0 8px 18px rgba(2, 6, 23, 0.55);
+  display: grid;
+  gap: 0.6rem;
+  align-items: center;
+}
+
+.fila-tecnico {
+  grid-template-columns: 140px 1fr 44px;
+}
+
+.fila-mat {
+  grid-template-columns: 1fr 110px 120px 44px;
+}
+
+.fila-tecnico input,
+.fila-mat input,
+.fila-tecnico .input,
+.fila-mat .input,
+.fila-tecnico label.campo,
+.fila-mat label.campo {
+  margin: 0 !important;
+}
+
+@media (max-width: 560px) {
+  .fila-tecnico {
+    grid-template-columns: 1fr 1fr 44px;
+  }
+  .fila-mat {
+    grid-template-columns: 1fr 90px 90px 44px;
+  }
+}
+
+@media (max-width: 420px) {
+  .fila-tecnico {
+    grid-template-columns: 1fr 44px;
+  }
+  .fila-tecnico > :nth-child(1),
+  .fila-tecnico > :nth-child(2) {
+    grid-column: 1 / 2;
+  }
+  .fila-tecnico .btn-x {
+    grid-column: 2 / 3;
+    grid-row: 1 / 3;
+    height: 100%;
+  }
+
+  .fila-mat {
+    grid-template-columns: 1fr 44px;
+  }
+  .fila-mat > :nth-child(1),
+  .fila-mat > :nth-child(2),
+  .fila-mat > :nth-child(3) {
+    grid-column: 1 / 2;
+  }
+  .fila-mat .btn-x {
+    grid-column: 2 / 3;
+    grid-row: 1 / 4;
+    height: 100%;
+  }
+}
+
+/* ===========================================
+   Fotos
+=========================================== */
+.foto-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
   margin-top: 10px;
 }
 
-.foto-item{
+.foto-item {
   position: relative;
   border: 1px solid var(--border);
   border-radius: 12px;
@@ -344,54 +522,234 @@ label.campo > input.input:focus {
   background: var(--bg2);
 }
 
-.foto-item img{
+.foto-item img {
   width: 100%;
   height: 130px;
   object-fit: cover;
   display: block;
 }
 
-.foto-item .btn-x{
+.foto-item .btn-x {
   position: absolute;
   top: 6px;
   right: 6px;
 }
 
+/* ===========================================
+   Historial / Timeline
+=========================================== */
+.timeline {
+  border-radius: var(--radius);
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  overflow: hidden;
+  background: rgba(2, 6, 23, 0.35);
+}
+
 .timeline-item {
   padding: 12px;
-  border-bottom: 1px solid #334155;
+  border-bottom: 1px solid rgba(51, 65, 85, 0.85);
+}
+
+.timeline-item:last-child {
+  border-bottom: none;
 }
 
 .fecha {
-  font-size: 0.8rem;
-  color: #9ca3af;
-}
-
-.circuito {
-  font-size: 0.85rem;
-  font-weight: 600;
+  font-size: 0.78rem;
+  color: rgba(156, 163, 175, 0.9);
+  letter-spacing: 0.01em;
 }
 
 .desc {
-  margin-top: 4px;
+  margin-top: 6px;
   font-size: 0.95rem;
+  line-height: 1.35;
 }
+
+/* ===========================================
+   Autocomplete / Dropdown (compat)
+=========================================== */
 .dropdown {
   position: absolute;
-  z-index: 10;
-  background: #0b1220;
-  border: 1px solid #334155;
+  z-index: 50;
+  background: rgba(2, 6, 23, 0.96);
+  border: 1px solid rgba(148, 163, 184, 0.28);
   width: 100%;
-  max-height: 240px;
+  max-height: 38vh;
   overflow-y: auto;
+  border-radius: 12px;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(4px);
 }
 
 .dropdown-item {
-  padding: 10px;
-  border-bottom: 1px solid #1e293b;
+  padding: 10px 12px;
+  border-bottom: 1px solid rgba(30, 41, 59, 0.8);
 }
 
 .dropdown-item:hover {
-  background: #1e293b;
+  background: rgba(30, 41, 59, 0.7);
   cursor: pointer;
+}
+
+/* ===========================================
+   Animación
+=========================================== */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+/* Chip mini de acción (Limpiar) */
+.chip--danger {
+  border-color: rgba(248, 113, 113, 0.55);
+  background: rgba(127, 29, 29, 0.22);
+}
+
+.chip--danger:hover {
+  border-color: rgba(248, 113, 113, 0.75);
+  background: rgba(127, 29, 29, 0.32);
+}
+/* ===========================================
+   HISTORIAL — Pendientes + Agrupación (sticky) + Toggle
+=========================================== */
+
+.timeline-item {
+  position: relative;
+}
+
+.row-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+/* Borde/halo sutil SOLO cuando hay pendiente */
+.timeline-item.is-pendiente {
+  border-left: 3px solid rgba(245, 158, 11, 0.55);
+  background: linear-gradient(
+    90deg,
+    rgba(245, 158, 11, 0.1),
+    rgba(2, 6, 23, 0) 55%
+  );
+  box-shadow: inset 0 0 0 1px rgba(245, 158, 11, 0.12);
+  border-radius: 12px;
+}
+
+/* Badge tipo tag */
+.badge-pendiente {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  color: rgba(255, 237, 213, 0.95);
+  background: rgba(245, 158, 11, 0.18);
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  box-shadow: 0 8px 18px rgba(2, 6, 23, 0.35);
+  white-space: nowrap;
+}
+
+/* Toggle tipo chip (liviano, no “botón grande”) */
+.chip-toggle {
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  background: rgba(15, 23, 42, 0.55);
+  color: rgba(229, 231, 235, 0.92);
+  height: 40px;
+  padding: 0 12px;
+  border-radius: 999px;
+  font-weight: 800;
+  font-size: 0.82rem;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.chip-toggle:active {
+  transform: translateY(1px);
+}
+.chip-toggle.is-on {
+  border-color: rgba(245, 158, 11, 0.55);
+  background: rgba(245, 158, 11, 0.14);
+  color: rgba(255, 237, 213, 0.98);
+  box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.1);
+}
+.chip-toggle:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* =========================
+   Agrupación por tablero (modo “todo”) con sticky header
+========================= */
+
+.group-block {
+  margin-top: 12px;
+  border-radius: 14px;
+  overflow: hidden;
+  border: 1px solid rgba(51, 65, 85, 0.8);
+  background: rgba(15, 23, 42, 0.6);
+}
+
+.group-header {
+  position: sticky;
+  top: 10px; /* dentro del flujo */
+  z-index: 5;
+  padding: 10px 12px;
+  background: rgba(2, 6, 23, 0.88);
+  backdrop-filter: blur(6px);
+  border-bottom: 1px solid rgba(51, 65, 85, 0.85);
+}
+
+.group-items {
+  display: grid;
+}
+
+.group-items .timeline-item {
+  border-bottom: 1px solid rgba(51, 65, 85, 0.65);
+}
+.group-items .timeline-item:last-child {
+  border-bottom: none;
+}
+.page {
+  padding-bottom: calc(
+    var(--bottom-nav-h) + 20px + env(safe-area-inset-bottom)
+  ) !important;
+}
+/* =========================================================
+   PAGE: un solo padding-bottom real (bottom nav)
+   ========================================================= */
+:root {
+  --bottom-nav-h: 74px; /* ajustá si la barra mide distinto */
+  --page-bottom: calc(var(--bottom-nav-h) + 20px + env(safe-area-inset-bottom));
+}
+
+.page {
+  /* conserva tu padding top/side, pero bottom lo manda --page-bottom */
+  padding: 0.75rem 1rem var(--page-bottom) !important;
+}
+/* =========================================================
+   FIX: la barra inferior no puede tapar contenido “arriba”
+   ========================================================= */
+.bottom-nav,
+.nav-bottom,
+.tabbar {
+  position: fixed; /* si ya lo es, no molesta */
+  z-index: 20; /* menor que filtros-box (50) */
+}
+/* Corta-fuego: cualquier flotante genérico no debe tapar formularios */
+.fab,
+.floating,
+.btn-float,
+.round-action {
+  z-index: 15 !important;
 }

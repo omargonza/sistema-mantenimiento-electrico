@@ -1,6 +1,7 @@
+// src/pages/NuevaOT.jsx
 import { useNavigate } from "react-router-dom";
+import { useEffect, useMemo, useRef, useState } from "react";
 
-import { useRef, useState } from "react";
 import SmartSelect from "../components/SmartSelect";
 import NumericInput from "../components/NumericInput";
 import useOfflineQueue from "../hooks/useOfflineQueue";
@@ -11,23 +12,51 @@ import useFormStore from "../hooks/useFormStore";
 import Toast from "../components/Toast";
 import TableroAutocomplete from "../components/TableroAutocomplete";
 
+import { obtenerHistorial } from "../services/historialApi";
+import { obtenerCircuitosFrecuentes } from "../services/circuitosApi";
+import { saveOtPdf } from "../storage/ot_db";
+
 /* =======================================================
    UTILIDADES: cache para autocompletado
 ======================================================= */
 function saveCache(key, value) {
   if (!value) return;
-  const list = JSON.parse(localStorage.getItem(key) || "[]");
-  const updated = [value, ...list.filter((v) => v !== value)];
-  localStorage.setItem(key, JSON.stringify(updated.slice(0, 10)));
+  try {
+    const list = JSON.parse(localStorage.getItem(key) || "[]");
+    const updated = [value, ...list.filter((v) => v !== value)];
+    localStorage.setItem(key, JSON.stringify(updated.slice(0, 10)));
+  } catch {}
 }
 
 function loadCache(key) {
-  return JSON.parse(localStorage.getItem(key) || "[]");
+  try {
+    return JSON.parse(localStorage.getItem(key) || "[]");
+  } catch {
+    return [];
+  }
+}
+
+/* =======================================================
+   HISTORIAL PREVIEW (liviano)
+======================================================= */
+const PREVIEW_LIMIT = 3;
+
+function fmtDateISO(s) {
+  return s ? String(s).slice(0, 10) : "";
+}
+
+function pickDescripcion(h) {
+  return (
+    h?.tarea_realizada?.trim() ||
+    h?.tarea_pedida?.trim() ||
+    h?.tarea_pendiente?.trim() ||
+    h?.descripcion?.trim() ||
+    "—"
+  );
 }
 
 /* =======================================================
    IMG: compresión para que no pese (clave)
-   - convierte File -> dataURL jpeg comprimido
 ======================================================= */
 async function fileToCompressedDataURL(file, maxW = 1280, quality = 0.72) {
   const img = new Image();
@@ -48,13 +77,11 @@ async function fileToCompressedDataURL(file, maxW = 1280, quality = 0.72) {
   canvas.height = h;
 
   const ctx = canvas.getContext("2d");
-  // fondo blanco para fotos (evita transparencias raras)
   ctx.fillStyle = "#fff";
   ctx.fillRect(0, 0, w, h);
   ctx.drawImage(img, 0, 0, w, h);
 
   URL.revokeObjectURL(url);
-
   return canvas.toDataURL("image/jpeg", quality);
 }
 
@@ -116,19 +143,11 @@ const initialForm = {
   tareaRealizada: "",
   tareaPendiente: "",
   luminaria: "",
-
-  // Auditoría / Legal
   observaciones: "",
   firmaTecnico: "",
   firmaSupervisor: "",
-
-  // Firma digital (PNG base64)
   firmaTecnicoB64: "",
-
-  // Fotos (JPG base64 comprimidas)
-  fotosB64: [], // array de dataURL (jpg) máx 4
-
-  // Modo impresión B/N (opcional)
+  fotosB64: [],
   printMode: false,
 };
 
@@ -136,7 +155,10 @@ const initialForm = {
    HISTORIAL LOCAL
 ======================================================= */
 function guardarHistorialOT(payload) {
-  const prev = JSON.parse(localStorage.getItem("ot_historial") || "[]");
+  let prev = [];
+  try {
+    prev = JSON.parse(localStorage.getItem("ot_historial") || "[]");
+  } catch {}
 
   const nueva = {
     id: Date.now(),
@@ -148,7 +170,7 @@ function guardarHistorialOT(payload) {
     vehiculo: payload.vehiculo || "",
     km_inicial: payload.km_inicial,
     km_final: payload.km_final,
-    km_total: payload.km_total, // ✅
+    km_total: payload.km_total,
     tecnicos: payload.tecnicos,
     materiales: payload.materiales,
     luminaria_equipos: payload.luminaria_equipos,
@@ -156,8 +178,6 @@ function guardarHistorialOT(payload) {
     tarea_realizada: payload.tarea_realizada,
     tarea_pendiente: payload.tarea_pendiente,
     tecnico: payload.tecnicos?.[0]?.nombre || "—",
-
-    // Auditoría
     observaciones: payload.observaciones,
     firma_tecnico: payload.firma_tecnico,
     firma_supervisor: payload.firma_supervisor,
@@ -165,7 +185,9 @@ function guardarHistorialOT(payload) {
     fotos: payload.fotos_b64?.length || 0,
   };
 
-  localStorage.setItem("ot_historial", JSON.stringify([nueva, ...prev]));
+  try {
+    localStorage.setItem("ot_historial", JSON.stringify([nueva, ...prev]));
+  } catch {}
 }
 
 /* =======================================================
@@ -194,7 +216,6 @@ function normalizarPayloadOT(form) {
     km_inicial: form.kmIni === "" ? null : Number(form.kmIni),
     km_final: form.kmFin === "" ? null : Number(form.kmFin),
 
-    // ✅ nuevo: km_total
     km_total:
       form.kmIni !== "" &&
       form.kmFin !== "" &&
@@ -212,30 +233,25 @@ function normalizarPayloadOT(form) {
 
     luminaria_equipos: form.luminaria || "",
 
-    // ✅ Evidencias (request)
     firma_tecnico_img: form.firmaTecnicoB64 || "",
     fotos_b64: Array.isArray(form.fotosB64)
       ? form.fotosB64.slice(0, MAX_FOTOS)
       : [],
 
-    // ✅ Auditoría / Legal
     observaciones: form.observaciones || "",
     firma_tecnico: form.firmaTecnico || "",
     firma_supervisor: form.firmaSupervisor || "",
 
-    // ✅ Modo impresión opcional
     print_mode: Boolean(form.printMode),
   };
 }
 
 export default function NuevaOT() {
   const navigate = useNavigate();
-
   const { guardarPendiente } = useOfflineQueue();
 
   const [form, setForm] = useState(initialForm);
 
-  // autoguardado + clear
   const { clear: clearForm } = useFormStore(
     "ot_form_cache",
     form,
@@ -243,7 +259,6 @@ export default function NuevaOT() {
     initialForm
   );
 
-  // UI state
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState({
     open: false,
@@ -251,24 +266,89 @@ export default function NuevaOT() {
     message: "",
   });
 
-  // Firma canvas
-  const sigRef = useRef(null);
-  const drawingRef = useRef(false);
-
   function showToast(type, message) {
     setToast({ open: true, type, message });
   }
 
   /* =======================================================
+     Historial preview (liviano)
+  ======================================================== */
+  const tableroKey = useMemo(() => (form.tablero || "").trim(), [form.tablero]);
+
+  const [histPreview, setHistPreview] = useState([]);
+  const [histLoading, setHistLoading] = useState(false);
+
+  useEffect(() => {
+    if (!tableroKey) {
+      setHistPreview([]);
+      return;
+    }
+
+    let alive = true;
+    setHistLoading(true);
+
+    obtenerHistorial(tableroKey, { page: 1, page_size: PREVIEW_LIMIT })
+      .then((data) => {
+        if (!alive) return;
+        const rows = data?.results || data?.historial || [];
+        setHistPreview(Array.isArray(rows) ? rows.slice(0, PREVIEW_LIMIT) : []);
+      })
+      .catch(() => {
+        if (!alive) return;
+        setHistPreview([]);
+      })
+      .finally(() => {
+        if (!alive) return;
+        setHistLoading(false);
+      });
+
+    return () => {
+      alive = false;
+    };
+  }, [tableroKey]);
+
+  /* =======================================================
+     Circuitos frecuentes (chips)
+  ======================================================== */
+  const [circuitosFreq, setCircuitosFreq] = useState([]);
+  const [circuitosLoading, setCircuitosLoading] = useState(false);
+
+  useEffect(() => {
+    if (!tableroKey) {
+      setCircuitosFreq([]);
+      return;
+    }
+
+    let alive = true;
+    setCircuitosLoading(true);
+
+    obtenerCircuitosFrecuentes(tableroKey, { limit: 8 })
+      .then((data) => {
+        if (!alive) return;
+        const items = Array.isArray(data?.items) ? data.items : [];
+        setCircuitosFreq(items);
+      })
+      .catch(() => {
+        if (!alive) return;
+        setCircuitosFreq([]);
+      })
+      .finally(() => {
+        if (!alive) return;
+        setCircuitosLoading(false);
+      });
+
+    return () => {
+      alive = false;
+    };
+  }, [tableroKey]);
+
+  /* =======================================================
      VALIDACIÓN
   ======================================================== */
-
   function validarCampos() {
-    if (!form.zona.trim()) return "La zona es obligatoria.";
     if (!form.tablero.trim()) return "Debe seleccionar un tablero.";
     if (!form.vehiculo.trim()) return "Debe seleccionar un vehículo.";
 
-    // km coherente (una sola vez)
     if (
       form.kmIni !== "" &&
       form.kmFin !== "" &&
@@ -277,16 +357,14 @@ export default function NuevaOT() {
       return "El km final no puede ser menor que el inicial.";
     }
 
-    // Auditoría mínima
     if (!form.firmaTecnico.trim())
       return "Falta la aclaración (nombre) del técnico.";
     if (!form.firmaTecnicoB64) return "Falta la firma digital del técnico.";
 
-    return null; // ✅ “no hay error”
+    return null;
   }
-  // =========================
-  // KM TOTAL (calculado)
-  // =========================
+
+  // KM TOTAL
   const kmIniNum = Number(form.kmIni);
   const kmFinNum = Number(form.kmFin);
 
@@ -301,6 +379,9 @@ export default function NuevaOT() {
   /* =======================================================
      FIRMA (canvas)
   ======================================================== */
+  const sigRef = useRef(null);
+  const drawingRef = useRef(false);
+
   function getPos(e, canvas) {
     const r = canvas.getBoundingClientRect();
     const t = e.touches?.[0];
@@ -350,14 +431,13 @@ export default function NuevaOT() {
   function guardarFirma() {
     const canvas = sigRef.current;
     if (!canvas) return;
-    // PNG -> base64
     const dataUrl = canvas.toDataURL("image/png");
     setForm((p) => ({ ...p, firmaTecnicoB64: dataUrl }));
     showToast("ok", "Firma digital capturada.");
   }
 
   /* =======================================================
-     FOTOS (acumula hasta 4, comprimidas)
+     FOTOS
   ======================================================== */
   async function onAddFotos(e) {
     const files = Array.from(e.target.files || []);
@@ -397,7 +477,7 @@ export default function NuevaOT() {
       showToast("warn", "No se pudieron procesar las fotos.");
     } finally {
       setLoading(false);
-      e.target.value = ""; // permite re-seleccionar la misma foto
+      e.target.value = "";
     }
   }
 
@@ -420,7 +500,6 @@ export default function NuevaOT() {
 
     const payload = normalizarPayloadOT(form);
 
-    // cache sugerencias
     saveCache("cache_tableros", form.tablero);
     saveCache("cache_vehiculos", form.vehiculo);
 
@@ -432,28 +511,45 @@ export default function NuevaOT() {
 
       const blob = await enviarOT(payload);
 
-      // descarga PDF
+      // ✅ Guardado local PRO (IndexedDB) — best-effort
+      try {
+        await saveOtPdf(
+          {
+            ...payload,
+            tecnico: payload?.tecnicos?.[0]?.nombre || "",
+          },
+          blob
+        );
+      } catch (dbErr) {
+        console.warn(
+          "No se pudo guardar en IndexedDB (continúo igual):",
+          dbErr
+        );
+        // No frenamos: igual descargamos el PDF y seguimos
+      }
+
+      // ✅ Descarga PDF
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
       a.download = `OT_${payload.fecha}_${payload.tablero}.pdf`;
       a.click();
-      URL.revokeObjectURL(url);
+      setTimeout(() => URL.revokeObjectURL(url), 30_000);
 
-      guardarHistorialOT(payload);
+      // 🚫 Recomendación: eliminar esto para no duplicar fuente de datos
+      // guardarHistorialOT(payload);
+
       clearForm();
-
       showToast("ok", "Orden generada correctamente. PDF descargado.");
     } catch (e) {
       console.warn("Fallo envío → guardando OT localmente", e);
 
-      // 🚫 NO guardamos base64 (fotos/firma) en pendientes → rompe localStorage
+      // Pendientes SIN base64 pesado
       const payloadLiviano = { ...payload };
       delete payloadLiviano.firma_tecnico_img;
       delete payloadLiviano.fotos_b64;
 
       payloadLiviano.evidencias_pendientes = true;
-
       await guardarPendiente({ data: payloadLiviano });
 
       showToast(
@@ -471,9 +567,6 @@ export default function NuevaOT() {
   const sugeridosVehiculos = [...loadCache("cache_vehiculos"), ...VEHICULOS];
   const sugeridosTableros = [...loadCache("cache_tableros"), ...TABLEROS];
 
-  /* =======================================================
-     RENDER
-  ======================================================== */
   return (
     <div className="page">
       <h2 className="titulo">Nueva Orden de Trabajo</h2>
@@ -484,6 +577,7 @@ export default function NuevaOT() {
         value={form.fecha}
         onChange={(e) => setForm({ ...form, fecha: e.target.value })}
       />
+
       <label>Ubicación</label>
       <input
         type="text"
@@ -492,19 +586,22 @@ export default function NuevaOT() {
         onChange={(e) => setForm({ ...form, ubicacion: e.target.value })}
       />
 
-      <label>zona</label>
+      <label>Zona</label>
       <input
         type="text"
         value={form.zona}
         onChange={(e) => setForm({ ...form, zona: e.target.value })}
       />
 
-      {/* TABLERO — AUTOCOMPLETE PRO */}
       <label>Tablero</label>
-
       <TableroAutocomplete
-        value={form.tablero} // ✅ mantiene sincronizado input ↔ state
-        placeholder="Seleccionar tablero…"
+        value={form.tablero}
+        placeholder="Buscar/seleccionar tablero…"
+        limit={20}
+        minChars={2}
+        onChangeText={(v) => {
+          setForm((prev) => ({ ...prev, tablero: v }));
+        }}
         onSelect={(t) => {
           setForm((prev) => ({
             ...prev,
@@ -512,27 +609,111 @@ export default function NuevaOT() {
             zona: t.zona,
           }));
         }}
+        onSubmit={(texto) => {
+          setForm((prev) => ({
+            ...prev,
+            tablero: (texto || prev.tablero || "").trim(),
+          }));
+        }}
       />
 
-      {/* ZONA visible (solo lectura) */}
       {form.zona && (
         <div className="muted" style={{ marginTop: 6 }}>
           Zona: {form.zona}
         </div>
       )}
 
-      {/* Botón historial del tablero seleccionado */}
-      {form.tablero && (
+      {tableroKey && (
         <button
           type="button"
           className="btn-outline"
           style={{ marginTop: 8 }}
           onClick={() =>
-            navigate(`/historial?tablero=${encodeURIComponent(form.tablero)}`)
+            navigate(`/historial?tablero=${encodeURIComponent(tableroKey)}`)
           }
         >
-          📜 Ver historial de este tablero
+          Ver historial de este tablero
         </button>
+      )}
+
+      {/* Preview historial */}
+      {tableroKey && (
+        <div className="card" style={{ marginTop: 10, padding: 12 }}>
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              gap: 10,
+            }}
+          >
+            <div style={{ fontWeight: 800 }}>Últimos registros</div>
+
+            <button
+              type="button"
+              className="btn-outline"
+              onClick={() =>
+                navigate(`/historial?tablero=${encodeURIComponent(tableroKey)}`)
+              }
+            >
+              Ver completo
+            </button>
+          </div>
+
+          {histLoading && (
+            <div className="muted" style={{ marginTop: 8 }}>
+              Cargando…
+            </div>
+          )}
+
+          {!histLoading && histPreview.length === 0 && (
+            <div className="muted" style={{ marginTop: 8 }}>
+              Sin registros recientes.
+            </div>
+          )}
+
+          {!histLoading && histPreview.length > 0 && (
+            <div style={{ marginTop: 10, display: "grid", gap: 10 }}>
+              {histPreview.map((h, idx) => (
+                <div
+                  key={h.id ?? `${h.fecha}-${h.creado ?? ""}-${idx}`}
+                  style={{
+                    padding: "10px 12px",
+                    borderRadius: 12,
+                    border: "1px solid rgba(148,163,184,.20)",
+                    background: "rgba(2,6,23,.35)",
+                  }}
+                >
+                  <div className="muted" style={{ fontSize: 12 }}>
+                    {fmtDateISO(h.fecha)}
+                    {h.circuito ? ` · ${h.circuito}` : ""}
+                  </div>
+
+                  <div style={{ marginTop: 6, lineHeight: 1.25 }}>
+                    {pickDescripcion(h)}
+                  </div>
+
+                  {(h.tarea_pedida || h.tarea_pendiente) && (
+                    <div
+                      className="muted"
+                      style={{ marginTop: 8, fontSize: 12 }}
+                    >
+                      {h.tarea_pedida ? (
+                        <div>
+                          <strong>Pedida:</strong> {h.tarea_pedida}
+                        </div>
+                      ) : null}
+                      {h.tarea_pendiente ? (
+                        <div>
+                          <strong>Pendiente:</strong> {h.tarea_pendiente}
+                        </div>
+                      ) : null}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       )}
 
       <label>Circuito</label>
@@ -542,6 +723,73 @@ export default function NuevaOT() {
         value={form.circuito}
         onChange={(e) => setForm({ ...form, circuito: e.target.value })}
       />
+
+      {/* Chips: circuitos frecuentes del tablero */}
+      {tableroKey && (
+        <div style={{ marginTop: 8 }}>
+          <div className="muted" style={{ fontSize: 12, marginBottom: 6 }}>
+            {circuitosLoading
+              ? "Cargando circuitos frecuentes…"
+              : circuitosFreq.length
+              ? "Circuitos frecuentes:"
+              : ""}
+          </div>
+
+          {/* Contenedor chips */}
+          {(circuitosFreq.length > 0 || form.circuito?.trim()) && (
+            <div className="chips">
+              {/* Chip "Todos" (neutral) */}
+              {circuitosFreq.length > 0 && (
+                <button
+                  type="button"
+                  className={`chip ${
+                    !form.circuito?.trim() ? "chip--active" : ""
+                  }`}
+                  onClick={() => setForm((prev) => ({ ...prev, circuito: "" }))}
+                  title="Mostrar todos (sin circuito)"
+                >
+                  Todos
+                </button>
+              )}
+
+              {/* Chips de circuitos frecuentes */}
+              {circuitosFreq.map((c) => {
+                const active = (form.circuito || "").trim() === c.circuito;
+
+                return (
+                  <button
+                    key={c.circuito}
+                    type="button"
+                    className={`chip ${active ? "chip--active" : ""}`}
+                    onClick={() =>
+                      setForm((prev) => ({
+                        ...prev,
+                        circuito: c.circuito,
+                      }))
+                    }
+                    title={`Usar circuito (${c.n} registros)`}
+                  >
+                    {c.circuito}
+                    <span className="chip-count">{c.n}</span>
+                  </button>
+                );
+              })}
+
+              {/* Chip mini "Limpiar" SOLO si hay circuito elegido */}
+              {form.circuito?.trim() && (
+                <button
+                  type="button"
+                  className="chip chip--danger"
+                  onClick={() => setForm((prev) => ({ ...prev, circuito: "" }))}
+                  title="Limpiar circuito"
+                >
+                  Limpiar
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       <SmartSelect
         label="Vehículo"
@@ -587,7 +835,6 @@ export default function NuevaOT() {
               })
             }
           />
-
           <input
             placeholder="Nombre"
             value={tec.nombre}
@@ -600,7 +847,6 @@ export default function NuevaOT() {
               })
             }
           />
-
           {idx > 0 && (
             <button
               type="button"
@@ -675,7 +921,6 @@ export default function NuevaOT() {
               })
             }
           />
-
           <NumericInput
             placeholder="Cant."
             value={m.cant}
@@ -688,7 +933,6 @@ export default function NuevaOT() {
               })
             }
           />
-
           <input
             placeholder="Unidad/Mtrs"
             value={m.unidad}
@@ -701,7 +945,6 @@ export default function NuevaOT() {
               })
             }
           />
-
           {idx > 0 && (
             <button
               type="button"
@@ -753,9 +996,9 @@ export default function NuevaOT() {
       <label>Firma digital del técnico</label>
       <div className="card" style={{ padding: 12 }}>
         <canvas
-          ref={sigRef}
           width={600}
           height={180}
+          ref={sigRef}
           style={{
             width: "100%",
             height: 180,
@@ -817,9 +1060,8 @@ export default function NuevaOT() {
         placeholder="Nombre y apellido"
       />
 
-      {/* Evidencias (Fotos) */}
+      {/* Evidencias */}
       <h3 className="subtitulo">Evidencias (Fotos)</h3>
-
       <input
         type="file"
         accept="image/*"
@@ -875,7 +1117,6 @@ export default function NuevaOT() {
         </>
       )}
 
-      {/* Opción impresión */}
       <label style={{ marginTop: 14 }}>Modo impresión (B/N)</label>
       <select
         value={form.printMode ? "1" : "0"}

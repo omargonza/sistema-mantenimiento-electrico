@@ -2,7 +2,7 @@
 const DB_NAME = "ot_local_db";
 const DB_VERSION = 1;
 
-const STORE_OTS = "ots";   // metadata
+const STORE_OTS = "ots"; // metadata
 const STORE_PDFS = "pdfs"; // blobs
 
 function openDb() {
@@ -45,6 +45,7 @@ function makeId() {
 }
 
 // Guarda metadata + blob (PDF real)
+// Guarda metadata + blob (PDF real)
 export async function saveOtPdf(meta, pdfBlob) {
   const db = await openDb();
 
@@ -52,27 +53,83 @@ export async function saveOtPdf(meta, pdfBlob) {
   const pdfId = id;
   const createdAt = Date.now();
 
+  // Normalización defensiva
+  const tecnicos = Array.isArray(meta?.tecnicos) ? meta.tecnicos : [];
+  const materiales = Array.isArray(meta?.materiales) ? meta.materiales : [];
+
+  // Importante: NO guardamos base64 pesados acá (firma imagen / fotos)
+  // porque el PDF ya es el respaldo final.
+  const detalle = {
+    // Identidad operativa
+    fecha: meta?.fecha || new Date().toISOString().slice(0, 10),
+    ubicacion: meta?.ubicacion || "",
+    zona: meta?.zona || "",
+    tablero: meta?.tablero || "",
+    circuito: meta?.circuito || "",
+    vehiculo: meta?.vehiculo || "",
+
+    // Recorrido
+    km_inicial: meta?.km_inicial ?? null,
+    km_final: meta?.km_final ?? null,
+    km_total: meta?.km_total ?? null,
+
+    // Operación
+    luminaria_equipos: meta?.luminaria_equipos || "",
+    tarea_pedida: meta?.tarea_pedida || "",
+    tarea_realizada: meta?.tarea_realizada || "",
+    tarea_pendiente: meta?.tarea_pendiente || "",
+
+    // RRHH / materiales
+    tecnicos: tecnicos.map((t) => ({
+      legajo: t?.legajo ?? "",
+      nombre: t?.nombre ?? "",
+    })),
+    materiales: materiales.map((m) => ({
+      material: m?.material ?? "",
+      cant: m?.cant ?? "",
+      unidad: m?.unidad ?? "",
+    })),
+
+    // Auditoría (texto)
+    observaciones: meta?.observaciones || "",
+    firma_tecnico: meta?.firma_tecnico || "",
+    firma_supervisor: meta?.firma_supervisor || "",
+
+    // Señales de evidencia (sin base64)
+    tiene_firma: Boolean(meta?.firma_tecnico_img),
+    fotos_count: Array.isArray(meta?.fotos_b64) ? meta.fotos_b64.length : 0,
+
+    // Impresión
+    print_mode: Boolean(meta?.print_mode),
+  };
+
   const record = {
     id,
     pdfId,
+    createdAt,
 
-    fecha: meta?.fecha || new Date().toISOString().slice(0, 10),
-    tablero: meta?.tablero || "",
-    tableroLower: String(meta?.tablero || "").toLowerCase(),
-    ubicacion: meta?.ubicacion || "",
-    zona: meta?.zona || "",
-    tecnico: meta?.tecnico || "",
-    vehiculo: meta?.vehiculo || "",
+    // Campos “rápidos” para Dashboard / búsquedas
+    fecha: detalle.fecha,
+    tablero: detalle.tablero,
+    tableroLower: String(detalle.tablero || "").toLowerCase(),
+    ubicacion: detalle.ubicacion,
+    zona: detalle.zona,
+    tecnico: detalle.tecnicos?.[0]?.nombre || meta?.tecnico || "",
+    vehiculo: detalle.vehiculo,
 
     // flags locales “pro técnico”
     favorito: false,
     enviado: false,
     reimpreso: 0,
+
+    // tags opcional
     tags: Array.isArray(meta?.tags) ? meta.tags : [],
 
     // métrica liviana
     pdfBytes: pdfBlob?.size || 0,
-    createdAt,
+
+    // ✅ TODO lo “operativo” queda acá
+    detalle,
   };
 
   const tx = db.transaction([STORE_OTS, STORE_PDFS], "readwrite");
@@ -103,9 +160,16 @@ export async function listOts() {
   return all;
 }
 
-export async function queryOts({ q = "", desde = "", hasta = "", favorito = null } = {}) {
+export async function queryOts({
+  q = "",
+  desde = "",
+  hasta = "",
+  favorito = null,
+} = {}) {
   const all = await listOts();
-  const qn = String(q || "").trim().toLowerCase();
+  const qn = String(q || "")
+    .trim()
+    .toLowerCase();
   const hasQ = qn.length > 0;
 
   const inRange = (fecha) => {
@@ -122,8 +186,25 @@ export async function queryOts({ q = "", desde = "", hasta = "", favorito = null
 
     if (!hasQ) return true;
 
+    const det = ot.detalle || {};
+    const tecs = Array.isArray(det.tecnicos)
+      ? det.tecnicos.map((t) => `${t.legajo} ${t.nombre}`).join(" ")
+      : "";
+    const mats = Array.isArray(det.materiales)
+      ? det.materiales
+          .map((m) => `${m.material} ${m.cant} ${m.unidad}`)
+          .join(" ")
+      : "";
+
     const hay =
-      `${ot.tablero} ${ot.zona} ${ot.ubicacion} ${ot.tecnico} ${ot.vehiculo} ${(ot.tags || []).join(" ")}`.toLowerCase();
+      `${ot.tablero} ${ot.zona} ${ot.ubicacion} ${ot.tecnico} ${ot.vehiculo} ${(
+        ot.tags || []
+      ).join(" ")} ` +
+      `${det.circuito || ""} ${det.luminaria_equipos || ""} ` +
+      `${det.tarea_pedida || ""} ${det.tarea_realizada || ""} ${
+        det.tarea_pendiente || ""
+      } ` +
+      `${det.observaciones || ""} ${tecs} ${mats}`.toLowerCase();
 
     return hay.includes(qn);
   });
@@ -189,4 +270,53 @@ export async function deleteOt(otId) {
 
   await txDone(tx);
   db.close();
+}
+
+export async function getOtById(otId) {
+  const db = await openDb();
+  const tx = db.transaction(STORE_OTS, "readonly");
+  const store = tx.objectStore(STORE_OTS);
+
+  const row = await new Promise((resolve, reject) => {
+    const req = store.get(otId);
+    req.onsuccess = () => resolve(req.result || null);
+    req.onerror = () => reject(req.error);
+  });
+
+  await txDone(tx);
+  db.close();
+
+  return row; // metadata o null
+}
+
+// Opcional PRO: metadata + pdf blob en una sola función
+export async function getOtWithPdf(otId) {
+  const db = await openDb();
+
+  const tx = db.transaction([STORE_OTS, STORE_PDFS], "readonly");
+  const ots = tx.objectStore(STORE_OTS);
+  const pdfs = tx.objectStore(STORE_PDFS);
+
+  const ot = await new Promise((resolve, reject) => {
+    const req = ots.get(otId);
+    req.onsuccess = () => resolve(req.result || null);
+    req.onerror = () => reject(req.error);
+  });
+
+  if (!ot) {
+    await txDone(tx);
+    db.close();
+    return { ot: null, blob: null };
+  }
+
+  const row = await new Promise((resolve, reject) => {
+    const req = pdfs.get(ot.pdfId || ot.id);
+    req.onsuccess = () => resolve(req.result || null);
+    req.onerror = () => reject(req.error);
+  });
+
+  await txDone(tx);
+  db.close();
+
+  return { ot, blob: row?.blob || null };
 }

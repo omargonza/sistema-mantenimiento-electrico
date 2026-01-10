@@ -36,7 +36,10 @@ function downloadBlob(blob, filename = "OT.pdf") {
 async function sharePdfBlob({ blob, filename, title, text }) {
   const file = new File([blob], filename, { type: "application/pdf" });
 
-  if (navigator.share && (!navigator.canShare || navigator.canShare({ files: [file] }))) {
+  if (
+    navigator.share &&
+    (!navigator.canShare || navigator.canShare({ files: [file] }))
+  ) {
     await navigator.share({ title, text, files: [file] });
     return true;
   }
@@ -61,7 +64,12 @@ function highlightText(text, query) {
   const out = [];
   for (let i = 0; i < parts.length; i++) {
     out.push(parts[i]);
-    if (matches[i]) out.push(<mark key={`${i}-${matches[i]}`} className="hl">{matches[i]}</mark>);
+    if (matches[i])
+      out.push(
+        <mark key={`${i}-${matches[i]}`} className="hl">
+          {matches[i]}
+        </mark>
+      );
   }
   return out;
 }
@@ -127,7 +135,12 @@ export default function Dashboard() {
   const itemsFiltrados = useMemo(() => {
     if (!filtroZona) return items;
     const target = filtroZona.trim().toLowerCase();
-    return items.filter((ot) => String(ot?.zona || "").trim().toLowerCase() === target);
+    return items.filter(
+      (ot) =>
+        String(ot?.zona || "")
+          .trim()
+          .toLowerCase() === target
+    );
   }, [items, filtroZona]);
 
   // Insights / KPIs / Stats (sobre itemsFiltrados)
@@ -169,9 +182,15 @@ export default function Dashboard() {
       byZona.set(zonaKey, (byZona.get(zonaKey) || 0) + 1);
     }
 
-    const topTableros = [...byTablero.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5);
-    const topTecnicos = [...byTecnico.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5);
-    const topZonas = [...byZona.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5);
+    const topTableros = [...byTablero.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5);
+    const topTecnicos = [...byTecnico.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5);
+    const topZonas = [...byZona.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5);
 
     const pctEnviados = total ? Math.round((enviados / total) * 100) : 0;
     const pctFav = total ? Math.round((fav / total) * 100) : 0;
@@ -239,7 +258,9 @@ export default function Dashboard() {
 
     const filename = `${ot.fecha || "OT"} - ${ot.tablero || "Tablero"}.pdf`;
     const title = "Orden de Trabajo";
-    const text = `${ot.fecha || ""} — ${ot.tablero || ""}\n${ot.ubicacion || ""}`.trim();
+    const text = `${ot.fecha || ""} — ${ot.tablero || ""}\n${
+      ot.ubicacion || ""
+    }`.trim();
 
     try {
       await sharePdfBlob({ blob, filename, title, text });
@@ -286,7 +307,8 @@ export default function Dashboard() {
         <div className="kpi">
           <div className="kpi-label">Enviados</div>
           <div className="kpi-value">
-            {insights.enviados} <span className="kpi-sub">({insights.pctEnviados}%)</span>
+            {insights.enviados}{" "}
+            <span className="kpi-sub">({insights.pctEnviados}%)</span>
           </div>
         </div>
         <div className="kpi">
@@ -354,7 +376,10 @@ export default function Dashboard() {
 
         <div>
           <label>Zona</label>
-          <select value={filtroZona} onChange={(e) => setFiltroZona(e.target.value)}>
+          <select
+            value={filtroZona}
+            onChange={(e) => setFiltroZona(e.target.value)}
+          >
             <option value="">Todas</option>
             {zonas.map((z) => (
               <option key={z} value={z}>
@@ -366,12 +391,20 @@ export default function Dashboard() {
 
         <div>
           <label>Desde</label>
-          <input type="date" value={desde} onChange={(e) => setDesde(e.target.value)} />
+          <input
+            type="date"
+            value={desde}
+            onChange={(e) => setDesde(e.target.value)}
+          />
         </div>
 
         <div>
           <label>Hasta</label>
-          <input type="date" value={hasta} onChange={(e) => setHasta(e.target.value)} />
+          <input
+            type="date"
+            value={hasta}
+            onChange={(e) => setHasta(e.target.value)}
+          />
         </div>
 
         <div className="toggles">
@@ -408,37 +441,70 @@ export default function Dashboard() {
                 {section.items.map((ot) => (
                   <div
                     key={ot.id}
-                    className={`fila-ot ${ot.enviado ? "is-sent" : ""} ${ot.favorito ? "is-fav" : ""}`}
+                    className={`fila-ot ${ot.enviado ? "is-sent" : ""} ${
+                      ot.favorito ? "is-fav" : ""
+                    }`}
                   >
-                    <div className="ot-linea" onClick={() => navigate(`/detalle/${ot.id}`)}>
-                      <div className="ot-tablero">{highlightText(ot.tablero, q)}</div>
+                    <div
+                      className="ot-linea"
+                      onClick={() => navigate(`/detalle/${ot.id}`)}
+                    >
+                      <div className="ot-tablero">
+                        {highlightText(ot.tablero, q)}
+                      </div>
 
                       <div className="ot-meta">
                         <span className="ot-fecha">{ot.fecha}</span>
-                        {ot.zona ? <span className="zbadge">{highlightText(ot.zona, q)}</span> : null}
+                        {ot.zona ? (
+                          <span className="zbadge">
+                            {highlightText(ot.zona, q)}
+                          </span>
+                        ) : null}
                         {ot.favorito && <span className="chip">⭐</span>}
                         {ot.enviado && <span className="chip ok">ENVIADO</span>}
                       </div>
                     </div>
 
-                    <div className="ot-sub">{highlightText(ot.ubicacion, q)}</div>
+                    <div className="ot-sub">
+                      {highlightText(ot.ubicacion, q)}
+                    </div>
 
                     <div className="ot-info">
-                      <span className="pill">{highlightText(ot.tecnico || "-", q)}</span>
-                      <span className="pill">{highlightText(ot.vehiculo || "-", q)}</span>
+                      <span className="pill">
+                        {highlightText(ot.tecnico || "-", q)}
+                      </span>
+                      <span className="pill">
+                        {highlightText(ot.vehiculo || "-", q)}
+                      </span>
                     </div>
 
                     <div className="ot-actions">
-                      <button type="button" className="btn-mini" onClick={() => openPdf(ot)}>
+                      <button
+                        type="button"
+                        className="btn-mini"
+                        onClick={() => openPdf(ot)}
+                      >
                         Abrir PDF
                       </button>
-                      <button type="button" className="btn-mini primary" onClick={() => sharePdf(ot)}>
+                      <button
+                        type="button"
+                        className="btn-mini primary"
+                        onClick={() => sharePdf(ot)}
+                      >
                         Compartir
                       </button>
-                      <button type="button" className="btn-mini" onClick={() => toggleFav(ot)}>
+                      <button
+                        type="button"
+                        className="btn-mini"
+                        onClick={() => toggleFav(ot)}
+                      >
                         {ot.favorito ? "Quitar ⭐" : "Favorito ⭐"}
                       </button>
-                      <button type="button" className="btn-mini danger" onClick={() => remove(ot)}>
+                      <button
+                        type="button"
+                        className="btn-mini danger"
+                        onClick={() => remove(ot)}
+                      >
                         Eliminar
                       </button>
                     </div>
@@ -450,7 +516,8 @@ export default function Dashboard() {
 
         {!loading && itemsFiltrados.length === 0 && (
           <p className="sin-datos">
-            No hay resultados con esos filtros. Probá limpiar Zona, fechas o búsqueda.
+            No hay resultados con esos filtros. Probá limpiar Zona, fechas o
+            búsqueda.
           </p>
         )}
       </div>

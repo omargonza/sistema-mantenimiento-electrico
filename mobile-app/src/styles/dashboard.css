@@ -1,12 +1,15 @@
 /* =========================
    DASHBOARD — PRO (alineado al JSX actual)
    - Filtros en grid + toggles en fila propia (NO se corren)
-   - Inputs sin "display:flex" (no aplica a input)
+   - Grid robusto (minmax) para evitar overflow/solapes
    - Cards OT con jerarquía fuerte en Tablero
 ========================= */
 
 /* ===== Helpers ===== */
-.kpi-sub { opacity: 0.75; font-size: 0.95rem; }
+.kpi-sub {
+  opacity: 0.75;
+  font-size: 0.95rem;
+}
 
 /* =========================
    KPIs
@@ -19,24 +22,38 @@
 }
 
 .kpi {
-  border: 1px solid rgba(148,163,184,.18);
-  background: rgba(15, 23, 42, 0.70);
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  background: rgba(15, 23, 42, 0.7);
   border-radius: 14px;
   padding: 10px 12px;
-  box-shadow: 0 10px 22px rgba(2,6,23,.30);
+  box-shadow: 0 10px 22px rgba(2, 6, 23, 0.3);
 }
 
-.kpi-label { font-size: .82rem; opacity: .75; }
-.kpi-value { font-size: 1.25rem; font-weight: 900; margin-top: 4px; }
+.kpi-label {
+  font-size: 0.82rem;
+  opacity: 0.75;
+}
+.kpi-value {
+  font-size: 1.25rem;
+  font-weight: 900;
+  margin-top: 4px;
+}
 
 /* Compact: KPIs más densos */
 .page.is-compact .kpis {
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
 }
-.page.is-compact .kpi { padding: 8px 10px; border-radius: 12px; }
-.page.is-compact .kpi-label { font-size: .72rem; }
-.page.is-compact .kpi-value { font-size: 1.05rem; }
+.page.is-compact .kpi {
+  padding: 8px 10px;
+  border-radius: 12px;
+}
+.page.is-compact .kpi-label {
+  font-size: 0.72rem;
+}
+.page.is-compact .kpi-value {
+  font-size: 1.05rem;
+}
 
 /* =========================
    Stats PRO
@@ -48,32 +65,43 @@
   margin: 10px 0 14px;
 }
 .statbox {
-  border: 1px solid rgba(148,163,184,.18);
+  border: 1px solid rgba(148, 163, 184, 0.18);
   background: rgba(15, 23, 42, 0.62);
   border-radius: 14px;
   padding: 10px 12px;
-  box-shadow: 0 10px 22px rgba(2,6,23,.30);
+  box-shadow: 0 10px 22px rgba(2, 6, 23, 0.3);
 }
-.stat-title { font-weight: 950; margin-bottom: 8px; letter-spacing: .02em; }
+.stat-title {
+  font-weight: 950;
+  margin-bottom: 8px;
+  letter-spacing: 0.02em;
+}
 .stat-row {
   display: flex;
   justify-content: space-between;
   gap: 10px;
   padding: 6px 0;
-  border-top: 1px solid rgba(148,163,184,.12);
+  border-top: 1px solid rgba(148, 163, 184, 0.12);
 }
-.stat-row:first-child { border-top: none; }
+.stat-row:first-child {
+  border-top: none;
+}
 .stat-name {
-  color: rgba(230,237,243,.85);
+  color: rgba(230, 237, 243, 0.85);
   font-weight: 800;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.stat-val { font-weight: 950; opacity: .9; }
+.stat-val {
+  font-weight: 950;
+  opacity: 0.9;
+}
 
 @media (max-width: 640px) {
-  .stats-grid { grid-template-columns: 1fr; }
+  .stats-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 /* Compact stats */
@@ -82,28 +110,45 @@
   gap: 8px;
 }
 @media (max-width: 640px) {
-  .page.is-compact .stats-grid { grid-template-columns: 1fr; }
+  .page.is-compact .stats-grid {
+    grid-template-columns: 1fr;
+  }
 }
-.page.is-compact .statbox { padding: 8px 10px; border-radius: 12px; }
-.page.is-compact .stat-title { margin-bottom: 6px; font-size: .82rem; }
-.page.is-compact .stat-row { padding: 5px 0; }
+.page.is-compact .statbox {
+  padding: 8px 10px;
+  border-radius: 12px;
+}
+.page.is-compact .stat-title {
+  margin-bottom: 6px;
+  font-size: 0.82rem;
+}
+.page.is-compact .stat-row {
+  padding: 5px 0;
+}
 
 /* =========================
-   Filtros (CARD) — FIX definitivo
+   Filtros (CARD) — FIX definitivo (robusto)
    Estructura:
    [Búsqueda][Zona][Desde][Hasta]
    [Toggles (ocupa todo)]
 ========================= */
 .filtros-box {
   display: grid;
-  grid-template-columns: 1fr 220px 160px 160px;
+
+  /* ✅ columnas fluidas (evita overflow/solapes en distintos DPI) */
+  grid-template-columns:
+    minmax(0, 1fr)
+    minmax(0, 220px)
+    minmax(0, 160px)
+    minmax(0, 160px);
+
   gap: 12px;
   margin: 12px 0 16px;
   padding: 12px;
   border-radius: var(--radius);
-  border: 1px solid rgba(148,163,184,.18);
-  background: rgba(15, 23, 42, 0.70);
-  box-shadow: 0 10px 22px rgba(2,6,23,.35);
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  background: rgba(15, 23, 42, 0.7);
+  box-shadow: 0 10px 22px rgba(2, 6, 23, 0.35);
 }
 
 /* Cada bloque (label + control) */
@@ -111,7 +156,7 @@
   display: flex;
   flex-direction: column;
   gap: 6px;
-  min-width: 0;
+  min-width: 0; /* ✅ permite shrink dentro del grid */
 }
 
 .filtros-box label {
@@ -144,9 +189,9 @@
   gap: 12px;
   padding: 0 12px;
   border-radius: 14px;
-  border: 1px solid rgba(148,163,184,.18);
-  background: rgba(15,23,42,.60);
-  color: rgba(230,237,243,.88);
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  background: rgba(15, 23, 42, 0.6);
+  color: rgba(230, 237, 243, 0.88);
   font-weight: 950;
   font-size: 0.82rem;
   user-select: none;
@@ -161,19 +206,41 @@
   accent-color: #38bdf8;
 }
 
-@media (max-width: 820px) {
-  .filtros-box { grid-template-columns: 1fr 1fr; }
+/* =========================
+   Responsive (más temprano para evitar “cruce”)
+========================= */
+@media (max-width: 900px) {
+  .filtros-box {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  /* Búsqueda ocupa toda la fila */
+  .filtros-box > div:first-child {
+    grid-column: 1 / -1;
+  }
+
+  /* Toggles abajo y full */
+  .filtros-box .toggles {
+    grid-column: 1 / -1;
+    justify-content: space-between;
+  }
 }
 
 @media (max-width: 640px) {
-  .filtros-box { grid-template-columns: 1fr; }
-  .filtros-box .toggles { justify-content: space-between; }
-  .toggle { min-width: 0; flex: 1 1 auto; }
+  .filtros-box {
+    grid-template-columns: 1fr;
+  }
+  .filtros-box .toggles {
+    justify-content: space-between;
+  }
+  .toggle {
+    min-width: 0;
+    flex: 1 1 auto;
+  }
 }
 
 /* =========================
    Inputs: baseline estable
-   (NO uses display:flex en input)
 ========================= */
 .filtros-box input,
 .filtros-box select {
@@ -182,23 +249,30 @@
   font-size: 0.95rem;
   line-height: 1.2;
   box-sizing: border-box;
+  min-width: 0; /* ✅ evita overflow en grid */
 }
 
 /* =========================
    Timeline / Secciones
 ========================= */
-.section { margin-top: 12px; }
+.section {
+  margin-top: 12px;
+}
 
 .section-title {
   margin: 8px 0 10px;
-  font-size: .78rem;
+  font-size: 0.78rem;
   font-weight: 950;
-  letter-spacing: .06em;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: rgba(230,237,243,.75);
+  color: rgba(230, 237, 243, 0.75);
 }
 
-.section-list { display: flex; flex-direction: column; gap: 12px; }
+.section-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
 
 /* =========================
    Cards OTs — PRO
@@ -212,9 +286,13 @@
 .fila-ot {
   position: relative;
   border-radius: 16px;
-  border: 1px solid rgba(148,163,184,.18);
-  background: linear-gradient(180deg, rgba(2,6,23,.80), rgba(2,6,23,.55));
-  box-shadow: 0 14px 34px rgba(0,0,0,.38);
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  background: linear-gradient(
+    180deg,
+    rgba(2, 6, 23, 0.8),
+    rgba(2, 6, 23, 0.55)
+  );
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.38);
   overflow: hidden;
   padding: 12px;
 }
@@ -226,16 +304,30 @@
   top: 0;
   bottom: 0;
   width: 10px;
-  background: linear-gradient(180deg, rgba(37,99,235,.9), rgba(56,189,248,.15));
+  background: linear-gradient(
+    180deg,
+    rgba(37, 99, 235, 0.9),
+    rgba(56, 189, 248, 0.15)
+  );
 }
 
 .fila-ot.is-sent::before {
-  background: linear-gradient(180deg, rgba(34,197,94,.9), rgba(34,197,94,.18));
+  background: linear-gradient(
+    180deg,
+    rgba(34, 197, 94, 0.9),
+    rgba(34, 197, 94, 0.18)
+  );
 }
 
-.fila-ot.is-fav { border-color: rgba(245,158,11,.22); }
+.fila-ot.is-fav {
+  border-color: rgba(245, 158, 11, 0.22);
+}
 .fila-ot.is-fav::before {
-  background: linear-gradient(180deg, rgba(245,158,11,.95), rgba(245,158,11,.14));
+  background: linear-gradient(
+    180deg,
+    rgba(245, 158, 11, 0.95),
+    rgba(245, 158, 11, 0.14)
+  );
 }
 
 /* Header clickeable */
@@ -246,11 +338,11 @@
 
 /* TABLERO protagonista */
 .ot-tablero {
-  font-size: 1.20rem;
+  font-size: 1.2rem;
   font-weight: 950;
-  letter-spacing: .35px;
+  letter-spacing: 0.35px;
   line-height: 1.15;
-  color: rgba(255,255,255,.96);
+  color: rgba(255, 255, 255, 0.96);
   text-transform: uppercase;
 }
 
@@ -260,10 +352,13 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: .78rem;
-  color: rgba(230,237,243,.72);
+  font-size: 0.78rem;
+  color: rgba(230, 237, 243, 0.72);
 }
-.ot-fecha { font-weight: 950; letter-spacing: .25px; }
+.ot-fecha {
+  font-weight: 950;
+  letter-spacing: 0.25px;
+}
 
 /* Zona badge */
 .zbadge {
@@ -272,20 +367,20 @@
   height: 22px;
   padding: 0 8px;
   border-radius: 999px;
-  font-size: .72rem;
+  font-size: 0.72rem;
   font-weight: 950;
-  border: 1px solid rgba(56,189,248,.28);
-  background: rgba(56,189,248,.10);
-  color: rgba(230,237,243,.92);
+  border: 1px solid rgba(56, 189, 248, 0.28);
+  background: rgba(56, 189, 248, 0.1);
+  color: rgba(230, 237, 243, 0.92);
 }
 
 /* Ubicación */
 .ot-sub {
   margin-top: 10px;
   padding-left: 10px;
-  font-size: .95rem;
+  font-size: 0.95rem;
   font-weight: 750;
-  color: rgba(230,237,243,.86);
+  color: rgba(230, 237, 243, 0.86);
 }
 
 /* Info pills */
@@ -303,11 +398,11 @@
   height: 26px;
   padding: 0 10px;
   border-radius: 999px;
-  font-size: .78rem;
+  font-size: 0.78rem;
   font-weight: 900;
-  color: rgba(230,237,243,.86);
-  border: 1px solid rgba(148,163,184,.18);
-  background: rgba(15,23,42,.55);
+  color: rgba(230, 237, 243, 0.86);
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  background: rgba(15, 23, 42, 0.55);
 }
 
 /* Chips */
@@ -317,15 +412,17 @@
   height: 22px;
   padding: 0 8px;
   border-radius: 999px;
-  font-size: .74rem;
+  font-size: 0.74rem;
   font-weight: 950;
-  border: 1px solid rgba(148,163,184,.22);
-  background: rgba(15,23,42,.55);
-  color: rgba(230,237,243,.9);
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  background: rgba(15, 23, 42, 0.55);
+  color: rgba(230, 237, 243, 0.9);
   transform: translateY(-1px);
 }
 
-.chip.ok { border-color: rgba(34,197,94,.38); }
+.chip.ok {
+  border-color: rgba(34, 197, 94, 0.38);
+}
 
 /* Acciones */
 .ot-actions {
@@ -340,34 +437,36 @@
   height: 36px;
   padding: 0 12px;
   border-radius: 12px;
-  border: 1px solid rgba(148,163,184,.22);
-  background: rgba(15,23,42,.55);
-  color: rgba(230,237,243,.92);
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  background: rgba(15, 23, 42, 0.55);
+  color: rgba(230, 237, 243, 0.92);
   font-weight: 900;
 }
 
 .btn-mini.primary {
-  border-color: rgba(56,189,248,.35);
-  background: rgba(56,189,248,.12);
+  border-color: rgba(56, 189, 248, 0.35);
+  background: rgba(56, 189, 248, 0.12);
 }
 
 .btn-mini.danger {
-  border-color: rgba(239,68,68,.38);
-  background: rgba(239,68,68,.10);
+  border-color: rgba(239, 68, 68, 0.38);
+  background: rgba(239, 68, 68, 0.1);
 }
 
 /* Hover */
 .fila-ot:hover {
-  border-color: rgba(148,163,184,.30);
-  box-shadow: 0 18px 42px rgba(0,0,0,.46);
+  border-color: rgba(148, 163, 184, 0.3);
+  box-shadow: 0 18px 42px rgba(0, 0, 0, 0.46);
 }
-.fila-ot:hover .ot-tablero { color: #fff; }
+.fila-ot:hover .ot-tablero {
+  color: #fff;
+}
 
 /* Sin datos */
 .sin-datos {
   text-align: center;
   margin: 18px 0 0;
-  color: rgba(230,237,243,.65);
+  color: rgba(230, 237, 243, 0.65);
 }
 
 /* =========================
@@ -378,18 +477,97 @@
   border-radius: 6px;
   background: rgba(56, 189, 248, 0.16);
   border: 1px solid rgba(56, 189, 248, 0.26);
-  color: rgba(255,255,255,.96);
+  color: rgba(255, 255, 255, 0.96);
 }
 
 /* Compact: cards más densas */
-.page.is-compact .fila-ot { padding: 10px; border-radius: 14px; }
-.page.is-compact .fila-ot::before { width: 8px; }
-.page.is-compact .ot-linea { padding-left: 8px; }
-.page.is-compact .ot-tablero { font-size: 1.05rem; letter-spacing: .25px; }
-.page.is-compact .ot-meta { margin-top: 4px; gap: 6px; font-size: .74rem; }
-.page.is-compact .ot-sub { margin-top: 8px; padding-left: 8px; font-size: .88rem; }
-.page.is-compact .ot-info { margin-top: 8px; padding-left: 8px; gap: 6px; }
-.page.is-compact .pill { height: 24px; padding: 0 9px; font-size: .74rem; }
-.page.is-compact .chip { height: 20px; padding: 0 7px; font-size: .70rem; }
-.page.is-compact .ot-actions { margin-top: 10px; padding-left: 8px; gap: 6px; }
-.page.is-compact .btn-mini { height: 34px; padding: 0 10px; border-radius: 11px; font-size: .86rem; }
+.page.is-compact .fila-ot {
+  padding: 10px;
+  border-radius: 14px;
+}
+.page.is-compact .fila-ot::before {
+  width: 8px;
+}
+.page.is-compact .ot-linea {
+  padding-left: 8px;
+}
+.page.is-compact .ot-tablero {
+  font-size: 1.05rem;
+  letter-spacing: 0.25px;
+}
+.page.is-compact .ot-meta {
+  margin-top: 4px;
+  gap: 6px;
+  font-size: 0.74rem;
+}
+.page.is-compact .ot-sub {
+  margin-top: 8px;
+  padding-left: 8px;
+  font-size: 0.88rem;
+}
+.page.is-compact .ot-info {
+  margin-top: 8px;
+  padding-left: 8px;
+  gap: 6px;
+}
+.page.is-compact .pill {
+  height: 24px;
+  padding: 0 9px;
+  font-size: 0.74rem;
+}
+.page.is-compact .chip {
+  height: 20px;
+  padding: 0 7px;
+  font-size: 0.7rem;
+}
+.page.is-compact .ot-actions {
+  margin-top: 10px;
+  padding-left: 8px;
+  gap: 6px;
+}
+.page.is-compact .btn-mini {
+  height: 34px;
+  padding: 0 10px;
+  border-radius: 11px;
+  font-size: 0.86rem;
+}
+/* =========================================================
+   FIX SOLAPE “REDONDEL”: elevar filtros/input en el stack
+   ========================================================= */
+
+/* el card de filtros se pone por arriba */
+.filtros-box {
+  position: relative;
+  z-index: 50;
+}
+
+/* y los controles también */
+.filtros-box input,
+.filtros-box select {
+  position: relative;
+  z-index: 51;
+}
+
+/* opcional: si el redondel se mete desde la izquierda, evitás “visual clash” */
+.filtros-box > div:first-child input[type="text"] {
+  padding-left: 14px; /* mantenelo normal */
+}
+/* =========================================================
+   FIX REAL: cortar pseudo/decoraciones que se dibujan encima
+   ========================================================= */
+.filtros-box > div:first-child {
+  position: relative;
+  isolation: isolate; /* crea stacking context propio */
+}
+
+/* si el “redondel” viene de ::before/::after, lo apagamos */
+.filtros-box > div:first-child::before,
+.filtros-box > div:first-child::after {
+  content: none !important;
+  display: none !important;
+}
+
+/* el input queda sólido y no “deja ver” cosas detrás */
+.filtros-box > div:first-child input[type="text"] {
+  background: rgba(15, 23, 42, 0.95) !important;
+}

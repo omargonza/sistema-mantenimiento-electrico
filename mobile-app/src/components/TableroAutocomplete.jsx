@@ -5,15 +5,19 @@ import { buscarTableros } from "../services/tablerosAutocompleteApi";
 /**
  * TableroAutocomplete (PRO)
  * - Debounce + AbortController
- * - Busca desde 3 caracteres
- * - Evita re-buscar cuando el usuario selecciona un item (reduce requests/logs)
+ * - Busca desde N caracteres
+ * - Evita re-buscar cuando el usuario selecciona un item
  * - “Sin resultados” consistente
  * - Cierra en blur (con delay) y al seleccionar
- * - Evita flicker de loading con requestId
+ * - Soporta:
+ *    - onChangeText(texto) -> para controlar el valor en el padre
+ *    - onSubmit(texto) -> Enter para buscar directo sin seleccionar
  */
 export default function TableroAutocomplete({
   value = "",
   onSelect,
+  onChangeText, // <-- NUEVO
+  onSubmit, // <-- NUEVO
   placeholder = "Buscar tablero…",
   limit = 20,
   minChars = 3,
@@ -28,16 +32,16 @@ export default function TableroAutocomplete({
   const tRef = useRef(null);
   const reqIdRef = useRef(0);
 
-  // evita disparar búsqueda cuando el input se llena por selección
   const selectedRef = useRef(false);
-
-  // para mostrar “Sin resultados” solo si ya se intentó buscar
   const searchedOnceRef = useRef(false);
 
   useEffect(() => setQ(value || ""), [value]);
 
   const trimmed = (q ?? "").trim();
-  const canSearch = useMemo(() => trimmed.length >= minChars, [trimmed, minChars]);
+  const canSearch = useMemo(
+    () => trimmed.length >= minChars,
+    [trimmed, minChars]
+  );
 
   const closeDropdown = () => {
     setOpen(false);
@@ -45,13 +49,9 @@ export default function TableroAutocomplete({
   };
 
   useEffect(() => {
-    // limpiar debounce anterior
     if (tRef.current) clearTimeout(tRef.current);
-
-    // cancelar request anterior
     if (ctrlRef.current) ctrlRef.current.abort();
 
-    // si el cambio vino de un click en la lista, no re-buscar
     if (selectedRef.current) {
       selectedRef.current = false;
       setLoading(false);
@@ -59,7 +59,7 @@ export default function TableroAutocomplete({
     }
 
     if (!canSearch) {
-      searchedOnceRef.current = false; // resetea estado “sin resultados”
+      searchedOnceRef.current = false;
       setLoading(false);
       closeDropdown();
       return;
@@ -67,8 +67,6 @@ export default function TableroAutocomplete({
 
     const myReqId = ++reqIdRef.current;
     searchedOnceRef.current = true;
-
-    // abrimos el panel en cuanto empieza una búsqueda (lista o “sin resultados”)
     setOpen(true);
 
     tRef.current = setTimeout(async () => {
@@ -77,11 +75,11 @@ export default function TableroAutocomplete({
 
       setLoading(true);
       try {
-        const data = await buscarTableros(trimmed, { signal: ctrl.signal, limit });
-
-        // ignorar respuestas viejas
+        const data = await buscarTableros(trimmed, {
+          signal: ctrl.signal,
+          limit,
+        });
         if (reqIdRef.current !== myReqId) return;
-
         setItems(Array.isArray(data) ? data : []);
       } catch (e) {
         if (e?.name !== "AbortError") {
@@ -112,12 +110,25 @@ export default function TableroAutocomplete({
         className="input"
         value={q}
         placeholder={placeholder}
-        onChange={(e) => setQ(e.target.value)}
+        onChange={(e) => {
+          const v = e.target.value;
+          setQ(v);
+          onChangeText?.(v); // <-- NUEVO: notifica al padre
+        }}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            closeDropdown();
+            onSubmit?.(q); // <-- NUEVO: buscar directo
+          }
+          if (e.key === "Escape") {
+            closeDropdown();
+          }
+        }}
         onFocus={() => {
           if (canSearch) setOpen(true);
         }}
         onBlur={() => {
-          // delay corto para permitir click en item
           setTimeout(() => closeDropdown(), 140);
         }}
         autoCorrect="off"
@@ -144,11 +155,9 @@ export default function TableroAutocomplete({
             borderRadius: 12,
             border: "1px solid rgba(148,163,184,.28)",
             background: "rgba(2,6,23,.96)",
-
             maxHeight: "38vh",
             overflowY: "auto",
             overscrollBehavior: "contain",
-
             boxShadow: "0 10px 25px rgba(0,0,0,.35)",
             backdropFilter: "blur(4px)",
           }}
@@ -157,10 +166,11 @@ export default function TableroAutocomplete({
             <button
               key={t.id ?? `${t.nombre}-${t.zona}-${idx}`}
               type="button"
-              onMouseDown={(e) => e.preventDefault()} // evita perder foco antes de click
+              onMouseDown={(e) => e.preventDefault()}
               onClick={() => {
-                selectedRef.current = true; // ✅ evita request con texto completo
+                selectedRef.current = true;
                 setQ(t.nombre);
+                onChangeText?.(t.nombre); // <-- NUEVO: mantiene sincronía con padre
                 closeDropdown();
                 onSelect?.(t); // {id, nombre, zona}
               }}
