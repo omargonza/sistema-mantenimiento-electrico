@@ -1,15 +1,26 @@
 from django.urls import path
-from .views import TablerosListView, HistorialPorTablero
-
-from .views import TableroAutocompleteView
-
-urlpatterns = [
-    path("tableros/", TableroAutocompleteView.as_view(), name="tableros_autocomplete"),
-]
-
+from .views import (
+    TablerosListView,
+    TableroAutocompleteView,
+    HistorialView,
+    CircuitosFrecuentesView,
+)
 
 urlpatterns = [
+    # catálogo completo (si lo necesitás)
     path("tableros/", TablerosListView.as_view(), name="tableros_list"),
-    path("historial/", HistorialPorTablero.as_view(), name="historial_por_tablero"),
-     path("tableros/", TableroAutocompleteView.as_view(), name="tableros_autocomplete"),
+    # autocomplete liviano
+    path(
+        "tableros/autocomplete/",
+        TableroAutocompleteView.as_view(),
+        name="tableros_autocomplete",
+    ),
+    # historial (por tablero opcional) + filtros + paginado
+    path("historial/", HistorialView.as_view(), name="historial"),
+    # circuitos frecuentes por tablero (para chips)
+    path(
+        "tableros/circuitos/",
+        CircuitosFrecuentesView.as_view(),
+        name="tableros_circuitos",
+    ),
 ]
