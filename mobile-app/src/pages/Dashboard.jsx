@@ -323,20 +323,7 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Stats PRO (técnico/zona/tablero) */}
       <div className="stats-grid">
-        {insights.topTecnicos.length > 0 && (
-          <div className="statbox">
-            <div className="stat-title">Top técnicos</div>
-            {insights.topTecnicos.map(([name, n]) => (
-              <div className="stat-row" key={name}>
-                <span className="stat-name">{name}</span>
-                <span className="stat-val">{n}</span>
-              </div>
-            ))}
-          </div>
-        )}
-
         {insights.topZonas.length > 0 && (
           <div className="statbox">
             <div className="stat-title">Top zonas</div>
