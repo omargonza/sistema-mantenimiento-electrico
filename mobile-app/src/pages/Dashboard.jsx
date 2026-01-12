@@ -2,7 +2,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import "../styles/dashboard.css";
-import { queryOts, getPdfBlob, setFlags, deleteOt } from "../storage/ot_db";
+import {
+  queryOts,
+  getPdfBlob,
+  setFlags,
+  deleteOt,
+  migrateOtsOperationalFields,
+} from "../storage/ot_db";
 
 function isoToday() {
   return new Date().toISOString().slice(0, 10);
@@ -96,6 +102,27 @@ function tableroColor(estado) {
   }
 }
 
+// ✅ Lee campos operativos desde detalle (nuevo) con fallback
+function readOpFields(ot) {
+  const det = ot?.detalle || {};
+  const alcance = String(det?.alcance ?? ot?.alcance ?? "")
+    .trim()
+    .toUpperCase();
+  const resultado = String(det?.resultado ?? ot?.resultado ?? "")
+    .trim()
+    .toUpperCase();
+  const estado_tablero = String(det?.estado_tablero ?? ot?.estado_tablero ?? "")
+    .trim()
+    .toUpperCase();
+  const luminaria_estado = String(
+    det?.luminaria_estado ?? ot?.luminaria_estado ?? ""
+  )
+    .trim()
+    .toUpperCase();
+
+  return { alcance, resultado, estado_tablero, luminaria_estado };
+}
+
 export default function Dashboard() {
   const navigate = useNavigate();
 
@@ -138,6 +165,19 @@ export default function Dashboard() {
       setItems(Array.isArray(data) ? data : []);
     } finally {
       setLoading(false);
+    }
+  };
+  const runMigration = async () => {
+    try {
+      const res = await migrateOtsOperationalFields();
+      console.log("Migración OK:", res);
+      alert(
+        `Migración OK\nEscaneadas: ${res.scanned}\nActualizadas: ${res.updated}`
+      );
+      refresh();
+    } catch (e) {
+      console.error(e);
+      alert("Error en migración. Mirá la consola.");
     }
   };
 
@@ -308,10 +348,11 @@ export default function Dashboard() {
   };
 
   // ========= Panel tableros (semáforo manual + luminarias aparte) =========
+  // ✅ Se calcula sobre "items" (universo) para no apagarse con filtroZona
   const tableroPanel = useMemo(() => {
     const map = new Map(); // tableroKey -> info
 
-    for (const ot of itemsFiltrados) {
+    for (const ot of items) {
       const k = normalizeKey(ot?.tablero);
       if (!k) continue;
 
@@ -328,10 +369,11 @@ export default function Dashboard() {
 
       const info = map.get(k);
 
-      const alcance = String(ot?.alcance || "").toUpperCase();
-      const resultado = String(ot?.resultado || "").toUpperCase();
-      const estadoExp = String(ot?.estado_tablero || "").toUpperCase();
-      const lumEstado = String(ot?.luminaria_estado || "").toUpperCase();
+      const { alcance, resultado, estado_tablero, luminaria_estado } =
+        readOpFields(ot);
+
+      const estadoExp = estado_tablero;
+      const lumEstado = luminaria_estado;
 
       // Semáforo: solo TABLERO/CIRCUITO con estado explícito
       if ((alcance === "TABLERO" || alcance === "CIRCUITO") && estadoExp) {
@@ -340,7 +382,6 @@ export default function Dashboard() {
 
       // Luminarias aparte (no afectan semáforo)
       if (alcance === "LUMINARIA") {
-        // preferimos luminaria_estado si viene, si no usamos resultado
         const ok =
           lumEstado === "REPARADO" ||
           lumEstado === "ENCENDIDO" ||
@@ -377,11 +418,40 @@ export default function Dashboard() {
     );
 
     return arr;
-  }, [itemsFiltrados, filtroEstado]);
+  }, [items, filtroEstado]);
 
   return (
     <div className={`page ${compacto ? "is-compact" : ""}`}>
       <h2 className="titulo">Mis PDFs</h2>
+      {/*
+<button
+  type="button"
+  className="btn-mini"
+  style={{ marginBottom: 12 }}
+  onClick={async () => {
+    if (
+      !confirm(
+        "Esto va a actualizar OTs viejas para el semáforo.\n\n¿Continuar?"
+      )
+    )
+      return;
+
+    try {
+      const res = await migrateOtsOperationalFields();
+      console.log("Migración OK:", res);
+      alert(
+        `Migración completada\n\nEscaneadas: ${res.scanned}\nActualizadas: ${res.updated}`
+      );
+      refresh();
+    } catch (e) {
+      console.error(e);
+      alert("Error en la migración. Mirá la consola.");
+    }
+  }}
+>
+  Migrar OTs viejas (semáforo)
+</button>
+*/}
 
       {/* KPIs */}
       <div className="kpis">
@@ -542,14 +612,21 @@ export default function Dashboard() {
               type="button"
               className="tablero-card"
               onClick={() => {
+                // ✅ evita quedar en 0 por filtros previos
+                setSoloFavoritos(false);
+                setFiltroZona("");
+                setFiltroEstado("");
+
                 setQ(t.name);
-                setDesde(lastNDaysIso(7));
-                setHasta(""); // opcional: lo limpiás para que no te bloquee
+
+                // ✅ no forzar 7 días: solo pone 30 días si no había rango
+                if (!desde && !hasta) setDesde(lastNDaysIso(30));
+                setHasta("");
               }}
               title={`${t.name} — Estado: ${
                 t.estadoFinal || "SIN ESTADO"
               } · Luminarias ok:${t.lumReparadas} pend:${t.lumPendientes}`}
-              style={{ borderColor: t.color }}
+              style={{ borderColor: t.color, color: t.color }}
             >
               <div className="tablero-head">
                 <span className="dot" style={{ background: t.color }} />

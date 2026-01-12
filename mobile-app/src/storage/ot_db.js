@@ -99,6 +99,12 @@ export async function saveOtPdf(meta, pdfBlob) {
     tiene_firma: Boolean(meta?.firma_tecnico_img),
     fotos_count: Array.isArray(meta?.fotos_b64) ? meta.fotos_b64.length : 0,
 
+    // ✅ Semáforo / clasificación (viene desde normalizarPayloadOT)
+    alcance: meta?.alcance || "",
+    resultado: meta?.resultado || "",
+    estado_tablero: meta?.estado_tablero || "",
+    luminaria_estado: meta?.luminaria_estado || "",
+
     // Impresión
     print_mode: Boolean(meta?.print_mode),
   };
@@ -319,4 +325,113 @@ export async function getOtWithPdf(otId) {
   db.close();
 
   return { ot, blob: row?.blob || null };
+}
+export async function migrateOtsOperationalFields() {
+  // Asegura apertura y stores (usa helpers existentes del archivo)
+  const db = await openDb();
+  const tx = db.transaction([STORE_OTS], "readwrite");
+  const store = tx.objectStore(STORE_OTS);
+
+  const all = await new Promise((resolve, reject) => {
+    const req = store.getAll();
+    req.onsuccess = () => resolve(req.result || []);
+    req.onerror = () => reject(req.error);
+  });
+
+  const inferAlcance = (ot) => {
+    const det = ot?.detalle || {};
+    const hasLum =
+      String(det?.luminaria_equipos || "").trim() ||
+      String(det?.luminaria || "").trim() ||
+      String(det?.luminaria_estado || "").trim() ||
+      String(ot?.luminaria_estado || "").trim();
+    return hasLum ? "LUMINARIA" : "TABLERO";
+  };
+
+  const inferResultado = (det) => {
+    const raw = String(det?.resultado || "")
+      .trim()
+      .toUpperCase();
+    if (raw) return raw;
+    if (String(det?.tarea_pendiente || "").trim()) return "PARCIAL";
+    return "COMPLETO";
+  };
+
+  const inferLuminariaEstado = (det) => {
+    const raw = String(det?.luminaria_estado || "")
+      .trim()
+      .toUpperCase();
+    if (raw) return raw;
+    if (String(det?.tarea_realizada || "").trim()) return "REPARADO";
+    if (
+      String(det?.tarea_pedida || "").trim() ||
+      String(det?.tarea_pendiente || "").trim()
+    )
+      return "PENDIENTE";
+    return "";
+  };
+
+  let updated = 0;
+
+  for (const ot of all) {
+    const det = ot?.detalle || {};
+
+    const hasAll =
+      det &&
+      typeof det === "object" &&
+      "alcance" in det &&
+      "resultado" in det &&
+      "estado_tablero" in det &&
+      "luminaria_estado" in det;
+
+    const needsTableroLower =
+      typeof ot?.tableroLower !== "string" ||
+      ot.tableroLower !== String(ot?.tablero || "").toLowerCase();
+
+    if (hasAll && !needsTableroLower) continue;
+
+    const next = { ...ot };
+    const nextDet = { ...det };
+
+    if (!String(nextDet.alcance || "").trim()) {
+      nextDet.alcance = inferAlcance(ot);
+    }
+    nextDet.alcance = String(nextDet.alcance || "")
+      .trim()
+      .toUpperCase();
+
+    if (!String(nextDet.resultado || "").trim()) {
+      nextDet.resultado = inferResultado(nextDet);
+    }
+    nextDet.resultado = String(nextDet.resultado || "")
+      .trim()
+      .toUpperCase();
+
+    if (!("estado_tablero" in nextDet)) nextDet.estado_tablero = "";
+    nextDet.estado_tablero = String(nextDet.estado_tablero || "")
+      .trim()
+      .toUpperCase();
+
+    if (nextDet.alcance === "LUMINARIA") {
+      if (!String(nextDet.luminaria_estado || "").trim()) {
+        nextDet.luminaria_estado = inferLuminariaEstado(nextDet);
+      }
+      nextDet.luminaria_estado = String(nextDet.luminaria_estado || "")
+        .trim()
+        .toUpperCase();
+    } else {
+      nextDet.luminaria_estado = "";
+    }
+
+    next.detalle = nextDet;
+    next.tableroLower = String(next?.tablero || "").toLowerCase();
+
+    store.put(next);
+    updated += 1;
+  }
+
+  await txDone(tx);
+  db.close();
+
+  return { scanned: all.length, updated };
 }
