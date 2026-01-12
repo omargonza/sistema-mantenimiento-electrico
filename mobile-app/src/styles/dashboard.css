@@ -571,3 +571,120 @@
 .filtros-box > div:first-child input[type="text"] {
   background: rgba(15, 23, 42, 0.95) !important;
 }
+
+/* premium dashboard  */
+.panel-tableros {
+  margin-top: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 14px;
+  background: rgba(2, 6, 23, 0.55);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.25);
+  overflow: hidden;
+}
+
+.panel-title {
+  padding: 10px 12px;
+  font-weight: 900;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.16);
+  background: rgba(2, 6, 23, 0.75);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.panel-sub {
+  font-weight: 500;
+  opacity: 0.8;
+  font-size: 0.9rem;
+}
+
+.panel-grid {
+  padding: 10px 12px 12px;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 1fr;
+}
+
+@media (min-width: 700px) {
+  .panel-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (min-width: 1020px) {
+  .panel-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+.tablero-card {
+  border-radius: 14px;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  background: rgba(15, 23, 42, 0.45);
+  padding: 10px 10px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.tablero-card:hover {
+  background: rgba(15, 23, 42, 0.62);
+}
+
+.tablero-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.tablero-head .dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  flex: 0 0 auto;
+}
+
+.tablero-head .nm {
+  font-weight: 800;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1 1 auto;
+}
+
+.badge {
+  font-size: 0.78rem;
+  padding: 6px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  background: rgba(2, 6, 23, 0.35);
+  font-weight: 900;
+}
+
+.badge.ok {
+  border-color: rgba(34, 197, 94, 0.35);
+}
+.badge.parcial {
+  border-color: rgba(245, 158, 11, 0.35);
+}
+.badge.critico {
+  border-color: rgba(239, 68, 68, 0.35);
+}
+.badge.none {
+  border-color: rgba(148, 163, 184, 0.2);
+  opacity: 0.85;
+}
+
+.tablero-foot {
+  margin-top: 10px;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.tablero-foot .mini {
+  font-size: 0.82rem;
+  padding: 6px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  background: rgba(2, 6, 23, 0.25);
+  opacity: 0.92;
+}

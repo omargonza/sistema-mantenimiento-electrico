@@ -149,6 +149,10 @@ const initialForm = {
   firmaTecnicoB64: "",
   fotosB64: [],
   printMode: false,
+  alcance: "LUMINARIA", // default operativo
+  resultado: "COMPLETO", // default
+  estado_tablero: "", // "CRITICO" | "PARCIAL" | "OK" | ""
+  luminaria_estado: "", // opcional por ahora  (ENCENDIDO/APAGADO/REPARADO)
 };
 
 /* =======================================================
@@ -190,7 +194,7 @@ function guardarHistorialOT(payload) {
   } catch {}
 }
 
-/* =======================================================
+/* ===============================================/* /* =======================================================
    NORMALIZACIÓN PAYLOAD (SIN DUPLICADOS)
 ======================================================= */
 function normalizarPayloadOT(form) {
@@ -205,6 +209,65 @@ function normalizarPayloadOT(form) {
       ? form.circuitos.join(", ")
       : form.circuitos) ||
     "";
+
+  // =========================
+  // Clasificación (raw) + compat
+  // =========================
+  const alcanceRaw = String(form.alcance || "")
+    .trim()
+    .toUpperCase();
+  const resultado = String(form.resultado || "COMPLETO")
+    .trim()
+    .toUpperCase();
+
+  // Compatibilidad hacia atrás:
+  // si no viene alcance (OT vieja), inferimos de forma conservadora
+  // - si hay "luminaria" o "luminaria_estado" => LUMINARIA
+  // - si no => TABLERO (porque probablemente era trabajo de tablero/circuito)
+  let alcance =
+    alcanceRaw ||
+    (String(form.luminaria || "").trim() ||
+    String(form.luminaria_estado || "").trim()
+      ? "LUMINARIA"
+      : "TABLERO");
+
+  // =========================
+  // estado_tablero (solo TABLERO/CIRCUITO)
+  // =========================
+  const ESTADOS_TABLERO = new Set(["CRITICO", "PARCIAL", "OK"]);
+  let estado_tablero = String(form.estado_tablero || "")
+    .trim()
+    .toUpperCase();
+
+  if (!(alcance === "TABLERO" || alcance === "CIRCUITO")) {
+    estado_tablero = "";
+  } else if (!ESTADOS_TABLERO.has(estado_tablero)) {
+    estado_tablero = ""; // descarta basura
+  }
+
+  // =========================
+  // luminaria_estado (solo LUMINARIA) + compat
+  // =========================
+  const ESTADOS_LUM = new Set(["REPARADO", "APAGADO", "PENDIENTE"]);
+  let luminaria_estado = String(form.luminaria_estado || "")
+    .trim()
+    .toUpperCase();
+
+  if (alcance !== "LUMINARIA") {
+    luminaria_estado = "";
+  } else if (luminaria_estado && !ESTADOS_LUM.has(luminaria_estado)) {
+    luminaria_estado = "";
+  }
+
+  // Compatibilidad: OT vieja de luminaria sin luminaria_estado
+  // Si alcance=LUMINARIA y hay tareaRealizada, asumimos REPARADO (conservador)
+  if (
+    alcance === "LUMINARIA" &&
+    !luminaria_estado &&
+    String(form.tareaRealizada || "").trim()
+  ) {
+    luminaria_estado = "REPARADO";
+  }
 
   return {
     fecha: form.fecha,
@@ -243,6 +306,12 @@ function normalizarPayloadOT(form) {
     firma_supervisor: form.firmaSupervisor || "",
 
     print_mode: Boolean(form.printMode),
+
+    // ✅ Persisten y sirven para dashboard + PDF
+    alcance,
+    resultado,
+    estado_tablero,
+    luminaria_estado,
   };
 }
 
@@ -346,20 +415,111 @@ export default function NuevaOT() {
      VALIDACIÓN
   ======================================================== */
   function validarCampos() {
-    if (!form.tablero.trim()) return "Debe seleccionar un tablero.";
-    if (!form.vehiculo.trim()) return "Debe seleccionar un vehículo.";
+    // =========================
+    // 1) Mínimos operativos
+    // =========================
+    if (!String(form.tablero || "").trim())
+      return "Debe seleccionar un tablero.";
+    if (!String(form.vehiculo || "").trim())
+      return "Debe seleccionar un vehículo.";
 
+    // Al menos 1 técnico válido
+    const tecnicos = Array.isArray(form.tecnicos) ? form.tecnicos : [];
+    const tieneTecnico = tecnicos.some(
+      (t) => String(t?.nombre || "").trim() || String(t?.legajo || "").trim()
+    );
+    if (!tieneTecnico) return "Cargá al menos un técnico (nombre o legajo).";
+
+    // KM coherentes
     if (
       form.kmIni !== "" &&
       form.kmFin !== "" &&
+      Number.isFinite(Number(form.kmIni)) &&
+      Number.isFinite(Number(form.kmFin)) &&
       Number(form.kmFin) < Number(form.kmIni)
     ) {
       return "El km final no puede ser menor que el inicial.";
     }
 
-    if (!form.firmaTecnico.trim())
+    // Firma (si es obligatorio en tu operación)
+    if (!String(form.firmaTecnico || "").trim())
       return "Falta la aclaración (nombre) del técnico.";
     if (!form.firmaTecnicoB64) return "Falta la firma digital del técnico.";
+
+    // =========================
+    // 2) Clasificación (negocio)
+    // =========================
+    const alcance = String(form.alcance || "LUMINARIA")
+      .trim()
+      .toUpperCase();
+    const resultado = String(form.resultado || "COMPLETO")
+      .trim()
+      .toUpperCase();
+    const estadoTab = String(form.estado_tablero || "")
+      .trim()
+      .toUpperCase();
+    const lumEstado = String(form.luminaria_estado || "")
+      .trim()
+      .toUpperCase();
+
+    const ESTADOS_TABLERO = new Set(["CRITICO", "PARCIAL", "OK"]);
+    const ESTADOS_LUM = new Set(["REPARADO", "APAGADO", "PENDIENTE"]);
+
+    // Resultado vs contenido
+    const tareaRealizada = String(form.tareaRealizada || "").trim();
+    const tareaPendiente = String(form.tareaPendiente || "").trim();
+
+    if (resultado === "PARCIAL" && !tareaPendiente) {
+      return "Si el resultado es PARCIAL, completá 'Tarea pendiente' (qué quedó faltando).";
+    }
+    if (resultado === "COMPLETO" && !tareaRealizada) {
+      return "Si el resultado es COMPLETO, completá 'Tarea realizada' (qué se hizo).";
+    }
+
+    // Reglas por alcance
+    if (alcance === "LUMINARIA") {
+      // No debería evaluarse el tablero en luminaria
+      if (estadoTab) {
+        return "En LUMINARIA no se marca 'Estado del tablero'. Cambiá a TABLERO/CIRCUITO si corresponde.";
+      }
+
+      // Recomendado: pedir mínimo detalle de luminaria
+      const lumTexto = String(form.luminaria || "").trim();
+      if (!lumEstado && !lumTexto && !tareaRealizada) {
+        return "En LUMINARIA, indicá 'Estado luminaria' o completá 'Luminarias / Equipos' o 'Tarea realizada'.";
+      }
+
+      if (lumEstado && !ESTADOS_LUM.has(lumEstado)) {
+        return "Estado luminaria inválido.";
+      }
+    }
+
+    if (alcance === "CIRCUITO" || alcance === "TABLERO") {
+      // Estado tablero obligatorio
+      if (!estadoTab) {
+        return "Si el alcance es TABLERO/CIRCUITO, elegí 'Estado del tablero' (Crítico/Parcial/OK).";
+      }
+      if (!ESTADOS_TABLERO.has(estadoTab)) {
+        return "Estado del tablero inválido.";
+      }
+
+      // Circuito recomendado/obligatorio para CIRCUITO
+      if (alcance === "CIRCUITO" && !String(form.circuito || "").trim()) {
+        return "Si el alcance es CIRCUITO, completá el campo 'Circuito'.";
+      }
+
+      // Contradicción: OK pero resultado PARCIAL
+      if (estadoTab === "OK" && resultado === "PARCIAL") {
+        return "No podés marcar tablero OK si el resultado fue PARCIAL. Poné PARCIAL o CRÍTICO.";
+      }
+    }
+
+    if (alcance === "OTRO") {
+      // Evitar “OTRO” vacío
+      if (!tareaRealizada && !String(form.observaciones || "").trim()) {
+        return "Si elegís OTRO, describí la tarea en 'Tarea realizada' u 'Observaciones'.";
+      }
+    }
 
     return null;
   }
@@ -491,6 +651,9 @@ export default function NuevaOT() {
   /* =======================================================
      ENVÍO / PDF
   ======================================================== */
+  /* =======================================================
+   ENVÍO / PDF
+======================================================== */
   async function generarPDF() {
     const error = validarCampos();
     if (error) {
@@ -498,6 +661,68 @@ export default function NuevaOT() {
       return;
     }
 
+    // ==========================================
+    // VALIDACIONES DE NEGOCIO (soft / pedagógicas)
+    // ==========================================
+    const alcance = String(form.alcance || "LUMINARIA")
+      .trim()
+      .toUpperCase();
+    const resultado = String(form.resultado || "COMPLETO")
+      .trim()
+      .toUpperCase();
+    const estadoTablero = String(form.estado_tablero || "")
+      .trim()
+      .toUpperCase();
+    const lumEstado = String(form.luminaria_estado || "")
+      .trim()
+      .toUpperCase();
+
+    // 1) Si es TABLERO/CIRCUITO y dejan OK, avisamos para evitar "verde por arreglito"
+    if (
+      (alcance === "TABLERO" || alcance === "CIRCUITO") &&
+      estadoTablero === "OK"
+    ) {
+      showToast(
+        "warn",
+        "Ojo: 'OK (verde)' usalo solo si el tablero quedó realmente en condición aceptable. Si fue un arreglo puntual, marcá 'PARCIAL (naranja)'."
+      );
+      // No bloqueamos: seguimos igual (para no frenar el trabajo)
+    }
+
+    // 2) Si es TABLERO/CIRCUITO y no eligieron estado_tablero, sugerimos (esto sí conviene bloquear)
+    if ((alcance === "TABLERO" || alcance === "CIRCUITO") && !estadoTablero) {
+      showToast(
+        "warn",
+        "Falta 'Estado del tablero'. Elegí: Crítico / Parcial / OK. (Esto alimenta el semáforo del dashboard)."
+      );
+      return;
+    }
+
+    // 3) Si es LUMINARIA y no eligieron luminaria_estado, NO bloqueamos, pero avisamos
+    if (alcance === "LUMINARIA" && !lumEstado) {
+      showToast(
+        "info",
+        "Tip: si elegís 'Estado luminaria' (Reparado / Apagado / Pendiente), el panel va a contar Luminarias OK y Pendientes automáticamente."
+      );
+      // No bloquea
+    }
+
+    // 4) Consistencia: si es LUMINARIA no tiene sentido "PARCIAL/COMPLETO" sin texto (esto es opcional)
+    if (
+      alcance === "LUMINARIA" &&
+      resultado === "PARCIAL" &&
+      !String(form.tareaPendiente || "").trim()
+    ) {
+      showToast(
+        "warn",
+        "Marcaste 'Parcial' pero no escribiste 'Tarea pendiente'. Si quedó algo por hacer, anotá qué faltó (material, falla, etc.)."
+      );
+      // No bloquea
+    }
+
+    // ==============================
+    // Armado de payload normalizado
+    // ==============================
     const payload = normalizarPayloadOT(form);
 
     saveCache("cache_tableros", form.tablero);
@@ -525,7 +750,6 @@ export default function NuevaOT() {
           "No se pudo guardar en IndexedDB (continúo igual):",
           dbErr
         );
-        // No frenamos: igual descargamos el PDF y seguimos
       }
 
       // ✅ Descarga PDF
@@ -535,9 +759,6 @@ export default function NuevaOT() {
       a.download = `OT_${payload.fecha}_${payload.tablero}.pdf`;
       a.click();
       setTimeout(() => URL.revokeObjectURL(url), 30_000);
-
-      // 🚫 Recomendación: eliminar esto para no duplicar fuente de datos
-      // guardarHistorialOT(payload);
 
       clearForm();
       showToast("ok", "Orden generada correctamente. PDF descargado.");
@@ -560,7 +781,13 @@ export default function NuevaOT() {
       setLoading(false);
     }
   }
+  /*TABLERO/CIRCUITO + OK → avisa (para evitar “verde por arreglo puntual”).
 
+TABLERO/CIRCUITO sin estado_tablero → bloquea (porque el semáforo depende de eso).
+
+LUMINARIA sin luminaria_estado → no bloquea, pero te enseña a usarlo para que cuente en el panel.
+
+LUMINARIA + PARCIAL sin tarea pendiente → avisa (calidad de registro).*/
   /* =======================================================
      AUTOCOMPLETADO
   ======================================================== */
@@ -876,6 +1103,102 @@ export default function NuevaOT() {
       >
         ➕ Agregar técnico
       </button>
+
+      <h3 className="subtitulo">Clasificación</h3>
+
+      <div className="hint">
+        <strong>¿Qué estás haciendo hoy?</strong>
+        <ul>
+          <li>
+            <b>Luminaria</b>: arreglás una luz puntual (NO evalúa el tablero)
+          </li>
+          <li>
+            <b>Circuito / Tablero</b>: trabajo eléctrico del tablero
+          </li>
+        </ul>
+        <small>
+          ⚠️ Marcá <b>Estado del tablero</b> solo si realmente evaluaste su
+          condición.
+        </small>
+      </div>
+
+      <label>Alcance del trabajo</label>
+      <select
+        value={form.alcance || "LUMINARIA"}
+        onChange={(e) => {
+          const alcance = e.target.value;
+
+          setForm((prev) => {
+            // defaults inteligentes
+            let estado_tablero = prev.estado_tablero || "";
+
+            if (alcance === "LUMINARIA") {
+              estado_tablero = ""; // no aplica
+            } else {
+              // si pasa a tablero/circuito y no hay estado, sugerimos PARCIAL
+              if (!estado_tablero) estado_tablero = "PARCIAL";
+            }
+
+            return { ...prev, alcance, estado_tablero };
+          });
+        }}
+      >
+        <option value="LUMINARIA">Luminaria </option>
+        <option value="CIRCUITO">Circuito</option>
+        <option value="TABLERO">Tablero</option>
+        <option value="OTRO">Otro</option>
+      </select>
+
+      <label>Resultado</label>
+      <select
+        value={form.resultado || "COMPLETO"}
+        onChange={(e) =>
+          setForm((prev) => ({ ...prev, resultado: e.target.value }))
+        }
+      >
+        <option value="COMPLETO">Completo (se resolvió lo planificado)</option>
+        <option value="PARCIAL">Parcial (quedó pendiente)</option>
+      </select>
+
+      {/* Estado tablero: solo si NO es luminaria */}
+      {(form.alcance === "TABLERO" || form.alcance === "CIRCUITO") && (
+        <>
+          <label>Estado del tablero (semáforo)</label>
+          <select
+            value={form.estado_tablero || ""}
+            onChange={(e) =>
+              setForm((prev) => ({ ...prev, estado_tablero: e.target.value }))
+            }
+          >
+            <option value="CRITICO">Crítico (rojo)</option>
+            <option value="PARCIAL">Parcial (naranja)</option>
+            <option value="OK">OK (verde)</option>
+          </select>
+
+          <div className="muted" style={{ marginTop: 6 }}>
+            Recomendación: “OK” solo si el tablero quedó realmente en condición
+            aceptable.
+          </div>
+        </>
+      )}
+
+      {/* Luminaria (extra simple, opcional) */}
+      {form.alcance === "LUMINARIA" && (
+        <>
+          <label>Estado luminaria (opcional)</label>
+          <select
+            value={form.luminaria_estado || ""}
+            onChange={(e) =>
+              setForm((prev) => ({ ...prev, luminaria_estado: e.target.value }))
+            }
+          >
+            <option value="">—</option>
+            <option value="REPARADO">Reparado / encendido</option>
+            <option value="APAGADO">Sigue apagado</option>
+            <option value="PENDIENTE">Pendiente (falta material/otro)</option>
+          </select>
+        </>
+      )}
 
       <h3 className="subtitulo">Tareas</h3>
 

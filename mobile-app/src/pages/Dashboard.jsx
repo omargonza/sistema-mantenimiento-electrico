@@ -74,6 +74,28 @@ function highlightText(text, query) {
   return out;
 }
 
+function normalizeKey(s) {
+  return String(s || "")
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, " ");
+}
+
+function tableroColor(estado) {
+  switch (estado) {
+    case "OK":
+      return "hsl(120 70% 45%)";
+    case "PARCIAL":
+      return "hsl(35 85% 45%)";
+    case "CRITICO":
+      return "hsl(0 70% 45%)";
+    default:
+      return "hsl(215 15% 45%)"; // SIN ESTADO
+  }
+}
+
 export default function Dashboard() {
   const navigate = useNavigate();
 
@@ -82,6 +104,9 @@ export default function Dashboard() {
   const [hasta, setHasta] = useState("");
   const [soloFavoritos, setSoloFavoritos] = useState(false);
   const [filtroZona, setFiltroZona] = useState("");
+
+  const [filtroEstado, setFiltroEstado] = useState("");
+  // "" | "CRITICO" | "PARCIAL" | "OK" | "SIN_ESTADO"
 
   const [compacto, setCompacto] = useState(() => {
     try {
@@ -131,7 +156,7 @@ export default function Dashboard() {
     return [...set].sort((a, b) => a.localeCompare(b));
   }, [items]);
 
-  // Aplicar filtro de zona en frontend (rápido y seguro)
+  // Filtro base por zona (rápido y seguro)
   const itemsFiltrados = useMemo(() => {
     if (!filtroZona) return items;
     const target = filtroZona.trim().toLowerCase();
@@ -282,6 +307,78 @@ export default function Dashboard() {
     refresh();
   };
 
+  // ========= Panel tableros (semáforo manual + luminarias aparte) =========
+  const tableroPanel = useMemo(() => {
+    const map = new Map(); // tableroKey -> info
+
+    for (const ot of itemsFiltrados) {
+      const k = normalizeKey(ot?.tablero);
+      if (!k) continue;
+
+      if (!map.has(k)) {
+        map.set(k, {
+          name: (ot.tablero || "").trim() || "Sin tablero",
+          // estado explícito manual
+          estado: null,
+          // luminarias
+          lumReparadas: 0,
+          lumPendientes: 0,
+        });
+      }
+
+      const info = map.get(k);
+
+      const alcance = String(ot?.alcance || "").toUpperCase();
+      const resultado = String(ot?.resultado || "").toUpperCase();
+      const estadoExp = String(ot?.estado_tablero || "").toUpperCase();
+      const lumEstado = String(ot?.luminaria_estado || "").toUpperCase();
+
+      // Semáforo: solo TABLERO/CIRCUITO con estado explícito
+      if ((alcance === "TABLERO" || alcance === "CIRCUITO") && estadoExp) {
+        info.estado = estadoExp; // último manda
+      }
+
+      // Luminarias aparte (no afectan semáforo)
+      if (alcance === "LUMINARIA") {
+        // preferimos luminaria_estado si viene, si no usamos resultado
+        const ok =
+          lumEstado === "REPARADO" ||
+          lumEstado === "ENCENDIDO" ||
+          resultado === "COMPLETO";
+        if (ok) info.lumReparadas += 1;
+        else info.lumPendientes += 1;
+      }
+    }
+
+    let arr = [...map.values()].map((x) => {
+      const estadoFinal = x.estado; // null => SIN ESTADO
+      return {
+        ...x,
+        estadoFinal,
+        color: tableroColor(estadoFinal),
+      };
+    });
+
+    // ✅ aplicar filtro de estado (solo panel)
+    if (filtroEstado) {
+      arr = arr.filter((t) => {
+        if (filtroEstado === "SIN_ESTADO") return !t.estadoFinal;
+        return t.estadoFinal === filtroEstado;
+      });
+    }
+
+    // Orden: primero sin estado / crítico, después parcial, después ok
+    const rank = (e) =>
+      e === "OK" ? 3 : e === "PARCIAL" ? 2 : e === "CRITICO" ? 1 : 0;
+    arr.sort(
+      (a, b) =>
+        rank(a.estadoFinal) - rank(b.estadoFinal) ||
+        a.name.localeCompare(b.name)
+    );
+
+    return arr;
+  }, [itemsFiltrados, filtroEstado]);
+
   return (
     <div className={`page ${compacto ? "is-compact" : ""}`}>
       <h2 className="titulo">Mis PDFs</h2>
@@ -377,6 +474,20 @@ export default function Dashboard() {
         </div>
 
         <div>
+          <label>Estado</label>
+          <select
+            value={filtroEstado}
+            onChange={(e) => setFiltroEstado(e.target.value)}
+          >
+            <option value="">Todos</option>
+            <option value="CRITICO">Crítico</option>
+            <option value="PARCIAL">Parcial</option>
+            <option value="OK">OK</option>
+            <option value="SIN_ESTADO">Sin estado</option>
+          </select>
+        </div>
+
+        <div>
           <label>Desde</label>
           <input
             type="date"
@@ -412,6 +523,52 @@ export default function Dashboard() {
               onChange={(e) => setCompacto(e.target.checked)}
             />
           </label>
+        </div>
+      </div>
+
+      {/* Panel semáforo */}
+      <div className="panel-tableros">
+        <div className="panel-title">
+          Estado de tableros
+          <span className="panel-sub">
+            Semáforo (TABLERO/CIRCUITO) + luminarias aparte
+          </span>
+        </div>
+
+        <div className="panel-grid">
+          {tableroPanel.map((t) => (
+            <button
+              key={t.name}
+              type="button"
+              className="tablero-card"
+              onClick={() => {
+                setQ(t.name);
+                setDesde(lastNDaysIso(7));
+                setHasta(""); // opcional: lo limpiás para que no te bloquee
+              }}
+              title={`${t.name} — Estado: ${
+                t.estadoFinal || "SIN ESTADO"
+              } · Luminarias ok:${t.lumReparadas} pend:${t.lumPendientes}`}
+              style={{ borderColor: t.color }}
+            >
+              <div className="tablero-head">
+                <span className="dot" style={{ background: t.color }} />
+                <span className="nm">{t.name}</span>
+                <span
+                  className={`badge ${
+                    t.estadoFinal ? t.estadoFinal.toLowerCase() : "none"
+                  }`}
+                >
+                  {t.estadoFinal || "SIN ESTADO"}
+                </span>
+              </div>
+
+              <div className="tablero-foot">
+                <span className="mini">Luminarias OK: {t.lumReparadas}</span>
+                <span className="mini">Pend: {t.lumPendientes}</span>
+              </div>
+            </button>
+          ))}
         </div>
       </div>
 

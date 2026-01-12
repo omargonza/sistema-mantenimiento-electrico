@@ -38,3 +38,14 @@ class OrdenTrabajo(models.Model):
     # Evidencias (guardamos paths en disco, no base64)
     fotos = models.JSONField(default=list, blank=True)  # lista de paths
     firma_tecnico_path = models.CharField(max_length=300, blank=True)
+    # =========================
+    # Clasificación (Semáforo)
+    # =========================
+    alcance = models.CharField(max_length=20, blank=True, default="LUMINARIA")
+    resultado = models.CharField(max_length=20, blank=True, default="COMPLETO")
+
+    # Solo aplica si alcance es TABLERO o CIRCUITO
+    estado_tablero = models.CharField(max_length=20, blank=True, default="")
+
+    # Solo aplica si alcance es LUMINARIA
+    luminaria_estado = models.CharField(max_length=20, blank=True, default="")
