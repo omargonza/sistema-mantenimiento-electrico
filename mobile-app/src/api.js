@@ -73,7 +73,9 @@ export async function enviarOT(payload, silent = false) {
   } catch {}
   const MAX_BYTES = 4_000_000;
   if (approxBytes > MAX_BYTES) {
-    const e = new Error("Payload demasiado grande (fotos/firma). Reducí cantidad o compresión.");
+    const e = new Error(
+      "Payload demasiado grande (fotos/firma). Reducí cantidad o compresión."
+    );
     e.status = 413;
     e.body = `approxBytes=${approxBytes}`;
     if (!silent) console.error("❌", e.message, e.body);
@@ -152,7 +154,10 @@ export async function syncPendientes(lista, silent = true) {
 export async function buscarTableros(q, { signal, limit = 20 } = {}) {
   const params = new URLSearchParams();
   params.set("q", (q ?? "").trim());
-  params.set("limit", String(Number.isFinite(Number(limit)) ? parseInt(limit, 10) : 20));
+  params.set(
+    "limit",
+    String(Number.isFinite(Number(limit)) ? parseInt(limit, 10) : 20)
+  );
 
   const url = `${API}/api/tableros/?${params.toString()}`;
   const res = await fetch(url, { signal });
@@ -160,4 +165,20 @@ export async function buscarTableros(q, { signal, limit = 20 } = {}) {
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   const data = await res.json();
   return Array.isArray(data) ? data : [];
+}
+
+// ==========================================================
+//  TABLERO EXISTS (PRO) — valida catálogo
+// ==========================================================
+export async function tableroExists(nombre, { signal } = {}) {
+  const n = (nombre ?? "").trim();
+  if (!n) return { exists: false, nombre: "" };
+
+  const params = new URLSearchParams({ nombre: n });
+  const url = `${API}/api/tableros/exists/?${params.toString()}`;
+
+  const res = await fetch(url, { signal });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+  return await res.json(); // {exists, nombre, zona?}
 }

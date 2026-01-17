@@ -5,7 +5,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import SmartSelect from "../components/SmartSelect";
 import NumericInput from "../components/NumericInput";
 import useOfflineQueue from "../hooks/useOfflineQueue";
-import { enviarOT } from "../api";
+import { enviarOT, tableroExists } from "../api";
+
 import { vibrar } from "../utils/haptics";
 import "../styles/app.css";
 import useFormStore from "../hooks/useFormStore";
@@ -194,14 +195,22 @@ function guardarHistorialOT(payload) {
   } catch {}
 }
 
-/* ===============================================/* /* =======================================================
+function canonTableroUI(s) {
+  return String(s || "")
+    .trim()
+    .replace(/\s+/g, " ");
+}
+
+/*
+
+
+===============================================/* /* =======================================================
    NORMALIZACIÓN PAYLOAD (SIN DUPLICADOS)
 ======================================================= */
 function normalizarPayloadOT(form) {
-  const tableroFinal =
-    form.tablero ||
-    (Array.isArray(form.tableros) ? form.tableros[0] : "") ||
-    "";
+  const tableroFinal = canonTableroUI(
+    form.tablero || (Array.isArray(form.tableros) ? form.tableros[0] : "") || ""
+  );
 
   const circuitoFinal =
     form.circuito ||
@@ -347,6 +356,8 @@ export default function NuevaOT() {
   const [histPreview, setHistPreview] = useState([]);
   const [histLoading, setHistLoading] = useState(false);
 
+  const [tableroCatalogado, setTableroCatalogado] = useState(true);
+
   useEffect(() => {
     if (!tableroKey) {
       setHistPreview([]);
@@ -410,6 +421,41 @@ export default function NuevaOT() {
       alive = false;
     };
   }, [tableroKey]);
+
+  useEffect(() => {
+    const nombre = (form.tablero || "").trim();
+    if (!nombre || nombre.length < 2) {
+      setTableroCatalogado(true); // no molestamos si está vacío
+      return;
+    }
+
+    const controller = new AbortController();
+    const t = setTimeout(async () => {
+      try {
+        const res = await tableroExists(nombre, { signal: controller.signal });
+
+        // si existe, res.nombre puede venir normalizado (TI 1400)
+        setTableroCatalogado(Boolean(res?.exists));
+
+        if (!res?.exists) {
+          showToast(
+            "warn",
+            "Tablero NO está en catálogo. Se generará la OT igual, pero avisar al supervisor para cargarlo."
+          );
+        }
+      } catch (e) {
+        // si abort, ignorar
+        if (e?.name === "AbortError") return;
+        // ante error de red, no bloqueamos
+        console.warn("tableroExists error:", e);
+      }
+    }, 300);
+
+    return () => {
+      controller.abort();
+      clearTimeout(t);
+    };
+  }, [form.tablero]); // debounce sobre tablero
 
   /* =======================================================
      VALIDACIÓN
@@ -724,6 +770,8 @@ export default function NuevaOT() {
     // Armado de payload normalizado
     // ==============================
     const payload = normalizarPayloadOT(form);
+    // flag informativo para PDF/auditoría (no depende del modelo)
+    payload.tablero_catalogado = Boolean(tableroCatalogado);
 
     saveCache("cache_tableros", form.tablero);
     saveCache("cache_vehiculos", form.vehiculo);
@@ -843,6 +891,11 @@ LUMINARIA + PARCIAL sin tarea pendiente → avisa (calidad de registro).*/
           }));
         }}
       />
+      {form.tablero?.trim() && tableroCatalogado === false && (
+        <div className="muted" style={{ marginTop: 6 }}>
+          ⚠️ Tablero no catalogado. Genera OT igual, pero avisar supervisor.
+        </div>
+      )}
 
       {form.zona && (
         <div className="muted" style={{ marginTop: 6 }}>

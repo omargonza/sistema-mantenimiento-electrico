@@ -8,6 +8,11 @@ from .models import Tablero, HistorialTarea
 from .serializers import TableroSerializer
 
 
+from rest_framework import status
+
+from .models import Tablero
+
+
 class TablerosListView(APIView):
     """
     Catálogo completo de tableros.
@@ -191,3 +196,35 @@ class CircuitosFrecuentesView(APIView):
         )
 
         return Response({"tablero": exact.nombre, "items": list(qs)})
+
+
+#
+
+
+class TableroExistsView(APIView):
+    """
+    GET /api/tableros/exists/?nombre=TI%201400
+    Respuesta:
+      { "exists": true, "nombre": "TI 1400", "zona": "..." }
+      { "exists": false, "nombre": "TI 1400" }
+    """
+
+    def get(self, request):
+        raw = (request.query_params.get("nombre") or "").strip()
+        if not raw:
+            return Response(
+                {"detail": "Falta parámetro 'nombre'."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        t = Tablero.objects.filter(nombre__iexact=raw).only("nombre", "zona").first()
+        if t:
+            return Response(
+                {"exists": True, "nombre": t.nombre, "zona": t.zona},
+                status=status.HTTP_200_OK,
+            )
+
+        return Response(
+            {"exists": False, "nombre": raw},
+            status=status.HTTP_200_OK,
+        )

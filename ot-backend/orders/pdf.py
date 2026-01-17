@@ -84,6 +84,12 @@ def generar_pdf(data):
     data = data or {}
     theme = get_theme(data)
 
+    # ==========================================
+    # FLAG: Tablero catalogado (para avisos/watermark)
+    # ==========================================
+    tablero_catalogado = bool(data.get("tablero_catalogado", True))
+    tablero_nombre = (str(data.get("tablero") or "")).strip()
+
     buffer = BytesIO()
     doc = SimpleDocTemplate(
         buffer,
@@ -300,6 +306,21 @@ def generar_pdf(data):
 
     story.append(card([resumen], pad=12))
     story.append(Spacer(1, 11))
+
+    # Aviso si tablero no está catalogado (no bloquea)
+    if tablero_nombre and (not tablero_catalogado):
+        story.append(
+            card(
+                [
+                    P(
+                        "⚠️ Tablero NO catalogado. Avisar a supervisor para cargarlo en el sistema.",
+                        MUTED,
+                    )
+                ],
+                pad=10,
+            )
+        )
+    story.append(Spacer(1, 9))
 
     # =========================
     # CLASIFICACIÓN (SEMAFORO)
@@ -616,16 +637,42 @@ def generar_pdf(data):
         canv.setFont("Helvetica", 10)
         canv.drawString(3.5 * cm, h - 2.05 * cm, "ORDEN DE TRABAJO")
 
+        # ==========================================
+        # WATERMARK: tablero NO catalogado (suave)
+        # ==========================================
+        if not tablero_catalogado:
+            # Transparencia (si la versión de reportlab lo soporta)
+            try:
+                canv.setFillAlpha(0.08)
+            except Exception:
+                pass
+
+            canv.setFont("Helvetica-Bold", 48)
+            canv.setFillColor(colors.HexColor("#94a3b8"))  # gris suave
+            canv.saveState()
+            canv.translate(w / 2, h / 2)
+            canv.rotate(35)
+            canv.drawCentredString(0, 0, "TABLERO NO CATALOGADO")
+            canv.restoreState()
+
+            # Reset alpha
+            try:
+                canv.setFillAlpha(1)
+            except Exception:
+                pass
+
         # =========================
-        # Footer
+        # Footer (dinámico)
         # =========================
         canv.setFillColor(theme["muted"])
         canv.setFont("Helvetica-Oblique", 8)
-        canv.drawString(
-            1.6 * cm,
-            1.2 * cm,
-            "Sistema de Mantenimiento Eléctrico — Desarrollado por conurbaDEV",
-        )
+
+        footer_left = "Sistema de Mantenimiento Eléctrico — Desarrollado por conurbaDEV"
+        if not tablero_catalogado:
+            footer_left += " · Aviso: tablero fuera de catálogo"
+
+        canv.drawString(1.6 * cm, 1.2 * cm, footer_left)
+
         canv.drawRightString(
             w - 1.6 * cm,
             1.2 * cm,

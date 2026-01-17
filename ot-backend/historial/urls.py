@@ -4,6 +4,7 @@ from .views import (
     TableroAutocompleteView,
     HistorialView,
     CircuitosFrecuentesView,
+    TableroExistsView,
 )
 
 urlpatterns = [
@@ -23,4 +24,5 @@ urlpatterns = [
         CircuitosFrecuentesView.as_view(),
         name="tableros_circuitos",
     ),
+    path("tableros/exists/", TableroExistsView.as_view(), name="tablero_exists"),
 ]

@@ -15,18 +15,46 @@ from .models import OrdenTrabajo
 from .serializers import OrdenTrabajoSerializer
 from .pdf import generar_pdf
 
-from historial.services import registrar_historial_desde_ot
+from historial.models import Tablero
 
 
-# =========================
-# Helpers
-# =========================
+# ==========================================================
+# Canon / helpers de identidad
+# ==========================================================
+def _canon_tablero(nombre: str) -> str:
+    """
+    Canonicaliza para evitar falsos distintos:
+    - trim
+    - espacios múltiples
+    - guiones raros
+    """
+    s = (nombre or "").strip()
+    s = re.sub(r"\s+", " ", s)
+    s = s.replace("–", "-").replace("—", "-")
+    return s
+
+
+def _resolve_tablero_catalogo(raw: str):
+    """
+    NO crea tablero.
+    Devuelve:
+      (nombre_final, tablero_ok)
+    """
+    raw = _canon_tablero(raw)
+    if not raw:
+        return "", False
+
+    t = Tablero.objects.filter(nombre__iexact=raw).only("nombre").first()
+    if t:
+        return t.nombre, True
+
+    return raw, False
+
+
+# ==========================================================
+# Helpers imágenes / paths
+# ==========================================================
 def _b64_to_bytes(s: str) -> bytes:
-    """
-    Acepta:
-      - data URL: data:image/png;base64,...
-      - base64 puro
-    """
     s = (s or "").strip()
     if not s:
         return b""
@@ -45,7 +73,6 @@ def _b64_to_bytes(s: str) -> bytes:
 
 
 def _save_b64_image(abs_folder: str, filename: str, b64: str) -> str:
-    """Guarda archivo dentro de abs_folder y devuelve path absoluto o "" si falla."""
     raw = _b64_to_bytes(b64)
     if not raw:
         return ""
@@ -60,7 +87,6 @@ def _save_b64_image(abs_folder: str, filename: str, b64: str) -> str:
 
 
 def _rel_media_path(abs_path: str) -> str:
-    """Convierte path absoluto dentro de MEDIA_ROOT a path relativo."""
     if not abs_path:
         return ""
 
@@ -69,7 +95,6 @@ def _rel_media_path(abs_path: str) -> str:
 
 
 def _safe_filename(s: str) -> str:
-    """Evita caracteres inválidos y limita longitud."""
     s = (s or "").strip()
     s = s.replace("/", "-").replace("\\", "-")
     s = re.sub(r'[:*"<>|?]', "", s)
@@ -77,9 +102,9 @@ def _safe_filename(s: str) -> str:
     return s[:80] or "OT"
 
 
-# =========================
-# API: List + Create
-# =========================
+# ==========================================================
+# API: List + Create (debug / admin)
+# ==========================================================
 class OrdenListCreateView(APIView):
     def get(self, request):
         ordenes = OrdenTrabajo.objects.all().order_by("-id")
@@ -96,56 +121,75 @@ class OrdenListCreateView(APIView):
         )
 
 
-# =========================
-# API: Generar PDF + Auditoría + Historial
-# =========================
+# ==========================================================
+# API: Generar PDF + Persistir OT
+# ==========================================================
 class OrdenPDFView(APIView):
     def post(self, request):
-        serializer = OrdenTrabajoSerializer(data=request.data)
 
+        # ------------------------------------------
+        # 0) Copia mutable del request (para pop)
+        # ------------------------------------------
+        request_data = dict(request.data)
+
+        # flag solo informativo (frontend)
+        request_data.pop("tablero_catalogado", None)
+
+        serializer = OrdenTrabajoSerializer(data=request_data)
         if not serializer.is_valid():
             print("ERRORES SERIALIZER OT:", serializer.errors)
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-        # Copia segura de validated_data
         data = dict(serializer.validated_data)
 
+        # ------------------------------------------
+        # 1) Normalizar identidad (SIN CREAR TABLERO)
+        # ------------------------------------------
+        tablero_raw = data.get("tablero")
+        tablero_final, tablero_ok = _resolve_tablero_catalogo(tablero_raw)
+
+        data["tablero"] = tablero_final
+        data["zona"] = (data.get("zona") or "").strip()
+        data["circuito"] = (data.get("circuito") or "").strip()
+
+        # ------------------------------------------
+        # 2) Preparar carpetas
+        # ------------------------------------------
         ahora = timezone.now()
         year = ahora.strftime("%Y")
         month = ahora.strftime("%m")
 
-        # Carpeta única por OT para evidencias
         ot_ts = int(ahora.timestamp())
-        evidence_rel_folder = os.path.join("ordenes", year, month, f"evid_{ot_ts}")
-        evidence_abs_folder = os.path.join(settings.MEDIA_ROOT, evidence_rel_folder)
-        os.makedirs(evidence_abs_folder, exist_ok=True)
+        evidence_rel = os.path.join("ordenes", year, month, f"evid_{ot_ts}")
+        evidence_abs = os.path.join(settings.MEDIA_ROOT, evidence_rel)
+        os.makedirs(evidence_abs, exist_ok=True)
 
-        # =========================
-        # 1) Datos SOLO del request
-        # =========================
+        # ------------------------------------------
+        # 3) Campos SOLO request
+        # ------------------------------------------
         firma_b64 = data.pop("firma_tecnico_img", "")
         fotos_b64 = data.pop("fotos_b64", []) or []
         print_mode = bool(data.pop("print_mode", False))
 
-        # =========================
-        # 2) Guardar firma técnico
-        # =========================
+        # ------------------------------------------
+        # 4) Guardar firma
+        # ------------------------------------------
         firma_rel = ""
         if firma_b64:
             firma_abs = _save_b64_image(
-                evidence_abs_folder,
+                evidence_abs,
                 "firma_tecnico.png",
                 firma_b64,
             )
             firma_rel = _rel_media_path(firma_abs)
 
-        # =========================
-        # 3) Guardar fotos (máx 4)
-        # =========================
+        # ------------------------------------------
+        # 5) Guardar fotos (máx 4)
+        # ------------------------------------------
         fotos_rel = []
         for idx, fb64 in enumerate(list(fotos_b64)[:4], start=1):
             p_abs = _save_b64_image(
-                evidence_abs_folder,
+                evidence_abs,
                 f"foto_{idx}.jpg",
                 fb64,
             )
@@ -153,9 +197,9 @@ class OrdenPDFView(APIView):
             if p_rel:
                 fotos_rel.append(p_rel)
 
-        # =========================
-        # 4) Persistir OT (SIEMPRE)
-        # =========================
+        # ------------------------------------------
+        # 6) Persistir OT (SIEMPRE)
+        # ------------------------------------------
         if firma_rel:
             data["firma_tecnico_path"] = firma_rel
         if fotos_rel:
@@ -163,43 +207,26 @@ class OrdenPDFView(APIView):
 
         ot = OrdenTrabajo.objects.create(**data)
 
-        # =========================
-        # 4.1) Registrar historial (GLOBAL)
-        # =========================
-        try:
-            registrar_historial_desde_ot(
-                {
-                    "tablero": ot.tablero,
-                    "zona": ot.zona,
-                    "circuito": ot.circuito,
-                    "tarea_realizada": ot.tarea_realizada,
-                    "tarea_pedida": ot.tarea_pedida,
-                    "tarea_pendiente": ot.tarea_pendiente,
-                    "fecha": ot.fecha,
-                }
-            )
-
-        except Exception as e:
-            # Nunca romper la OT ni el PDF por el historial
-            print("ERROR HISTORIAL:", e)
-
-        # =========================
-        # 5) Preparar data para PDF
-        # =========================
+        # ------------------------------------------
+        # 7) Preparar data PDF
+        # ------------------------------------------
         pdf_data = dict(data)
         pdf_data["print_mode"] = print_mode
         pdf_data["id_ot"] = f"OT-{ot.id:06d}"
         pdf_data["firma_tecnico_path"] = firma_rel
         pdf_data["fotos_paths"] = fotos_rel
 
-        # =========================
-        # 6) Generar PDF
-        # =========================
+        # 🔴 CLAVE: flag REAL para leyenda / watermark
+        pdf_data["tablero_catalogado"] = bool(tablero_ok)
+
+        # ------------------------------------------
+        # 8) Generar PDF
+        # ------------------------------------------
         pdf_bytes = generar_pdf(pdf_data)
 
-        # =========================
-        # 7) Guardar PDF
-        # =========================
+        # ------------------------------------------
+        # 9) Guardar PDF
+        # ------------------------------------------
         pdf_folder = os.path.join(settings.MEDIA_ROOT, "ordenes", year, month)
         os.makedirs(pdf_folder, exist_ok=True)
 
@@ -211,9 +238,9 @@ class OrdenPDFView(APIView):
         with open(filepath, "wb") as f:
             f.write(pdf_bytes)
 
-        # =========================
-        # 8) Responder PDF
-        # =========================
+        # ------------------------------------------
+        # 10) Responder
+        # ------------------------------------------
         resp = HttpResponse(pdf_bytes, content_type="application/pdf")
         resp["Content-Disposition"] = f'attachment; filename="{filename}"'
         return resp
