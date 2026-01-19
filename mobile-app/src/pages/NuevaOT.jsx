@@ -16,6 +16,8 @@ import TableroAutocomplete from "../components/TableroAutocomplete";
 import { obtenerHistorial } from "../services/historialApi";
 import { obtenerCircuitosFrecuentes } from "../services/circuitosApi";
 import { saveOtPdf } from "../storage/ot_db";
+import LuminariaFields from "../components/LuminariaFields";
+import LuminariasChips from "../components/LuminariasChips";
 
 /* =======================================================
    UTILIDADES: cache para autocompletado
@@ -99,31 +101,6 @@ const VEHICULOS = [
   "AA801TV",
 ];
 
-const TABLEROS = [
-  "TI 1400",
-  "TI 1300",
-  "TI 1200",
-  "TI 1100",
-  "TI 1000",
-  "TI 900",
-  "TI 800",
-  "TI 700",
-  "TI 600",
-  "TI 500",
-  "TI 400",
-  "TI 300",
-  "TI 200",
-  "TI 100",
-  "Tablero Cámara 1",
-  "Tablero Cámara 2",
-  "Ibarrola",
-  "Tuyuti",
-  "Madrid",
-  "San Cayetano",
-  "Peaje Debenedetti ASC",
-  "Peaje Campana Troncal",
-];
-
 const MAX_FOTOS = 4;
 
 /* =======================================================
@@ -150,66 +127,49 @@ const initialForm = {
   firmaTecnicoB64: "",
   fotosB64: [],
   printMode: false,
-  alcance: "LUMINARIA", // default operativo
-  resultado: "COMPLETO", // default
-  estado_tablero: "", // "CRITICO" | "PARCIAL" | "OK" | ""
-  luminaria_estado: "", // opcional por ahora  (ENCENDIDO/APAGADO/REPARADO)
+
+  // Clasificación
+  alcance: "LUMINARIA",
+  resultado: "COMPLETO",
+  estado_tablero: "",
+  luminaria_estado: "",
+
+  // Luminarias (mapa por ramal)
+  ramal: "",
+  km_luminaria: "",
+  codigo_luminaria: "",
 };
 
 /* =======================================================
-   HISTORIAL LOCAL
+   HELPERS
 ======================================================= */
-function guardarHistorialOT(payload) {
-  let prev = [];
-  try {
-    prev = JSON.parse(localStorage.getItem("ot_historial") || "[]");
-  } catch {}
-
-  const nueva = {
-    id: Date.now(),
-    fecha: payload.fecha,
-    ubicacion: payload.ubicacion,
-    tablero: payload.tablero || "",
-    zona: payload.zona || "",
-    circuito: payload.circuito || "",
-    vehiculo: payload.vehiculo || "",
-    km_inicial: payload.km_inicial,
-    km_final: payload.km_final,
-    km_total: payload.km_total,
-    tecnicos: payload.tecnicos,
-    materiales: payload.materiales,
-    luminaria_equipos: payload.luminaria_equipos,
-    tarea_pedida: payload.tarea_pedida,
-    tarea_realizada: payload.tarea_realizada,
-    tarea_pendiente: payload.tarea_pendiente,
-    tecnico: payload.tecnicos?.[0]?.nombre || "—",
-    observaciones: payload.observaciones,
-    firma_tecnico: payload.firma_tecnico,
-    firma_supervisor: payload.firma_supervisor,
-    tiene_firma: Boolean(payload.firma_tecnico_img),
-    fotos: payload.fotos_b64?.length || 0,
-  };
-
-  try {
-    localStorage.setItem("ot_historial", JSON.stringify([nueva, ...prev]));
-  } catch {}
-}
-
 function canonTableroUI(s) {
   return String(s || "")
     .trim()
     .replace(/\s+/g, " ");
 }
 
-/*
+function navigatePostOT(navigate, payload) {
+  const alcanceUp = String(payload?.alcance || "").toUpperCase();
 
+  if (alcanceUp === "LUMINARIA") {
+    const q = payload?.ramal
+      ? `?ramal=${encodeURIComponent(payload.ramal)}`
+      : "";
+    navigate(`/historial-luminarias${q}`);
+  } else {
+    navigate("/historial");
+  }
+}
 
-===============================================/* /* =======================================================
+/* =======================================================
    NORMALIZACIÓN PAYLOAD (SIN DUPLICADOS)
 ======================================================= */
 function normalizarPayloadOT(form) {
   const tableroFinal = canonTableroUI(
-    form.tablero || (Array.isArray(form.tableros) ? form.tableros[0] : "") || ""
+    form.tablero ||
+      (Array.isArray(form.tableros) ? form.tableros[0] : "") ||
+      "",
   );
 
   const circuitoFinal =
@@ -219,9 +179,7 @@ function normalizarPayloadOT(form) {
       : form.circuitos) ||
     "";
 
-  // =========================
-  // Clasificación (raw) + compat
-  // =========================
+  // Clasificación
   const alcanceRaw = String(form.alcance || "")
     .trim()
     .toUpperCase();
@@ -229,10 +187,7 @@ function normalizarPayloadOT(form) {
     .trim()
     .toUpperCase();
 
-  // Compatibilidad hacia atrás:
-  // si no viene alcance (OT vieja), inferimos de forma conservadora
-  // - si hay "luminaria" o "luminaria_estado" => LUMINARIA
-  // - si no => TABLERO (porque probablemente era trabajo de tablero/circuito)
+  // Compat hacia atrás
   let alcance =
     alcanceRaw ||
     (String(form.luminaria || "").trim() ||
@@ -240,9 +195,7 @@ function normalizarPayloadOT(form) {
       ? "LUMINARIA"
       : "TABLERO");
 
-  // =========================
   // estado_tablero (solo TABLERO/CIRCUITO)
-  // =========================
   const ESTADOS_TABLERO = new Set(["CRITICO", "PARCIAL", "OK"]);
   let estado_tablero = String(form.estado_tablero || "")
     .trim()
@@ -251,12 +204,10 @@ function normalizarPayloadOT(form) {
   if (!(alcance === "TABLERO" || alcance === "CIRCUITO")) {
     estado_tablero = "";
   } else if (!ESTADOS_TABLERO.has(estado_tablero)) {
-    estado_tablero = ""; // descarta basura
+    estado_tablero = "";
   }
 
-  // =========================
-  // luminaria_estado (solo LUMINARIA) + compat
-  // =========================
+  // luminaria_estado (solo LUMINARIA)
   const ESTADOS_LUM = new Set(["REPARADO", "APAGADO", "PENDIENTE"]);
   let luminaria_estado = String(form.luminaria_estado || "")
     .trim()
@@ -268,8 +219,7 @@ function normalizarPayloadOT(form) {
     luminaria_estado = "";
   }
 
-  // Compatibilidad: OT vieja de luminaria sin luminaria_estado
-  // Si alcance=LUMINARIA y hay tareaRealizada, asumimos REPARADO (conservador)
+  // Compat: si es luminaria y hay tarea realizada, inferimos REPARADO
   if (
     alcance === "LUMINARIA" &&
     !luminaria_estado &&
@@ -316,11 +266,21 @@ function normalizarPayloadOT(form) {
 
     print_mode: Boolean(form.printMode),
 
-    // ✅ Persisten y sirven para dashboard + PDF
+    // Clasificación
     alcance,
     resultado,
     estado_tablero,
     luminaria_estado,
+
+    // Luminarias (mapa)
+    ramal: String(form.ramal || "").trim(),
+    km_luminaria:
+      form.km_luminaria === "" ||
+      form.km_luminaria === null ||
+      form.km_luminaria === undefined
+        ? null
+        : Number(form.km_luminaria),
+    codigo_luminaria: String(form.codigo_luminaria || "").trim(),
   };
 }
 
@@ -334,7 +294,7 @@ export default function NuevaOT() {
     "ot_form_cache",
     form,
     setForm,
-    initialForm
+    initialForm,
   );
 
   const [loading, setLoading] = useState(false);
@@ -422,10 +382,13 @@ export default function NuevaOT() {
     };
   }, [tableroKey]);
 
+  /* =======================================================
+     Exists tablero (debounce)
+  ======================================================== */
   useEffect(() => {
     const nombre = (form.tablero || "").trim();
     if (!nombre || nombre.length < 2) {
-      setTableroCatalogado(true); // no molestamos si está vacío
+      setTableroCatalogado(true);
       return;
     }
 
@@ -433,20 +396,16 @@ export default function NuevaOT() {
     const t = setTimeout(async () => {
       try {
         const res = await tableroExists(nombre, { signal: controller.signal });
-
-        // si existe, res.nombre puede venir normalizado (TI 1400)
         setTableroCatalogado(Boolean(res?.exists));
 
         if (!res?.exists) {
           showToast(
             "warn",
-            "Tablero NO está en catálogo. Se generará la OT igual, pero avisar al supervisor para cargarlo."
+            "Tablero NO está en catálogo. Se generará la OT igual, pero avisar al supervisor para cargarlo.",
           );
         }
       } catch (e) {
-        // si abort, ignorar
         if (e?.name === "AbortError") return;
-        // ante error de red, no bloqueamos
         console.warn("tableroExists error:", e);
       }
     }, 300);
@@ -455,15 +414,13 @@ export default function NuevaOT() {
       controller.abort();
       clearTimeout(t);
     };
-  }, [form.tablero]); // debounce sobre tablero
+  }, [form.tablero]);
 
   /* =======================================================
      VALIDACIÓN
   ======================================================== */
   function validarCampos() {
-    // =========================
-    // 1) Mínimos operativos
-    // =========================
+    // Mínimos operativos
     if (!String(form.tablero || "").trim())
       return "Debe seleccionar un tablero.";
     if (!String(form.vehiculo || "").trim())
@@ -472,7 +429,7 @@ export default function NuevaOT() {
     // Al menos 1 técnico válido
     const tecnicos = Array.isArray(form.tecnicos) ? form.tecnicos : [];
     const tieneTecnico = tecnicos.some(
-      (t) => String(t?.nombre || "").trim() || String(t?.legajo || "").trim()
+      (t) => String(t?.nombre || "").trim() || String(t?.legajo || "").trim(),
     );
     if (!tieneTecnico) return "Cargá al menos un técnico (nombre o legajo).";
 
@@ -487,14 +444,12 @@ export default function NuevaOT() {
       return "El km final no puede ser menor que el inicial.";
     }
 
-    // Firma (si es obligatorio en tu operación)
+    // Firma
     if (!String(form.firmaTecnico || "").trim())
       return "Falta la aclaración (nombre) del técnico.";
     if (!form.firmaTecnicoB64) return "Falta la firma digital del técnico.";
 
-    // =========================
-    // 2) Clasificación (negocio)
-    // =========================
+    // Clasificación (negocio)
     const alcance = String(form.alcance || "LUMINARIA")
       .trim()
       .toUpperCase();
@@ -511,7 +466,6 @@ export default function NuevaOT() {
     const ESTADOS_TABLERO = new Set(["CRITICO", "PARCIAL", "OK"]);
     const ESTADOS_LUM = new Set(["REPARADO", "APAGADO", "PENDIENTE"]);
 
-    // Resultado vs contenido
     const tareaRealizada = String(form.tareaRealizada || "").trim();
     const tareaPendiente = String(form.tareaPendiente || "").trim();
 
@@ -522,14 +476,28 @@ export default function NuevaOT() {
       return "Si el resultado es COMPLETO, completá 'Tarea realizada' (qué se hizo).";
     }
 
-    // Reglas por alcance
     if (alcance === "LUMINARIA") {
-      // No debería evaluarse el tablero en luminaria
+      // Para mapa: pedimos Ramal + KM
+      const ramal = String(form.ramal || "").trim();
+      const kmLum = form.km_luminaria;
+
+      if (!ramal) {
+        return "En LUMINARIA, seleccioná el Ramal (esto alimenta el mapa de luminarias).";
+      }
+
+      if (
+        kmLum === "" ||
+        kmLum === null ||
+        kmLum === undefined ||
+        !Number.isFinite(Number(kmLum))
+      ) {
+        return "En LUMINARIA, completá el KM (ej: 41.05) para ubicar la reparación en el mapa.";
+      }
+
       if (estadoTab) {
         return "En LUMINARIA no se marca 'Estado del tablero'. Cambiá a TABLERO/CIRCUITO si corresponde.";
       }
 
-      // Recomendado: pedir mínimo detalle de luminaria
       const lumTexto = String(form.luminaria || "").trim();
       if (!lumEstado && !lumTexto && !tareaRealizada) {
         return "En LUMINARIA, indicá 'Estado luminaria' o completá 'Luminarias / Equipos' o 'Tarea realizada'.";
@@ -541,7 +509,6 @@ export default function NuevaOT() {
     }
 
     if (alcance === "CIRCUITO" || alcance === "TABLERO") {
-      // Estado tablero obligatorio
       if (!estadoTab) {
         return "Si el alcance es TABLERO/CIRCUITO, elegí 'Estado del tablero' (Crítico/Parcial/OK).";
       }
@@ -549,19 +516,16 @@ export default function NuevaOT() {
         return "Estado del tablero inválido.";
       }
 
-      // Circuito recomendado/obligatorio para CIRCUITO
       if (alcance === "CIRCUITO" && !String(form.circuito || "").trim()) {
         return "Si el alcance es CIRCUITO, completá el campo 'Circuito'.";
       }
 
-      // Contradicción: OK pero resultado PARCIAL
       if (estadoTab === "OK" && resultado === "PARCIAL") {
         return "No podés marcar tablero OK si el resultado fue PARCIAL. Poné PARCIAL o CRÍTICO.";
       }
     }
 
     if (alcance === "OTRO") {
-      // Evitar “OTRO” vacío
       if (!tareaRealizada && !String(form.observaciones || "").trim()) {
         return "Si elegís OTRO, describí la tarea en 'Tarea realizada' u 'Observaciones'.";
       }
@@ -675,8 +639,8 @@ export default function NuevaOT() {
         "ok",
         `Fotos cargadas: ${Math.min(
           (form.fotosB64?.length || 0) + nuevas.length,
-          MAX_FOTOS
-        )}/${MAX_FOTOS}`
+          MAX_FOTOS,
+        )}/${MAX_FOTOS}`,
       );
     } catch (err) {
       console.warn(err);
@@ -697,9 +661,6 @@ export default function NuevaOT() {
   /* =======================================================
      ENVÍO / PDF
   ======================================================== */
-  /* =======================================================
-   ENVÍO / PDF
-======================================================== */
   async function generarPDF() {
     const error = validarCampos();
     if (error) {
@@ -707,9 +668,7 @@ export default function NuevaOT() {
       return;
     }
 
-    // ==========================================
-    // VALIDACIONES DE NEGOCIO (soft / pedagógicas)
-    // ==========================================
+    // Soft warnings
     const alcance = String(form.alcance || "LUMINARIA")
       .trim()
       .toUpperCase();
@@ -723,37 +682,31 @@ export default function NuevaOT() {
       .trim()
       .toUpperCase();
 
-    // 1) Si es TABLERO/CIRCUITO y dejan OK, avisamos para evitar "verde por arreglito"
     if (
       (alcance === "TABLERO" || alcance === "CIRCUITO") &&
       estadoTablero === "OK"
     ) {
       showToast(
         "warn",
-        "Ojo: 'OK (verde)' usalo solo si el tablero quedó realmente en condición aceptable. Si fue un arreglo puntual, marcá 'PARCIAL (naranja)'."
+        "Ojo: 'OK (verde)' usalo solo si el tablero quedó realmente en condición aceptable. Si fue un arreglo puntual, marcá 'PARCIAL (naranja)'.",
       );
-      // No bloqueamos: seguimos igual (para no frenar el trabajo)
     }
 
-    // 2) Si es TABLERO/CIRCUITO y no eligieron estado_tablero, sugerimos (esto sí conviene bloquear)
     if ((alcance === "TABLERO" || alcance === "CIRCUITO") && !estadoTablero) {
       showToast(
         "warn",
-        "Falta 'Estado del tablero'. Elegí: Crítico / Parcial / OK. (Esto alimenta el semáforo del dashboard)."
+        "Falta 'Estado del tablero'. Elegí: Crítico / Parcial / OK. (Esto alimenta el semáforo del dashboard).",
       );
       return;
     }
 
-    // 3) Si es LUMINARIA y no eligieron luminaria_estado, NO bloqueamos, pero avisamos
     if (alcance === "LUMINARIA" && !lumEstado) {
       showToast(
         "info",
-        "Tip: si elegís 'Estado luminaria' (Reparado / Apagado / Pendiente), el panel va a contar Luminarias OK y Pendientes automáticamente."
+        "Tip: si elegís 'Estado luminaria' (Reparado / Apagado / Pendiente), el panel va a contar Luminarias OK y Pendientes automáticamente.",
       );
-      // No bloquea
     }
 
-    // 4) Consistencia: si es LUMINARIA no tiene sentido "PARCIAL/COMPLETO" sin texto (esto es opcional)
     if (
       alcance === "LUMINARIA" &&
       resultado === "PARCIAL" &&
@@ -761,16 +714,11 @@ export default function NuevaOT() {
     ) {
       showToast(
         "warn",
-        "Marcaste 'Parcial' pero no escribiste 'Tarea pendiente'. Si quedó algo por hacer, anotá qué faltó (material, falla, etc.)."
+        "Marcaste 'Parcial' pero no escribiste 'Tarea pendiente'. Si quedó algo por hacer, anotá qué faltó (material, falla, etc.).",
       );
-      // No bloquea
     }
 
-    // ==============================
-    // Armado de payload normalizado
-    // ==============================
     const payload = normalizarPayloadOT(form);
-    // flag informativo para PDF/auditoría (no depende del modelo)
     payload.tablero_catalogado = Boolean(tableroCatalogado);
 
     saveCache("cache_tableros", form.tablero);
@@ -784,63 +732,65 @@ export default function NuevaOT() {
 
       const blob = await enviarOT(payload);
 
-      // ✅ Guardado local PRO (IndexedDB) — best-effort
+      // Guardado local best-effort
       try {
         await saveOtPdf(
           {
             ...payload,
             tecnico: payload?.tecnicos?.[0]?.nombre || "",
           },
-          blob
+          blob,
         );
       } catch (dbErr) {
         console.warn(
           "No se pudo guardar en IndexedDB (continúo igual):",
-          dbErr
+          dbErr,
         );
       }
 
-      // ✅ Descarga PDF
+      // Descarga PDF
       const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `OT_${payload.fecha}_${payload.tablero}.pdf`;
-      a.click();
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = `OT_${payload.fecha}_${payload.tablero}.pdf`;
+      anchor.click();
       setTimeout(() => URL.revokeObjectURL(url), 30_000);
 
       clearForm();
       showToast("ok", "Orden generada correctamente. PDF descargado.");
+
+      // Navegación post OK
+      navigatePostOT(navigate, payload);
     } catch (e) {
       console.warn("Fallo envío → guardando OT localmente", e);
 
-      // Pendientes SIN base64 pesado
       const payloadLiviano = { ...payload };
       delete payloadLiviano.firma_tecnico_img;
       delete payloadLiviano.fotos_b64;
 
       payloadLiviano.evidencias_pendientes = true;
+      payloadLiviano._pending_at = new Date().toISOString();
+
       await guardarPendiente({ data: payloadLiviano });
 
       showToast(
         "warn",
-        "Sin conexión o servidor no disponible. La OT se guardó para enviar más tarde (sin firma/fotos). Reintentar cuando haya señal."
+        "Sin conexión o servidor no disponible. La OT se guardó para enviar más tarde (sin firma/fotos).",
       );
+
+      // Navegación también cuando queda pendiente
+      navigatePostOT(navigate, payloadLiviano);
     } finally {
       setLoading(false);
     }
   }
-  /*TABLERO/CIRCUITO + OK → avisa (para evitar “verde por arreglo puntual”).
 
-TABLERO/CIRCUITO sin estado_tablero → bloquea (porque el semáforo depende de eso).
-
-LUMINARIA sin luminaria_estado → no bloquea, pero te enseña a usarlo para que cuente en el panel.
-
-LUMINARIA + PARCIAL sin tarea pendiente → avisa (calidad de registro).*/
   /* =======================================================
      AUTOCOMPLETADO
   ======================================================== */
-  const sugeridosVehiculos = [...loadCache("cache_vehiculos"), ...VEHICULOS];
-  const sugeridosTableros = [...loadCache("cache_tableros"), ...TABLEROS];
+  const sugeridosVehiculos = Array.from(
+    new Set([...loadCache("cache_vehiculos"), ...VEHICULOS].filter(Boolean)),
+  );
 
   return (
     <div className="page">
@@ -891,6 +841,7 @@ LUMINARIA + PARCIAL sin tarea pendiente → avisa (calidad de registro).*/
           }));
         }}
       />
+
       {form.tablero?.trim() && tableroCatalogado === false && (
         <div className="muted" style={{ marginTop: 6 }}>
           ⚠️ Tablero no catalogado. Genera OT igual, pero avisar supervisor.
@@ -1011,20 +962,16 @@ LUMINARIA + PARCIAL sin tarea pendiente → avisa (calidad de registro).*/
             {circuitosLoading
               ? "Cargando circuitos frecuentes…"
               : circuitosFreq.length
-              ? "Circuitos frecuentes:"
-              : ""}
+                ? "Circuitos frecuentes:"
+                : ""}
           </div>
 
-          {/* Contenedor chips */}
           {(circuitosFreq.length > 0 || form.circuito?.trim()) && (
             <div className="chips">
-              {/* Chip "Todos" (neutral) */}
               {circuitosFreq.length > 0 && (
                 <button
                   type="button"
-                  className={`chip ${
-                    !form.circuito?.trim() ? "chip--active" : ""
-                  }`}
+                  className={`chip ${!form.circuito?.trim() ? "chip--active" : ""}`}
                   onClick={() => setForm((prev) => ({ ...prev, circuito: "" }))}
                   title="Mostrar todos (sin circuito)"
                 >
@@ -1032,7 +979,6 @@ LUMINARIA + PARCIAL sin tarea pendiente → avisa (calidad de registro).*/
                 </button>
               )}
 
-              {/* Chips de circuitos frecuentes */}
               {circuitosFreq.map((c) => {
                 const active = (form.circuito || "").trim() === c.circuito;
 
@@ -1042,10 +988,7 @@ LUMINARIA + PARCIAL sin tarea pendiente → avisa (calidad de registro).*/
                     type="button"
                     className={`chip ${active ? "chip--active" : ""}`}
                     onClick={() =>
-                      setForm((prev) => ({
-                        ...prev,
-                        circuito: c.circuito,
-                      }))
+                      setForm((prev) => ({ ...prev, circuito: c.circuito }))
                     }
                     title={`Usar circuito (${c.n} registros)`}
                   >
@@ -1055,7 +998,6 @@ LUMINARIA + PARCIAL sin tarea pendiente → avisa (calidad de registro).*/
                 );
               })}
 
-              {/* Chip mini "Limpiar" SOLO si hay circuito elegido */}
               {form.circuito?.trim() && (
                 <button
                   type="button"
@@ -1110,7 +1052,7 @@ LUMINARIA + PARCIAL sin tarea pendiente → avisa (calidad de registro).*/
               setForm({
                 ...form,
                 tecnicos: form.tecnicos.map((t, i) =>
-                  i === idx ? { ...t, legajo: v } : t
+                  i === idx ? { ...t, legajo: v } : t,
                 ),
               })
             }
@@ -1122,7 +1064,7 @@ LUMINARIA + PARCIAL sin tarea pendiente → avisa (calidad de registro).*/
               setForm({
                 ...form,
                 tecnicos: form.tecnicos.map((t, i) =>
-                  i === idx ? { ...t, nombre: e.target.value } : t
+                  i === idx ? { ...t, nombre: e.target.value } : t,
                 ),
               })
             }
@@ -1182,13 +1124,11 @@ LUMINARIA + PARCIAL sin tarea pendiente → avisa (calidad de registro).*/
           const alcance = e.target.value;
 
           setForm((prev) => {
-            // defaults inteligentes
             let estado_tablero = prev.estado_tablero || "";
 
             if (alcance === "LUMINARIA") {
-              estado_tablero = ""; // no aplica
+              estado_tablero = "";
             } else {
-              // si pasa a tablero/circuito y no hay estado, sugerimos PARCIAL
               if (!estado_tablero) estado_tablero = "PARCIAL";
             }
 
@@ -1196,7 +1136,7 @@ LUMINARIA + PARCIAL sin tarea pendiente → avisa (calidad de registro).*/
           });
         }}
       >
-        <option value="LUMINARIA">Luminaria </option>
+        <option value="LUMINARIA">Luminaria</option>
         <option value="CIRCUITO">Circuito</option>
         <option value="TABLERO">Tablero</option>
         <option value="OTRO">Otro</option>
@@ -1213,7 +1153,6 @@ LUMINARIA + PARCIAL sin tarea pendiente → avisa (calidad de registro).*/
         <option value="PARCIAL">Parcial (quedó pendiente)</option>
       </select>
 
-      {/* Estado tablero: solo si NO es luminaria */}
       {(form.alcance === "TABLERO" || form.alcance === "CIRCUITO") && (
         <>
           <label>Estado del tablero (semáforo)</label>
@@ -1235,7 +1174,6 @@ LUMINARIA + PARCIAL sin tarea pendiente → avisa (calidad de registro).*/
         </>
       )}
 
-      {/* Luminaria (extra simple, opcional) */}
       {form.alcance === "LUMINARIA" && (
         <>
           <label>Estado luminaria (opcional)</label>
@@ -1250,6 +1188,8 @@ LUMINARIA + PARCIAL sin tarea pendiente → avisa (calidad de registro).*/
             <option value="APAGADO">Sigue apagado</option>
             <option value="PENDIENTE">Pendiente (falta material/otro)</option>
           </select>
+
+          <LuminariaFields form={form} setForm={setForm} />
         </>
       )}
 
@@ -1275,11 +1215,17 @@ LUMINARIA + PARCIAL sin tarea pendiente → avisa (calidad de registro).*/
         onChange={(e) => setForm({ ...form, tareaPendiente: e.target.value })}
       />
 
-      <label>Luminarias / Equipos</label>
-      <input
-        value={form.luminaria}
-        onChange={(e) => setForm({ ...form, luminaria: e.target.value })}
-      />
+      {form.alcance === "LUMINARIA" && (
+        <LuminariasChips
+          valueText={form.luminaria}
+          onChange={({ text }) =>
+            setForm((prev) => ({
+              ...prev,
+              luminaria: text, // acá guardamos el string normalizado
+            }))
+          }
+        />
+      )}
 
       <h3 className="subtitulo">Materiales</h3>
 
@@ -1292,7 +1238,7 @@ LUMINARIA + PARCIAL sin tarea pendiente → avisa (calidad de registro).*/
               setForm({
                 ...form,
                 materiales: form.materiales.map((mat, i) =>
-                  i === idx ? { ...mat, material: e.target.value } : mat
+                  i === idx ? { ...mat, material: e.target.value } : mat,
                 ),
               })
             }
@@ -1304,7 +1250,7 @@ LUMINARIA + PARCIAL sin tarea pendiente → avisa (calidad de registro).*/
               setForm({
                 ...form,
                 materiales: form.materiales.map((mat, i) =>
-                  i === idx ? { ...mat, cant: v } : mat
+                  i === idx ? { ...mat, cant: v } : mat,
                 ),
               })
             }
@@ -1316,7 +1262,7 @@ LUMINARIA + PARCIAL sin tarea pendiente → avisa (calidad de registro).*/
               setForm({
                 ...form,
                 materiales: form.materiales.map((mat, i) =>
-                  i === idx ? { ...mat, unidad: e.target.value } : mat
+                  i === idx ? { ...mat, unidad: e.target.value } : mat,
                 ),
               })
             }
@@ -1368,7 +1314,6 @@ LUMINARIA + PARCIAL sin tarea pendiente → avisa (calidad de registro).*/
         placeholder="Nombre y apellido"
       />
 
-      {/* Firma digital */}
       <label>Firma digital del técnico</label>
       <div className="card" style={{ padding: 12 }}>
         <canvas
@@ -1436,7 +1381,6 @@ LUMINARIA + PARCIAL sin tarea pendiente → avisa (calidad de registro).*/
         placeholder="Nombre y apellido"
       />
 
-      {/* Evidencias */}
       <h3 className="subtitulo">Evidencias (Fotos)</h3>
       <input
         type="file"

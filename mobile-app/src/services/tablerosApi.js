@@ -26,13 +26,25 @@ export async function obtenerTablerosCached() {
 }
 
 async function refreshTableros() {
-  const res = await fetch(`${API}/api/tableros/`);
-  if (!res.ok) throw new Error("Error cargando tableros");
-  const data = await res.json();
-
   try {
-    localStorage.setItem(KEY, JSON.stringify({ ts: now(), data }));
-  } catch {}
+    const res = await fetch(`${API}/api/tableros/`);
+    if (!res.ok) throw new Error("Error cargando tableros");
+    const data = await res.json();
 
-  return data;
+    try {
+      localStorage.setItem(KEY, JSON.stringify({ ts: now(), data }));
+    } catch {}
+
+    return data;
+  } catch (e) {
+    // si no hay red, devolver lo último que haya aunque esté vencido
+    try {
+      const raw = localStorage.getItem(KEY);
+      if (raw) {
+        const { data } = JSON.parse(raw);
+        return Array.isArray(data) ? data : [];
+      }
+    } catch {}
+    return [];
+  }
 }

@@ -7,17 +7,18 @@ import { buscarTableros } from "../services/tablerosAutocompleteApi";
  * - Debounce + AbortController
  * - Busca desde N caracteres
  * - Evita re-buscar cuando el usuario selecciona un item
- * - “Sin resultados” consistente
+ * - “Sin resultados” + acción “Usar texto”
  * - Cierra en blur (con delay) y al seleccionar
+ * - Badge "OFFLINE" si viene del cache
  * - Soporta:
- *    - onChangeText(texto) -> para controlar el valor en el padre
- *    - onSubmit(texto) -> Enter para buscar directo sin seleccionar
+ *    - onChangeText(texto)
+ *    - onSubmit(texto)
  */
 export default function TableroAutocomplete({
   value = "",
   onSelect,
-  onChangeText, // <-- NUEVO
-  onSubmit, // <-- NUEVO
+  onChangeText,
+  onSubmit,
   placeholder = "Buscar tablero…",
   limit = 20,
   minChars = 3,
@@ -27,6 +28,9 @@ export default function TableroAutocomplete({
   const [items, setItems] = useState([]);
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+
+  // NUEVO: source del resultado (remote/cache)
+  const [source, setSource] = useState("remote"); // "remote" | "cache"
 
   const ctrlRef = useRef(null);
   const tRef = useRef(null);
@@ -40,12 +44,20 @@ export default function TableroAutocomplete({
   const trimmed = (q ?? "").trim();
   const canSearch = useMemo(
     () => trimmed.length >= minChars,
-    [trimmed, minChars]
+    [trimmed, minChars],
   );
 
   const closeDropdown = () => {
     setOpen(false);
     setItems([]);
+  };
+
+  const commitTextAsValue = () => {
+    const txt = (q ?? "").trim();
+    closeDropdown();
+    if (!txt) return;
+    onChangeText?.(txt);
+    onSubmit?.(txt);
   };
 
   useEffect(() => {
@@ -61,6 +73,7 @@ export default function TableroAutocomplete({
     if (!canSearch) {
       searchedOnceRef.current = false;
       setLoading(false);
+      setSource("remote");
       closeDropdown();
       return;
     }
@@ -75,16 +88,33 @@ export default function TableroAutocomplete({
 
       setLoading(true);
       try {
-        const data = await buscarTableros(trimmed, {
+        const res = await buscarTableros(trimmed, {
           signal: ctrl.signal,
           limit,
         });
+
         if (reqIdRef.current !== myReqId) return;
-        setItems(Array.isArray(data) ? data : []);
+
+        // soporta:
+        // - viejo formato: array
+        // - nuevo formato: { items, meta:{source} }
+        const nextItems = Array.isArray(res)
+          ? res
+          : Array.isArray(res?.items)
+            ? res.items
+            : [];
+
+        const nextSource = Array.isArray(res)
+          ? "remote"
+          : res?.meta?.source || "remote";
+
+        setItems(nextItems);
+        setSource(nextSource);
       } catch (e) {
         if (e?.name !== "AbortError") {
           if (reqIdRef.current !== myReqId) return;
           setItems([]);
+          setSource("remote");
         }
       } finally {
         if (reqIdRef.current === myReqId) setLoading(false);
@@ -113,13 +143,12 @@ export default function TableroAutocomplete({
         onChange={(e) => {
           const v = e.target.value;
           setQ(v);
-          onChangeText?.(v); // <-- NUEVO: notifica al padre
+          onChangeText?.(v);
         }}
         onKeyDown={(e) => {
           if (e.key === "Enter") {
             e.preventDefault();
-            closeDropdown();
-            onSubmit?.(q); // <-- NUEVO: buscar directo
+            commitTextAsValue();
           }
           if (e.key === "Escape") {
             closeDropdown();
@@ -137,6 +166,13 @@ export default function TableroAutocomplete({
         inputMode="search"
         enterKeyHint="search"
       />
+
+      {/* Badge OFFLINE (cache) */}
+      {open && canSearch && !loading && source === "cache" && (
+        <div className="muted" style={{ marginTop: 6, fontSize: 12 }}>
+          Modo offline: sugerencias desde cache local.
+        </div>
+      )}
 
       {loading && (
         <div className="muted" style={{ marginTop: 6 }}>
@@ -169,8 +205,11 @@ export default function TableroAutocomplete({
               onMouseDown={(e) => e.preventDefault()}
               onClick={() => {
                 selectedRef.current = true;
-                setQ(t.nombre);
-                onChangeText?.(t.nombre); // <-- NUEVO: mantiene sincronía con padre
+
+                const nombre = t?.nombre || "";
+                setQ(nombre);
+                onChangeText?.(nombre);
+
                 closeDropdown();
                 onSelect?.(t); // {id, nombre, zona}
               }}
@@ -183,18 +222,47 @@ export default function TableroAutocomplete({
                 color: "inherit",
               }}
             >
-              <div style={{ fontWeight: 800 }}>{t.nombre}</div>
-              <div className="muted" style={{ marginTop: 2 }}>
-                {t.zona}
+              <div style={{ fontWeight: 800, display: "flex", gap: 10 }}>
+                <span>{t.nombre}</span>
+                {source === "cache" && (
+                  <span
+                    className="muted"
+                    style={{
+                      fontSize: 12,
+                      alignSelf: "center",
+                      padding: "2px 8px",
+                      borderRadius: 999,
+                      border: "1px solid rgba(148,163,184,.25)",
+                    }}
+                  >
+                    cache
+                  </span>
+                )}
               </div>
+
+              {!!t.zona && (
+                <div className="muted" style={{ marginTop: 2 }}>
+                  {t.zona}
+                </div>
+              )}
             </button>
           ))}
         </div>
       )}
 
       {showNoResults && (
-        <div className="muted" style={{ marginTop: 6 }}>
-          Sin resultados.
+        <div style={{ marginTop: 8 }}>
+          <div className="muted">Sin resultados.</div>
+
+          <button
+            type="button"
+            className="btn-outline"
+            style={{ marginTop: 8 }}
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={commitTextAsValue}
+          >
+            Usar “{trimmed}”
+          </button>
         </div>
       )}
 
@@ -206,3 +274,4 @@ export default function TableroAutocomplete({
     </div>
   );
 }
+// src/services/tablerosAutocompleteApi.js
