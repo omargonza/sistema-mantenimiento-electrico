@@ -1,11 +1,9 @@
-# orders/views_luminarias.py
 import re
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 
 from orders.models import OrdenTrabajo
-
 
 # Detecta códigos tipo: PC4026, CC4105, etc.
 # - 2 a 4 letras (ramal/cantero) + 3 a 6 dígitos
@@ -62,16 +60,28 @@ class LuminariasHistorialView(APIView):
 
         out = []
         for ot in qs:
-            # 1) Intentar explotar desde texto libre luminaria_equipos
-            codes = parse_luminaria_codes(getattr(ot, "luminaria_equipos", ""))
+            # 1) Fuente principal: lista canónica persistida
+            codes = []
+            if hasattr(ot, "codigos_luminarias") and isinstance(
+                ot.codigos_luminarias, list
+            ):
+                codes = [
+                    str(x).strip().upper()
+                    for x in ot.codigos_luminarias
+                    if str(x).strip()
+                ]
 
-            # 2) Fallback: si no hubo códigos en texto, usar codigo_luminaria si existe
+            # 2) Fallback: parseo desde texto libre (OTs viejas)
+            if not codes:
+                codes = parse_luminaria_codes(getattr(ot, "luminaria_equipos", ""))
+
+            # 3) Fallback final: codigo_luminaria único
             if not codes:
                 fallback = (ot.codigo_luminaria or "").strip().upper()
                 if fallback:
                     codes = [fallback]
 
-            # 3) Si sigue vacío, no aporta al mapa
+            # 4) Si sigue vacío, no aporta al mapa
             if not codes:
                 continue
 
@@ -86,7 +96,7 @@ class LuminariasHistorialView(APIView):
                 "ubicacion": ot.ubicacion or "",
             }
 
-            # 4) Un item por luminaria
+            # 5) Un item por luminaria
             for idx, code in enumerate(codes):
                 out.append(
                     {

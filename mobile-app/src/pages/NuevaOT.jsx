@@ -161,6 +161,29 @@ function navigatePostOT(navigate, payload) {
     navigate("/historial");
   }
 }
+/* =======================================================
+   LUMINARIAS: extraer códigos tipo PC4026 del texto
+   - soporta "PC4026", "PC 4026", "PC-4026"
+   - devuelve lista única manteniendo orden
+======================================================= */
+function extraerCodigosLuminaria(texto) {
+  const s = String(texto || "").toUpperCase();
+  const matches = s.match(/\bPC[\s-]?\d{3,6}\b/g) || [];
+
+  const norm = matches
+    .map((m) => m.replace(/\s+/g, "").replace("-", "")) // "PC 4026" -> "PC4026"
+    .filter(Boolean);
+
+  const seen = new Set();
+  const out = [];
+  for (const c of norm) {
+    if (!seen.has(c)) {
+      seen.add(c);
+      out.push(c);
+    }
+  }
+  return out;
+}
 
 /* =======================================================
    NORMALIZACIÓN PAYLOAD (SIN DUPLICADOS)
@@ -228,6 +251,35 @@ function normalizarPayloadOT(form) {
     luminaria_estado = "REPARADO";
   }
 
+  // -------------------------------------------------------
+  // LUMINARIAS: reglas duras por alcance (evita 400 max_length)
+  // -------------------------------------------------------
+  const esLum = alcance === "LUMINARIA";
+
+  // lista de códigos desde el texto normalizado (chips)
+  const codigos_luminarias = esLum
+    ? extraerCodigosLuminaria(form.luminaria)
+    : [];
+
+  // compat: codigo principal = input manual o primer código extraído
+  const codigoPrincipal = esLum
+    ? String(form.codigo_luminaria || "").trim() || codigos_luminarias[0] || ""
+    : "";
+  // hard cap por compat (backend actual tiene max_length=30)
+  const codigoPrincipalCapped = codigoPrincipal.slice(0, 30);
+
+  // si NO es luminaria, se limpian estos campos para que no viajen
+  const ramal = esLum ? String(form.ramal || "").trim() : "";
+  const km_luminaria = esLum
+    ? form.km_luminaria === "" ||
+      form.km_luminaria === null ||
+      form.km_luminaria === undefined
+      ? null
+      : Number(form.km_luminaria)
+    : null;
+
+  const luminaria_equipos = esLum ? form.luminaria || "" : "";
+
   return {
     fecha: form.fecha,
     ubicacion: form.ubicacion || "",
@@ -253,7 +305,8 @@ function normalizarPayloadOT(form) {
     tarea_realizada: form.tareaRealizada || "",
     tarea_pendiente: form.tareaPendiente || "",
 
-    luminaria_equipos: form.luminaria || "",
+    luminaria_equipos,
+    codigos_luminarias,
 
     firma_tecnico_img: form.firmaTecnicoB64 || "",
     fotos_b64: Array.isArray(form.fotosB64)
@@ -273,14 +326,9 @@ function normalizarPayloadOT(form) {
     luminaria_estado,
 
     // Luminarias (mapa)
-    ramal: String(form.ramal || "").trim(),
-    km_luminaria:
-      form.km_luminaria === "" ||
-      form.km_luminaria === null ||
-      form.km_luminaria === undefined
-        ? null
-        : Number(form.km_luminaria),
-    codigo_luminaria: String(form.codigo_luminaria || "").trim(),
+    ramal,
+    km_luminaria,
+    codigo_luminaria: codigoPrincipal,
   };
 }
 
@@ -1125,14 +1173,30 @@ export default function NuevaOT() {
 
           setForm((prev) => {
             let estado_tablero = prev.estado_tablero || "";
+            const esLum = alcance === "LUMINARIA";
 
-            if (alcance === "LUMINARIA") {
+            if (esLum) {
               estado_tablero = "";
             } else {
               if (!estado_tablero) estado_tablero = "PARCIAL";
             }
 
-            return { ...prev, alcance, estado_tablero };
+            return {
+              ...prev,
+              alcance,
+              estado_tablero,
+
+              // limpieza dura al salir de LUMINARIA (evita que viaje basura al backend)
+              ...(esLum
+                ? {}
+                : {
+                    ramal: "",
+                    km_luminaria: "",
+                    codigo_luminaria: "",
+                    luminaria_estado: "",
+                    luminaria: "",
+                  }),
+            };
           });
         }}
       >

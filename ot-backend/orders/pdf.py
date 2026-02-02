@@ -1,4 +1,3 @@
-# orders/pdf.py
 from io import BytesIO
 import os
 from datetime import datetime
@@ -173,6 +172,45 @@ def generar_pdf(data):
         return datetime.now().strftime("%Y-%m-%d %H:%M")
 
     # =========================
+    # LUMINARIAS: lista canónica para PDF
+    # =========================
+    def get_codigos_luminarias(pdf_data: dict):
+        # 1) lista persistida/canónica
+        cods = pdf_data.get("codigos_luminarias") or []
+        if isinstance(cods, (tuple, set)):
+            cods = list(cods)
+        if isinstance(cods, list):
+            cods = [str(x).strip().upper() for x in cods if str(x).strip()]
+
+        # 2) fallback: codigo_luminaria único
+        if not cods:
+            c = str(pdf_data.get("codigo_luminaria") or "").strip().upper()
+            if c:
+                cods = [c]
+
+        # 3) fallback final: parseo desde texto libre (OTs viejas)
+        if not cods:
+            try:
+                from .views_luminarias import parse_luminaria_codes
+
+                cods = (
+                    parse_luminaria_codes(pdf_data.get("luminaria_equipos", "")) or []
+                )
+            except Exception:
+                cods = []
+
+        # únicos manteniendo orden
+        seen = set()
+        out = []
+        for c in cods:
+            if c in seen:
+                continue
+            seen.add(c)
+            out.append(c)
+
+        return out
+
+    # =========================
     # Card (panel)
     # =========================
     def card(elements, pad=11):
@@ -330,7 +368,6 @@ def generar_pdf(data):
     estado_tablero = safe(data.get("estado_tablero")).strip()
     luminaria_estado = safe(data.get("luminaria_estado")).strip()
 
-    # Card compacto con 2 filas
     clasif_rows = [
         [
             P("ALCANCE", LABEL),
@@ -340,7 +377,6 @@ def generar_pdf(data):
         ],
     ]
 
-    # Condicionales según alcance
     if alcance.upper() in ("TABLERO", "CIRCUITO"):
         clasif_rows.append(
             [
@@ -390,7 +426,28 @@ def generar_pdf(data):
     story.append(bloque_texto("Tarea pedida", data.get("tarea_pedida")))
     story.append(bloque_texto("Tarea realizada", data.get("tarea_realizada")))
     story.append(bloque_texto("Tarea pendiente", data.get("tarea_pendiente")))
-    story.append(bloque_texto("Luminarias / equipos", data.get("luminaria_equipos")))
+
+    # Solo mostrar bloques de luminaria si aplica
+    if safe(data.get("alcance")).strip().upper() == "LUMINARIA":
+        cods = get_codigos_luminarias(data)
+        cods_txt = ", ".join(cods) if cods else "-"
+        story.append(bloque_texto("Códigos de luminarias", cods_txt, empty="-"))
+
+        # Sub-card operativa (ramal/km) opcional
+        ramal = safe(data.get("ramal")).strip()
+        km_lum = data.get("km_luminaria")
+        if ramal or km_lum not in (None, "", 0):
+            info = (
+                f"<b>Ramal:</b> {ramal or '-'} &nbsp;&nbsp; "
+                f"<b>KM:</b> {km_lum if km_lum not in (None,'') else '-'}"
+            )
+            story.append(card([P(info, BODY)], pad=10))
+            story.append(Spacer(1, 7))
+
+        lum_texto = safe(data.get("luminaria_equipos")).strip()
+        if lum_texto:
+            story.append(bloque_texto("Luminarias / equipos", lum_texto))
+
     story.append(Spacer(1, 6))
 
     # =========================
@@ -486,11 +543,10 @@ def generar_pdf(data):
     # =========================
     story.append(Paragraph("FIRMAS", H2))
 
-    # Firma técnica digital (path relativo guardado en DB o enviado al pdf_data)
     firma_rel = (data.get("firma_tecnico_path") or "").strip()
     firma_abs = _abs_media(firma_rel) if firma_rel else ""
 
-    firma_img = _img_flowable(firma_abs, w_cm=7.0, h_cm=2.4)  # tamaño “premium”
+    firma_img = _img_flowable(firma_abs, w_cm=7.0, h_cm=2.4)
 
     bloque_tec = [
         linea_firma("Firma técnico", aclaracion=data.get("firma_tecnico") or "")
@@ -597,22 +653,13 @@ def generar_pdf(data):
         canv.saveState()
         w, h = A4
 
-        # =========================
-        # Barra superior
-        # =========================
         canv.setFillColor(theme["bg"])
         canv.rect(0, h - 2.9 * cm, w, 2.9 * cm, stroke=0, fill=1)
 
-        # =========================
-        # Acento gris plomo metalizado
-        # =========================
-        accent_header = colors.HexColor("#9ca3af")  # plomo/acero claro
+        accent_header = colors.HexColor("#9ca3af")
         canv.setFillColor(accent_header)
         canv.rect(0, h - 2.9 * cm, w, 0.18 * cm, stroke=0, fill=1)
 
-        # =========================
-        # Logo corporativo (rayo) — grande
-        # =========================
         if logo_path and os.path.exists(logo_path):
             size = 1.85 * cm
             x = 1.6 * cm
@@ -627,9 +674,6 @@ def generar_pdf(data):
                 mask="auto",
             )
 
-        # =========================
-        # Títulos
-        # =========================
         canv.setFillColor(theme["text"])
         canv.setFont("Helvetica-Bold", 12)
         canv.drawString(3.5 * cm, h - 1.55 * cm, "SECTOR MANTENIMIENTO ELÉCTRICO")
@@ -637,33 +681,25 @@ def generar_pdf(data):
         canv.setFont("Helvetica", 10)
         canv.drawString(3.5 * cm, h - 2.05 * cm, "ORDEN DE TRABAJO")
 
-        # ==========================================
-        # WATERMARK: tablero NO catalogado (suave)
-        # ==========================================
         if not tablero_catalogado:
-            # Transparencia (si la versión de reportlab lo soporta)
             try:
                 canv.setFillAlpha(0.08)
             except Exception:
                 pass
 
             canv.setFont("Helvetica-Bold", 48)
-            canv.setFillColor(colors.HexColor("#94a3b8"))  # gris suave
+            canv.setFillColor(colors.HexColor("#94a3b8"))
             canv.saveState()
             canv.translate(w / 2, h / 2)
             canv.rotate(35)
             canv.drawCentredString(0, 0, "TABLERO NO CATALOGADO")
             canv.restoreState()
 
-            # Reset alpha
             try:
                 canv.setFillAlpha(1)
             except Exception:
                 pass
 
-        # =========================
-        # Footer (dinámico)
-        # =========================
         canv.setFillColor(theme["muted"])
         canv.setFont("Helvetica-Oblique", 8)
 

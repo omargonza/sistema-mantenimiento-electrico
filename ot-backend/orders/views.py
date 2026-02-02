@@ -142,6 +142,34 @@ class OrdenPDFView(APIView):
 
         data = dict(serializer.validated_data)
 
+        alcance = (data.get("alcance") or "").strip().upper()
+
+        # Si llega lista, ok. Si no llega, intentar derivarla desde luminaria_equipos (por compat)
+        cods = data.get("codigos_luminarias") or []
+        if alcance == "LUMINARIA":
+            if not cods:
+                # fallback desde texto libre (mismo criterio que views_luminarias)
+                from .views_luminarias import parse_luminaria_codes
+
+                cods = parse_luminaria_codes(data.get("luminaria_equipos", "")) or []
+
+            # setear lista canónica persistida
+            data["codigos_luminarias"] = cods
+
+            # compat: codigo principal (max 30)
+            if not (data.get("codigo_luminaria") or "").strip() and cods:
+                data["codigo_luminaria"] = cods[0]
+            data["codigo_luminaria"] = (data.get("codigo_luminaria") or "")[:30]
+
+        else:
+            # por seguridad extra: si no es luminaria, limpiar (aunque serializer ya lo haga)
+            data["codigos_luminarias"] = []
+            data["codigo_luminaria"] = ""
+            data["ramal"] = ""
+            data["km_luminaria"] = None
+            data["luminaria_equipos"] = ""
+            data["luminaria_estado"] = ""
+
         # ------------------------------------------
         # 1) Normalizar identidad (SIN CREAR TABLERO)
         # ------------------------------------------
