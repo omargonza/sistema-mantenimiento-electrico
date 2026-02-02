@@ -1,0 +1,430 @@
+/* src/styles/historial_luminarias.css
+   Dashboard Empresarial — Historial Luminarias (SCOPED)
+   No toca el resto de la app: todo prefijo .lumdash
+*/
+
+.lumdash {
+  /* hereda tu tema global, pero ajustamos microestética */
+  position: relative;
+  isolation: isolate; /* stacking context propio para overlays / tooltips / loaders */
+}
+
+.lumdash-top {
+  display: grid;
+  grid-template-columns: 120px 1fr 120px;
+  align-items: center;
+  gap: 10px;
+  margin: 10px 0 12px;
+}
+
+.lumdash-title {
+  font-size: 1.05rem;
+  font-weight: 900;
+  letter-spacing: 0.02em;
+  color: #f9fafb;
+}
+
+.lumdash-sub {
+  margin-top: 2px;
+  font-size: 0.82rem;
+  color: rgba(156, 163, 175, 0.95);
+}
+
+.lumdash-muted {
+  color: rgba(156, 163, 175, 0.95);
+  font-size: 0.82rem;
+}
+
+.lumdash-back {
+  height: 44px;
+  border-radius: 14px;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  background: rgba(15, 23, 42, 0.72);
+  color: rgba(226, 232, 240, 0.95);
+  font-weight: 900;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  cursor: pointer;
+}
+.lumdash-back:active {
+  transform: translateY(1px);
+}
+.lumdash-backIcon {
+  display: inline-flex;
+  width: 30px;
+  height: 30px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  background: rgba(59, 130, 246, 0.14);
+  box-shadow: inset 0 0 0 1px rgba(59, 130, 246, 0.22);
+}
+
+.lumdash-btn {
+  height: 44px;
+  border-radius: 14px;
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  background: linear-gradient(
+    90deg,
+    rgba(37, 99, 235, 0.22),
+    rgba(56, 189, 248, 0.16)
+  );
+  color: rgba(240, 249, 255, 0.95);
+  font-weight: 950;
+  cursor: pointer;
+}
+.lumdash-btn:active {
+  transform: translateY(1px);
+}
+
+.lumdash-card {
+  border-radius: 16px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  background: linear-gradient(
+    180deg,
+    rgba(15, 23, 42, 0.92),
+    rgba(2, 6, 23, 0.92)
+  );
+  box-shadow: 0 10px 22px rgba(2, 6, 23, 0.55);
+  padding: 12px;
+}
+
+.lumdash-cardhead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.lumdash-cardtitle {
+  font-weight: 950;
+  letter-spacing: 0.02em;
+}
+
+.lumdash-filters select,
+.lumdash-filters input {
+  width: 100%;
+  background: rgba(15, 23, 42, 0.9);
+  color: #e5e7eb;
+  border: 1px solid rgba(51, 65, 85, 0.9);
+  border-radius: 0.9rem;
+  height: 48px;
+  padding: 0 0.85rem;
+  outline: none;
+}
+
+.lumdash-grid3 {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 10px;
+}
+
+.lumdash-toggle {
+  height: 48px;
+  border-radius: 0.9rem;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  background: rgba(15, 23, 42, 0.6);
+  color: rgba(226, 232, 240, 0.92);
+  font-weight: 950;
+  cursor: pointer;
+}
+.lumdash-toggle.is-on {
+  border-color: rgba(56, 189, 248, 0.55);
+  box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.12);
+  background: rgba(37, 99, 235, 0.14);
+}
+.lumdash-toggle:active {
+  transform: translateY(1px);
+}
+
+.lumdash-kpis {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin: 12px 0 12px;
+}
+
+.lumdash-kpi {
+  border-radius: 16px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  background: rgba(2, 6, 23, 0.35);
+  padding: 12px;
+  box-shadow: 0 10px 22px rgba(2, 6, 23, 0.35);
+}
+
+.lumdash-kpiLabel {
+  font-size: 0.75rem;
+  color: rgba(156, 163, 175, 0.95);
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.lumdash-kpiVal {
+  font-size: 1.3rem;
+  font-weight: 1000;
+  margin-top: 6px;
+}
+
+.lumdash-kpiSub {
+  margin-top: 6px;
+  font-size: 0.8rem;
+  color: rgba(156, 163, 175, 0.95);
+}
+
+.lumdash-grid2 {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.lumdash-bars {
+  display: grid;
+  gap: 10px;
+}
+
+.lumdash-barrow {
+  display: grid;
+  grid-template-columns: 120px 1fr 44px;
+  gap: 10px;
+  align-items: center;
+}
+
+.lumdash-barlabel {
+  font-size: 0.86rem;
+  color: rgba(226, 232, 240, 0.92);
+  font-weight: 800;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lumdash-bartrack {
+  height: 10px;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.14);
+  overflow: hidden;
+}
+
+.lumdash-barfill {
+  height: 100%;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.55);
+  box-shadow: 0 10px 18px rgba(0, 0, 0, 0.25);
+}
+
+.lumdash-barval {
+  font-weight: 950;
+  text-align: right;
+  color: rgba(241, 245, 249, 0.95);
+}
+
+.lumdash-spark {
+  height: 92px;
+  display: grid;
+  grid-template-columns: repeat(14, minmax(0, 1fr));
+  gap: 6px;
+  align-items: end;
+  padding: 6px 2px 2px;
+  border-radius: 14px;
+  background: rgba(2, 6, 23, 0.35);
+  border: 1px solid rgba(148, 163, 184, 0.14);
+}
+.lumdash-sparkcol {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+.lumdash-sparkbar {
+  width: 100%;
+  min-width: 6px;
+  border-radius: 10px;
+  background: linear-gradient(
+    180deg,
+    rgba(56, 189, 248, 0.85),
+    rgba(37, 99, 235, 0.35)
+  );
+  box-shadow: 0 10px 18px rgba(0, 0, 0, 0.25);
+}
+
+/* Tones */
+.tone-ok {
+  border-color: rgba(34, 197, 94, 0.22);
+}
+.tone-warn {
+  border-color: rgba(245, 158, 11, 0.22);
+}
+.tone-danger {
+  border-color: rgba(239, 68, 68, 0.22);
+}
+.tone-neutral {
+}
+
+.lumdash-barfill.tone-ok {
+  background: linear-gradient(
+    90deg,
+    rgba(34, 197, 94, 0.85),
+    rgba(34, 197, 94, 0.25)
+  );
+}
+.lumdash-barfill.tone-warn {
+  background: linear-gradient(
+    90deg,
+    rgba(245, 158, 11, 0.85),
+    rgba(245, 158, 11, 0.25)
+  );
+}
+.lumdash-barfill.tone-danger {
+  background: linear-gradient(
+    90deg,
+    rgba(239, 68, 68, 0.85),
+    rgba(239, 68, 68, 0.25)
+  );
+}
+
+/* Table */
+.lumdash-tableHead {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.lumdash-sortRow {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.lumdash-sort {
+  height: 36px;
+  border-radius: 999px;
+  padding: 0 12px;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  background: rgba(15, 23, 42, 0.6);
+  color: rgba(226, 232, 240, 0.92);
+  font-weight: 950;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.lumdash-sort.is-active {
+  border-color: rgba(56, 189, 248, 0.55);
+  box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.1);
+}
+.lumdash-sort:active {
+  transform: translateY(1px);
+}
+.lumdash-sortdir {
+  opacity: 0.85;
+}
+
+.lumdash-tableWrap {
+  overflow: auto;
+  border-radius: 14px;
+  border: 1px solid rgba(148, 163, 184, 0.14);
+}
+
+.lumdash-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 860px;
+  background: rgba(2, 6, 23, 0.25);
+}
+
+.lumdash-table th,
+.lumdash-table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid rgba(51, 65, 85, 0.65);
+  vertical-align: middle;
+  font-size: 0.9rem;
+}
+
+.lumdash-table th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: rgba(2, 6, 23, 0.92);
+  color: rgba(203, 213, 225, 0.92);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 0.72rem;
+  font-weight: 950;
+}
+
+.lumdash-table tbody tr {
+  cursor: pointer;
+}
+.lumdash-table tbody tr:hover {
+  background: rgba(15, 23, 42, 0.55);
+}
+
+.mono {
+  font-variant-numeric: tabular-nums;
+  font-family:
+    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
+    "Courier New", monospace;
+}
+
+.clip {
+  max-width: 320px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  height: 28px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  background: rgba(15, 23, 42, 0.65);
+  font-weight: 950;
+  font-size: 0.82rem;
+  letter-spacing: 0.01em;
+}
+
+.pill-OK {
+  border-color: rgba(34, 197, 94, 0.35);
+  background: rgba(34, 197, 94, 0.12);
+}
+.pill-PENDIENTE {
+  border-color: rgba(245, 158, 11, 0.35);
+  background: rgba(245, 158, 11, 0.12);
+}
+.pill-APAGADO {
+  border-color: rgba(239, 68, 68, 0.35);
+  background: rgba(239, 68, 68, 0.12);
+}
+.pill-OTRO {
+  border-color: rgba(148, 163, 184, 0.28);
+  background: rgba(148, 163, 184, 0.1);
+}
+
+/* Responsive */
+@media (max-width: 640px) {
+  .lumdash-top {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+  .lumdash-btn {
+    width: 100%;
+  }
+  .lumdash-grid3 {
+    grid-template-columns: 1fr;
+  }
+  .lumdash-kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .lumdash-grid2 {
+    grid-template-columns: 1fr;
+  }
+}

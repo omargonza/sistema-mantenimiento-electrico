@@ -1,17 +1,8 @@
 // src/pages/HistorialLuminarias.jsx
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { ArrowLeft } from "lucide-react";
 import { API } from "../api";
-import "../styles/app.css";
-
-import Autopista3D from "../components/autopista3d/Autopista3D";
-import {
-  clamp,
-  tone,
-  toneColor,
-  pickRenderMode,
-} from "../components/autopista3d/utils3d";
+import "../styles/historial_luminarias.css";
 
 /* =======================================================
    RANGOS POR RAMAL (aprox)
@@ -23,7 +14,6 @@ const RAMAL_RANGES = {
   ACC_TIGRE: { min: 21, max: 27, label: "Acc Tigre" },
   GRAL_PAZ: { min: 0, max: 25, label: "Gral Paz" },
 };
-
 const RAMALES = Object.keys(RAMAL_RANGES);
 
 async function fetchLuminarias({ ramal, from, to }) {
@@ -39,338 +29,133 @@ async function fetchLuminarias({ ramal, from, to }) {
 }
 
 /* =======================================================
-   Track 2D (autopista)
+   Helpers: estados / etiquetas
 ======================================================= */
-function AutopistaTrack({ ramal, rows, onPinClick }) {
-  const range = RAMAL_RANGES[ramal];
-  const kmMin = range.min;
-  const kmMax = range.max;
-  const span = Math.max(0.01, kmMax - kmMin);
+function upper(s) {
+  return String(s || "")
+    .trim()
+    .toUpperCase();
+}
 
-  const pins = useMemo(() => {
-    const base = rows
-      .filter((r) => Number.isFinite(Number(r.km)))
-      .map((r) => {
-        const km = Number(r.km);
-        const xPct = ((km - kmMin) / span) * 100;
-        const label = String(r.codigo || "").trim() || "Luminaria";
-        return {
-          ...r,
-          km,
-          xPct: clamp(xPct, 0, 100),
-          t: tone(r),
-          label,
-        };
-      })
-      .filter((p) => p.km >= kmMin && p.km <= kmMax)
-      .sort((a, b) => a.xPct - b.xPct || a.km - b.km);
+function pickState(row) {
+  // Prioridad: luminaria_estado (si existe), sino inferir por resultado
+  const le = upper(row?.luminaria_estado);
+  if (le === "REPARADO") return "OK";
+  if (le === "APAGADO") return "APAGADO";
+  if (le === "PENDIENTE") return "PENDIENTE";
 
-    const BUCKET = 1.6;
-    const DX = 1.0;
-    const buckets = new Map();
+  const r = upper(row?.resultado);
+  if (r === "COMPLETO") return "OK";
+  if (r === "PARCIAL") return "PENDIENTE";
+  return "OTRO";
+}
 
-    return base.map((p) => {
-      const k = Math.round(p.xPct / BUCKET);
-      const n = buckets.get(k) || 0;
-      buckets.set(k, n + 1);
+function stateLabel(state) {
+  switch (state) {
+    case "OK":
+      return "Reparado / OK";
+    case "PENDIENTE":
+      return "Pendiente";
+    case "APAGADO":
+      return "Apagado";
+    default:
+      return "Otro";
+  }
+}
 
-      const lane = n % 4;
-      const sign = n % 2 === 0 ? 1 : -1;
-      const dx = n === 0 ? 0 : sign * Math.ceil(n / 2) * DX;
+function safeNum(n) {
+  const x = Number(n);
+  return Number.isFinite(x) ? x : null;
+}
 
-      return {
-        ...p,
-        xAdj: clamp(p.xPct + dx, 0, 100),
-        lane,
-      };
-    });
-  }, [rows, kmMin, kmMax, span]);
+function fmtDateISO(s) {
+  return s ? String(s).slice(0, 10) : "";
+}
 
-  const ticks = useMemo(() => {
-    const n = 7;
-    return Array.from({ length: n }).map((_, i) => {
-      const x = (i / (n - 1)) * 100;
-      const km = kmMin + (span * i) / (n - 1);
-      return { x, km: km.toFixed(0) };
-    });
-  }, [kmMin, span]);
+function kmBucket(km, step = 1) {
+  const x = safeNum(km);
+  if (x === null) return null;
+  const b = Math.floor(x / step) * step;
+  return `${b.toFixed(0)}-${(b + step).toFixed(0)}`;
+}
 
-  const laneTop = (lane) => {
-    switch (lane) {
-      case 0:
-        return 22;
-      case 1:
-        return 34;
-      case 2:
-        return 66;
-      case 3:
-        return 78;
-      default:
-        return 50;
-    }
-  };
-
-  const isTop = (lane) => lane === 0 || lane === 1;
+/* =======================================================
+   Mini charts (sin libs)
+======================================================= */
+function MiniBars({ title, subtitle, items, maxBars = 12 }) {
+  // items: [{ label, value, tone }]
+  const sliced = items.slice(0, maxBars);
+  const maxV = Math.max(1, ...sliced.map((x) => x.value));
 
   return (
-    <div className="card" style={{ padding: 14, marginBottom: 16 }}>
-      <div
-        style={{ display: "flex", justifyContent: "space-between", gap: 10 }}
-      >
-        <div style={{ fontWeight: 900, letterSpacing: 0.2 }}>{range.label}</div>
-        <div className="muted" style={{ fontSize: 12 }}>
-          KM {kmMin} — {kmMax} · {pins.length} registros · 2D
-        </div>
+    <div className="lumdash-card">
+      <div className="lumdash-cardhead">
+        <div className="lumdash-cardtitle">{title}</div>
+        {subtitle ? <div className="lumdash-muted">{subtitle}</div> : null}
       </div>
 
-      <div style={{ marginTop: 12 }}>
-        {/* carteles KM (2D) */}
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            gap: 8,
-            marginBottom: 8,
-            flexWrap: "wrap",
-          }}
-        >
-          {ticks.map((t, i) => (
-            <div
-              key={i}
-              style={{
-                position: "relative",
-                padding: "7px 12px",
-                borderRadius: 12,
-                border: "1px solid rgba(255,255,255,.14)",
-                background:
-                  "linear-gradient(180deg, rgba(16,185,129,.18), rgba(2,6,23,.35))",
-                boxShadow: "0 12px 26px rgba(0,0,0,.25)",
-                fontSize: 12,
-                fontWeight: 900,
-                letterSpacing: 0.2,
-              }}
-            >
-              KM <span style={{ marginLeft: 6 }}>{t.km}</span>
+      <div className="lumdash-bars">
+        {sliced.map((it) => (
+          <div
+            key={it.label}
+            className="lumdash-barrow"
+            title={`${it.label}: ${it.value}`}
+          >
+            <div className="lumdash-barlabel">{it.label}</div>
+            <div className="lumdash-bartrack">
+              <div
+                className={`lumdash-barfill tone-${it.tone || "neutral"}`}
+                style={{ width: `${(it.value / maxV) * 100}%` }}
+              />
             </div>
-          ))}
-        </div>
-
-        {/* autopista */}
-        <div
-          style={{
-            position: "relative",
-            height: 170,
-            borderRadius: 18,
-            border: "1px solid rgba(148,163,184,.22)",
-            overflow: "hidden",
-            boxShadow: "0 16px 34px rgba(0,0,0,.35)",
-            background:
-              "radial-gradient(1200px 220px at 50% 20%, rgba(59,130,246,.10), rgba(0,0,0,0))",
-          }}
-        >
-          {/* “asfalto” */}
-          <div
-            style={{
-              position: "absolute",
-              inset: 0,
-              background:
-                "linear-gradient(180deg, rgba(2,6,23,.55), rgba(2,6,23,.35)), repeating-linear-gradient(90deg, rgba(255,255,255,.02) 0px, rgba(255,255,255,.02) 2px, rgba(0,0,0,0) 6px, rgba(0,0,0,0) 14px)",
-            }}
-          />
-
-          {/* calzada arriba */}
-          <div
-            style={{
-              position: "absolute",
-              left: 10,
-              right: 10,
-              top: 44,
-              height: 44,
-              borderRadius: 14,
-              background:
-                "linear-gradient(180deg, rgba(8,12,20,.92), rgba(2,6,23,.92))",
-              border: "1px solid rgba(255,255,255,.06)",
-              boxShadow: "inset 0 10px 20px rgba(0,0,0,.35)",
-            }}
-          />
-          {/* calzada abajo */}
-          <div
-            style={{
-              position: "absolute",
-              left: 10,
-              right: 10,
-              bottom: 44,
-              height: 44,
-              borderRadius: 14,
-              background:
-                "linear-gradient(180deg, rgba(8,12,20,.92), rgba(2,6,23,.92))",
-              border: "1px solid rgba(255,255,255,.06)",
-              boxShadow: "inset 0 10px 20px rgba(0,0,0,.35)",
-            }}
-          />
-
-          {/* separador amarillo */}
-          <div
-            style={{
-              position: "absolute",
-              left: 14,
-              right: 14,
-              top: "50%",
-              height: 3,
-              transform: "translateY(-50%)",
-              background:
-                "linear-gradient(90deg, rgba(245,158,11,.0), rgba(245,158,11,.95), rgba(245,158,11,.0))",
-              opacity: 0.9,
-            }}
-          />
-
-          {/* líneas discontinuas arriba */}
-          {Array.from({ length: 22 }).map((_, i) => (
-            <div
-              key={`a-${i}`}
-              style={{
-                position: "absolute",
-                left: `${(i / 22) * 100}%`,
-                top: 64,
-                width: 20,
-                height: 2,
-                borderRadius: 2,
-                background: "rgba(241,245,249,.30)",
-                opacity: 0.65,
-              }}
-            />
-          ))}
-          {/* líneas discontinuas abajo */}
-          {Array.from({ length: 22 }).map((_, i) => (
-            <div
-              key={`b-${i}`}
-              style={{
-                position: "absolute",
-                left: `${(i / 22) * 100}%`,
-                bottom: 64,
-                width: 20,
-                height: 2,
-                borderRadius: 2,
-                background: "rgba(241,245,249,.30)",
-                opacity: 0.65,
-              }}
-            />
-          ))}
-
-          {/* ticks verticales */}
-          {ticks.map((t, i) => (
-            <div
-              key={`tick-${i}`}
-              style={{
-                position: "absolute",
-                left: `${t.x}%`,
-                top: 0,
-                bottom: 0,
-                width: 1,
-                background: "rgba(226,232,240,.10)",
-              }}
-            />
-          ))}
-
-          {/* pins */}
-          {pins.map((p) => {
-            const topSide = isTop(p.lane);
-            return (
-              <button
-                key={`${p.id}-${p.label}-${p.km}`}
-                type="button"
-                onClick={() => onPinClick(p)}
-                title={`${p.label} · KM ${p.km.toFixed(2)} · ${p.fecha} · ${
-                  p.luminaria_estado || p.resultado || ""
-                }`}
-                style={{
-                  position: "absolute",
-                  left: `${p.xAdj}%`,
-                  top: `${laneTop(p.lane)}%`,
-                  transform: "translate(-50%, -50%)",
-                  background: "transparent",
-                  border: "none",
-                  padding: 0,
-                  cursor: "pointer",
-                }}
-              >
-                {/* pin */}
-                <span
-                  style={{
-                    position: "relative",
-                    display: "inline-block",
-                    width: 10,
-                    height: 10,
-                    borderRadius: 3,
-                    background: toneColor(p.t),
-                    boxShadow: "0 10px 22px rgba(0,0,0,.35)",
-                    outline: "2px solid rgba(2,6,23,.55)",
-                  }}
-                />
-                {/* “poste” */}
-                <span
-                  style={{
-                    position: "absolute",
-                    left: "50%",
-                    top: topSide ? "100%" : "auto",
-                    bottom: topSide ? "auto" : "100%",
-                    transform: "translateX(-50%)",
-                    width: 2,
-                    height: 16,
-                    borderRadius: 2,
-                    background:
-                      "linear-gradient(180deg, rgba(226,232,240,.28), rgba(148,163,184,.10))",
-                    boxShadow: "0 10px 18px rgba(0,0,0,.25)",
-                  }}
-                />
-                {/* label */}
-                <span
-                  style={{
-                    position: "absolute",
-                    left: "50%",
-                    top: topSide ? -26 : 18,
-                    transform: "translateX(-50%)",
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: 8,
-                    padding: "6px 10px",
-                    borderRadius: 10,
-                    border: "1px solid rgba(255,255,255,.14)",
-                    background:
-                      "linear-gradient(180deg, rgba(2,6,23,.92), rgba(15,23,42,.82))",
-                    boxShadow: "0 14px 30px rgba(0,0,0,.45)",
-                    whiteSpace: "nowrap",
-                  }}
-                >
-                  <span
-                    style={{
-                      width: 8,
-                      height: 8,
-                      borderRadius: 2,
-                      background: toneColor(p.t),
-                      boxShadow: "0 0 0 3px rgba(2,6,23,.55)",
-                    }}
-                  />
-                  <span style={{ fontWeight: 900, fontSize: 11 }}>
-                    {p.label}
-                  </span>
-                </span>
-              </button>
-            );
-          })}
-        </div>
-
-        <div className="muted" style={{ marginTop: 8, fontSize: 12 }}>
-          Tocá un poste para abrir la OT.
-        </div>
+            <div className="lumdash-barval">{it.value}</div>
+          </div>
+        ))}
       </div>
     </div>
   );
 }
 
+function Sparkline({ points }) {
+  // points: [{x,label,value}] - dibujado con divs para no meter canvas/svg complejo
+  const maxV = Math.max(1, ...points.map((p) => p.value));
+  return (
+    <div className="lumdash-spark">
+      {points.map((p) => (
+        <div
+          key={p.x}
+          className="lumdash-sparkcol"
+          title={`${p.label}: ${p.value}`}
+        >
+          <div
+            className="lumdash-sparkbar"
+            style={{ height: `${(p.value / maxV) * 100}%` }}
+          />
+        </div>
+      ))}
+    </div>
+  );
+}
+
 /* =======================================================
-   Página
+   Tabla
 ======================================================= */
+function SortBtn({ active, dir, label, onClick }) {
+  return (
+    <button
+      type="button"
+      className={`lumdash-sort ${active ? "is-active" : ""}`}
+      onClick={onClick}
+      title="Ordenar"
+    >
+      {label}
+      {active ? (
+        <span className="lumdash-sortdir">{dir === "asc" ? "▲" : "▼"}</span>
+      ) : null}
+    </button>
+  );
+}
+
 export default function HistorialLuminarias() {
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
@@ -379,12 +164,24 @@ export default function HistorialLuminarias() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  // Toggle vista: auto | 2d | 3d-low | 3d-high
-  const [viewMode, setViewMode] = useState("auto");
-
   const ramal = params.get("ramal") || "";
   const from = params.get("from") || "";
   const to = params.get("to") || "";
+
+  // UI local (no URL)
+  const [q, setQ] = useState("");
+  const [stateFilter, setStateFilter] = useState("ALL"); // ALL|OK|PENDIENTE|APAGADO|OTRO
+  const [onlyLatestPerCode, setOnlyLatestPerCode] = useState(true);
+
+  const [sortKey, setSortKey] = useState("fecha"); // fecha|km|codigo|estado
+  const [sortDir, setSortDir] = useState("desc"); // asc|desc
+
+  function updateParam(key, value) {
+    const next = new URLSearchParams(params);
+    if (!value) next.delete(key);
+    else next.set(key, value);
+    setParams(next);
+  }
 
   useEffect(() => {
     let alive = true;
@@ -411,91 +208,303 @@ export default function HistorialLuminarias() {
     };
   }, [ramal, from, to]);
 
-  const grouped = useMemo(() => {
-    const out = {};
-    for (const r of rows) {
-      const k = r.ramal || "UNKNOWN";
-      if (!out[k]) out[k] = [];
-      out[k].push(r);
-    }
-    return out;
+  // Normalización + enriquecimiento
+  const enriched = useMemo(() => {
+    return (rows || []).map((r) => {
+      const state = pickState(r);
+      const km = safeNum(r.km);
+      const codigo = String(r.codigo || "")
+        .trim()
+        .toUpperCase();
+      return {
+        ...r,
+        _state: state,
+        _km: km,
+        _codigo: codigo,
+        _fecha: fmtDateISO(r.fecha),
+      };
+    });
   }, [rows]);
 
-  function updateParam(key, value) {
-    const next = new URLSearchParams(params);
-    if (!value) next.delete(key);
-    else next.set(key, value);
-    setParams(next);
+  // “Último estado por luminaria” (para métricas más limpias)
+  const latestByCode = useMemo(() => {
+    if (!onlyLatestPerCode) return enriched;
+
+    // tomamos la más nueva por código (fecha + ot_id)
+    const map = new Map();
+    for (const r of enriched) {
+      if (!r._codigo) continue;
+      const prev = map.get(r._codigo);
+      if (!prev) {
+        map.set(r._codigo, r);
+        continue;
+      }
+      // compara por fecha ISO y luego ot_id
+      const a = String(r._fecha || "");
+      const b = String(prev._fecha || "");
+      if (a > b) map.set(r._codigo, r);
+      else if (a === b && Number(r.ot_id || 0) > Number(prev.ot_id || 0))
+        map.set(r._codigo, r);
+    }
+
+    // si no tiene código, lo dejamos igual (son raros, pero no los oculto)
+    const noCode = enriched.filter((r) => !r._codigo);
+    return [...Array.from(map.values()), ...noCode];
+  }, [enriched, onlyLatestPerCode]);
+
+  // Filtro búsqueda + estado
+  const filtered = useMemo(() => {
+    const qq = String(q || "")
+      .trim()
+      .toUpperCase();
+    return (latestByCode || []).filter((r) => {
+      if (stateFilter !== "ALL" && r._state !== stateFilter) return false;
+
+      if (qq) {
+        const hay =
+          (r._codigo || "").includes(qq) ||
+          String(r.id_ot || "")
+            .toUpperCase()
+            .includes(qq) ||
+          String(r.ubicacion || "")
+            .toUpperCase()
+            .includes(qq);
+        if (!hay) return false;
+      }
+      return true;
+    });
+  }, [latestByCode, q, stateFilter]);
+
+  // Sort
+  const sorted = useMemo(() => {
+    const arr = [...filtered];
+    const dir = sortDir === "asc" ? 1 : -1;
+
+    const get = (r) => {
+      if (sortKey === "fecha") return r._fecha || "";
+      if (sortKey === "km") return r._km ?? -1;
+      if (sortKey === "codigo") return r._codigo || "";
+      if (sortKey === "estado") return r._state || "";
+      return "";
+    };
+
+    arr.sort((a, b) => {
+      const av = get(a);
+      const bv = get(b);
+      if (av < bv) return -1 * dir;
+      if (av > bv) return 1 * dir;
+      return 0;
+    });
+    return arr;
+  }, [filtered, sortKey, sortDir]);
+
+  // KPIs
+  const kpis = useMemo(() => {
+    const total = sorted.length;
+
+    let ok = 0,
+      pend = 0,
+      apag = 0,
+      otro = 0;
+
+    for (const r of sorted) {
+      if (r._state === "OK") ok++;
+      else if (r._state === "PENDIENTE") pend++;
+      else if (r._state === "APAGADO") apag++;
+      else otro++;
+    }
+
+    const pct = (n) => (total ? Math.round((n / total) * 100) : 0);
+
+    return {
+      total,
+      ok,
+      pend,
+      apag,
+      otro,
+      okPct: pct(ok),
+      pendPct: pct(pend),
+      apagPct: pct(apag),
+    };
+  }, [sorted]);
+
+  // Series por día (últimos 14 puntos)
+  const byDay = useMemo(() => {
+    const map = new Map();
+    for (const r of sorted) {
+      const d = r._fecha || "—";
+      map.set(d, (map.get(d) || 0) + 1);
+    }
+
+    const days = Array.from(map.entries())
+      .sort((a, b) => (a[0] < b[0] ? -1 : 1))
+      .slice(-14);
+
+    return days.map(([d, n]) => ({
+      x: d,
+      label: d,
+      value: n,
+    }));
+  }, [sorted]);
+
+  // Top por ramal
+  const byRamal = useMemo(() => {
+    const m = new Map();
+    for (const r of sorted) {
+      const rr = r.ramal || "UNKNOWN";
+      m.set(rr, (m.get(rr) || 0) + 1);
+    }
+    return Array.from(m.entries())
+      .map(([key, value]) => ({
+        label: RAMAL_RANGES[key]?.label || key,
+        value,
+        tone: "neutral",
+      }))
+      .sort((a, b) => b.value - a.value);
+  }, [sorted]);
+
+  // Distribución por estado
+  const byState = useMemo(() => {
+    return [
+      { label: "OK", value: kpis.ok, tone: "ok" },
+      { label: "Pendiente", value: kpis.pend, tone: "warn" },
+      { label: "Apagado", value: kpis.apag, tone: "danger" },
+      { label: "Otro", value: kpis.otro, tone: "neutral" },
+    ].filter((x) => x.value > 0);
+  }, [kpis]);
+
+  // Hotspots por KM (bucket 1km) -> top 12
+  const byKmBucket = useMemo(() => {
+    const m = new Map();
+    for (const r of sorted) {
+      const b = kmBucket(r._km, 1);
+      if (!b) continue;
+      m.set(b, (m.get(b) || 0) + 1);
+    }
+    return Array.from(m.entries())
+      .map(([label, value]) => ({ label, value, tone: "neutral" }))
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 12);
+  }, [sorted]);
+
+  function toggleSort(key) {
+    if (sortKey !== key) {
+      setSortKey(key);
+      setSortDir("desc");
+      return;
+    }
+    setSortDir((d) => (d === "asc" ? "desc" : "asc"));
   }
 
-  const list = ramal ? [ramal] : RAMALES;
+  function exportCSV() {
+    // Dataset listo para metrics/ML (simple, consistente)
+    const headers = [
+      "id",
+      "ot_id",
+      "id_ot",
+      "fecha",
+      "ramal",
+      "km",
+      "codigo",
+      "estado",
+      "resultado",
+      "luminaria_estado",
+      "ubicacion",
+    ];
+
+    const lines = [headers.join(",")];
+
+    for (const r of sorted) {
+      const row = [
+        r.id,
+        r.ot_id,
+        r.id_ot,
+        r._fecha,
+        r.ramal,
+        r._km ?? "",
+        (r._codigo || "").replace(/,/g, " "),
+        r._state,
+        upper(r.resultado),
+        upper(r.luminaria_estado),
+        String(r.ubicacion || "")
+          .replace(/\s+/g, " ")
+          .replace(/,/g, " "),
+      ];
+      lines.push(
+        row.map((x) => `"${String(x ?? "").replace(/"/g, '""')}"`).join(","),
+      );
+    }
+
+    const blob = new Blob([lines.join("\n")], {
+      type: "text/csv;charset=utf-8",
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+
+    const nameParts = [
+      "luminarias",
+      ramal || "todos",
+      from || "all",
+      to || "all",
+      onlyLatestPerCode ? "latest" : "raw",
+    ];
+    a.download = `${nameParts.join("_")}.csv`;
+
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 30_000);
+  }
 
   return (
-    <div className="page">
-      {/* Header PRO: Volver + Título */}
-      <button
-        type="button"
-        onClick={() => {
-          if (window.history.length > 1) navigate(-1);
-          else navigate("/"); // ajustá si tu home es otra ruta
-        }}
-        title="Volver"
-        className="back-fab"
-      >
-        <span className="back-fab-icon" aria-hidden>
-          <svg
-            viewBox="0 0 24 24"
-            width="20"
-            height="20"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2.6"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <path d="M15 18l-6-6 6-6" />
-          </svg>
-        </span>
-        <span className="back-fab-text">Volver</span>
-      </button>
-
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 10,
-          marginBottom: 8,
-        }}
-      >
+    <div className="page lumdash">
+      {/* Header */}
+      <div className="lumdash-top">
         <button
           type="button"
-          className="btn ghost"
+          className="lumdash-back"
           onClick={() => {
             if (window.history.length > 1) navigate(-1);
-            else navigate("/"); // ajustá si tu home es otra ruta
+            else navigate("/");
           }}
           title="Volver"
-          style={{ display: "inline-flex", alignItems: "center", gap: 8 }}
         >
-          <ArrowLeft size={18} />
+          <span className="lumdash-backIcon" aria-hidden>
+            <svg
+              viewBox="0 0 24 24"
+              width="18"
+              height="18"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.6"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M15 18l-6-6 6-6" />
+            </svg>
+          </span>
           Volver
         </button>
 
-        <h2 className="titulo" style={{ margin: 0 }}>
-          Ruta de Luminarias
-        </h2>
+        <div>
+          <div className="lumdash-title">Historial de Luminarias</div>
+          <div className="lumdash-sub">
+            KPIs · hotspots · dataset exportable
+          </div>
+        </div>
+
+        <button
+          type="button"
+          className="lumdash-btn"
+          onClick={exportCSV}
+          title="Export CSV"
+        >
+          Export CSV
+        </button>
       </div>
 
-      {/* Controles: filtros + toggle */}
-      <div className="card" style={{ padding: 12, marginBottom: 16 }}>
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "1fr 1fr 1fr",
-            gap: 10,
-            marginBottom: 10,
-          }}
-        >
+      {/* Filtros */}
+      <div className="lumdash-card lumdash-filters">
+        <div className="lumdash-grid3">
           <select
             value={ramal}
             onChange={(e) => updateParam("ramal", e.target.value)}
@@ -520,141 +529,204 @@ export default function HistorialLuminarias() {
           />
         </div>
 
-        {/* Toggle vista */}
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          <button
-            type="button"
-            className={viewMode === "auto" ? "btn" : "btn ghost"}
-            onClick={() => setViewMode("auto")}
-          >
-            Auto
-          </button>
-          <button
-            type="button"
-            className={viewMode === "2d" ? "btn" : "btn ghost"}
-            onClick={() => setViewMode("2d")}
-          >
-            2D
-          </button>
-          <button
-            type="button"
-            className={viewMode === "3d-low" ? "btn" : "btn ghost"}
-            onClick={() => setViewMode("3d-low")}
-          >
-            3D Lite
-          </button>
-          <button
-            type="button"
-            className={viewMode === "3d-high" ? "btn" : "btn ghost"}
-            onClick={() => setViewMode("3d-high")}
-          >
-            3D Pro
-          </button>
+        <div className="lumdash-grid3" style={{ marginTop: 10 }}>
+          <input
+            type="text"
+            placeholder="Buscar por código (PC4026), OT, ubicación…"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+          />
 
-          <span className="muted" style={{ alignSelf: "center", fontSize: 12 }}>
-            Auto recomienda por volumen y dispositivo.
-          </span>
+          <select
+            value={stateFilter}
+            onChange={(e) => setStateFilter(e.target.value)}
+          >
+            <option value="ALL">Todos los estados</option>
+            <option value="OK">Reparado / OK</option>
+            <option value="PENDIENTE">Pendiente</option>
+            <option value="APAGADO">Apagado</option>
+            <option value="OTRO">Otro</option>
+          </select>
+
+          <button
+            type="button"
+            className={`lumdash-toggle ${onlyLatestPerCode ? "is-on" : ""}`}
+            onClick={() => setOnlyLatestPerCode((v) => !v)}
+            title="Si está ON: una fila por luminaria (último estado)"
+          >
+            {onlyLatestPerCode ? "Último estado: ON" : "Último estado: OFF"}
+          </button>
+        </div>
+
+        <div className="lumdash-muted" style={{ marginTop: 10 }}>
+          Tip: dejá <b>Último estado ON</b> para métricas limpias (una fila por
+          luminaria). Ponelo OFF si querés ver todas las intervenciones
+          históricas.
         </div>
       </div>
 
-      {/* Leyenda */}
-      <div className="card" style={{ padding: 12, marginBottom: 16 }}>
-        <div
-          style={{ display: "flex", gap: 14, flexWrap: "wrap", fontSize: 13 }}
-        >
-          <span>
-            <span
-              style={{
-                display: "inline-block",
-                width: 10,
-                height: 10,
-                borderRadius: 3,
-                background: toneColor("ok"),
-                marginRight: 8,
-              }}
+      {loading && <div className="lumdash-muted">Cargando…</div>}
+      {error && <div className="error">{error}</div>}
+
+      {!loading && !error && (
+        <>
+          {/* KPIs */}
+          <div className="lumdash-kpis">
+            <div className="lumdash-kpi">
+              <div className="lumdash-kpiLabel">Total</div>
+              <div className="lumdash-kpiVal">{kpis.total}</div>
+              <div className="lumdash-kpiSub">Filtrado actual</div>
+            </div>
+
+            <div className="lumdash-kpi tone-ok">
+              <div className="lumdash-kpiLabel">OK</div>
+              <div className="lumdash-kpiVal">{kpis.ok}</div>
+              <div className="lumdash-kpiSub">{kpis.okPct}%</div>
+            </div>
+
+            <div className="lumdash-kpi tone-warn">
+              <div className="lumdash-kpiLabel">Pendientes</div>
+              <div className="lumdash-kpiVal">{kpis.pend}</div>
+              <div className="lumdash-kpiSub">{kpis.pendPct}%</div>
+            </div>
+
+            <div className="lumdash-kpi tone-danger">
+              <div className="lumdash-kpiLabel">Apagadas</div>
+              <div className="lumdash-kpiVal">{kpis.apag}</div>
+              <div className="lumdash-kpiSub">{kpis.apagPct}%</div>
+            </div>
+          </div>
+
+          {/* “Charts” */}
+          <div className="lumdash-grid2">
+            <div className="lumdash-card">
+              <div className="lumdash-cardhead">
+                <div className="lumdash-cardtitle">Volumen por día</div>
+                <div className="lumdash-muted">
+                  Últimos {Math.min(14, byDay.length)} días
+                </div>
+              </div>
+              <Sparkline points={byDay} />
+            </div>
+
+            <MiniBars
+              title="Estados"
+              subtitle="Distribución (según filtros)"
+              items={byState}
+              maxBars={6}
             />
-            Reparado / Completo
-          </span>
-          <span>
-            <span
-              style={{
-                display: "inline-block",
-                width: 10,
-                height: 10,
-                borderRadius: 3,
-                background: toneColor("warn"),
-                marginRight: 8,
-              }}
+
+            <MiniBars
+              title="Top ramales"
+              subtitle="Dónde hubo más registros"
+              items={byRamal}
+              maxBars={8}
             />
-            Pendiente / Parcial
-          </span>
-          <span>
-            <span
-              style={{
-                display: "inline-block",
-                width: 10,
-                height: 10,
-                borderRadius: 3,
-                background: toneColor("danger"),
-                marginRight: 8,
-              }}
+
+            <MiniBars
+              title="Hotspots KM"
+              subtitle="Buckets de 1km (top 12)"
+              items={byKmBucket}
+              maxBars={12}
             />
-            Apagado
-          </span>
-        </div>
-      </div>
+          </div>
 
-      {loading && <div className="muted">Cargando ruta…</div>}
-      {error && <div className="muted">{error}</div>}
+          {/* Tabla */}
+          <div className="lumdash-card" style={{ marginTop: 14 }}>
+            <div className="lumdash-tableHead">
+              <div>
+                <div className="lumdash-cardtitle">Detalle</div>
+                <div className="lumdash-muted">
+                  {sorted.length} filas · click para abrir OT
+                </div>
+              </div>
 
-      {!loading &&
-        !error &&
-        list.map((r) => {
-          const rowsR = grouped[r] || [];
-          const pinCount = rowsR.length;
+              <div className="lumdash-sortRow">
+                <SortBtn
+                  active={sortKey === "fecha"}
+                  dir={sortDir}
+                  label="Fecha"
+                  onClick={() => toggleSort("fecha")}
+                />
+                <SortBtn
+                  active={sortKey === "km"}
+                  dir={sortDir}
+                  label="KM"
+                  onClick={() => toggleSort("km")}
+                />
+                <SortBtn
+                  active={sortKey === "codigo"}
+                  dir={sortDir}
+                  label="Código"
+                  onClick={() => toggleSort("codigo")}
+                />
+                <SortBtn
+                  active={sortKey === "estado"}
+                  dir={sortDir}
+                  label="Estado"
+                  onClick={() => toggleSort("estado")}
+                />
+              </div>
+            </div>
 
-          // Decide según toggle
-          let mode = "2d";
-          let quality = "low";
-
-          if (viewMode === "2d") {
-            mode = "2d";
-          } else if (viewMode === "3d-low") {
-            mode = "3d";
-            quality = "low";
-          } else if (viewMode === "3d-high") {
-            mode = "3d";
-            quality = "high";
-          } else {
-            // auto
-            const auto = pickRenderMode(pinCount);
-            mode = auto.mode;
-            quality = auto.quality;
-          }
-
-          if (mode === "3d") {
-            return (
-              <Autopista3D
-                key={r}
-                ramalLabel={RAMAL_RANGES[r].label}
-                kmMin={RAMAL_RANGES[r].min}
-                kmMax={RAMAL_RANGES[r].max}
-                rows={rowsR}
-                quality={quality}
-                onPinClick={(row) => navigate(`/detalle/${row.id}`)}
-              />
-            );
-          }
-
-          return (
-            <AutopistaTrack
-              key={r}
-              ramal={r}
-              rows={rowsR}
-              onPinClick={(p) => navigate(`/detalle/${p.id}`)}
-            />
-          );
-        })}
+            <div className="lumdash-tableWrap">
+              <table className="lumdash-table">
+                <thead>
+                  <tr>
+                    <th>Fecha</th>
+                    <th>Ramal</th>
+                    <th>KM</th>
+                    <th>Código</th>
+                    <th>Estado</th>
+                    <th>OT</th>
+                    <th>Ubicación</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sorted.map((r) => (
+                    <tr
+                      key={String(r.id)}
+                      className={`row-${r._state}`}
+                      onClick={() => navigate(`/detalle/${r.id}`)}
+                      title="Abrir OT"
+                    >
+                      <td className="mono">{r._fecha || "—"}</td>
+                      <td>{RAMAL_RANGES[r.ramal]?.label || r.ramal || "—"}</td>
+                      <td className="mono">
+                        {r._km !== null ? r._km.toFixed(2) : "—"}
+                      </td>
+                      <td className="mono">{r._codigo || "—"}</td>
+                      <td>
+                        <span className={`pill pill-${r._state}`}>
+                          {stateLabel(r._state)}
+                        </span>
+                      </td>
+                      <td className="mono">
+                        {r.id_ot ||
+                          `OT-${Number(r.ot_id || 0)
+                            .toString()
+                            .padStart(6, "0")}`}
+                      </td>
+                      <td className="clip">{r.ubicacion || "—"}</td>
+                    </tr>
+                  ))}
+                  {!sorted.length && (
+                    <tr>
+                      <td
+                        colSpan={7}
+                        className="lumdash-muted"
+                        style={{ padding: 14 }}
+                      >
+                        Sin resultados con los filtros actuales.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }

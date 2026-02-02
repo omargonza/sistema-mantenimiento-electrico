@@ -47,7 +47,7 @@ export default function Historial() {
 
   // UI filter (local)
   const [soloPendientes, setSoloPendientes] = useState(
-    searchParams.get("pendientes") === "1"
+    searchParams.get("pendientes") === "1",
   );
 
   // paginación
@@ -176,7 +176,7 @@ export default function Historial() {
       fetchHistorial(tableroSel, { page: 1, page_size: PAGE_SIZE });
       setSearchParams(
         { tablero: tableroSel.trim(), page: "1" },
-        { replace: true }
+        { replace: true },
       );
     } else {
       setResp(null);
@@ -271,7 +271,7 @@ export default function Historial() {
 
     // orden por nombre de tablero, y dentro por fecha desc si el backend no lo hace
     const arr = Array.from(map.values()).sort((a, b) =>
-      a.tablero.localeCompare(b.tablero, "es", { sensitivity: "base" })
+      a.tablero.localeCompare(b.tablero, "es", { sensitivity: "base" }),
     );
 
     return arr;

@@ -9,6 +9,7 @@ import { enviarOT, tableroExists } from "../api";
 
 import { vibrar } from "../utils/haptics";
 import "../styles/app.css";
+import "../styles/nuevaOt.css";
 import useFormStore from "../hooks/useFormStore";
 import Toast from "../components/Toast";
 import TableroAutocomplete from "../components/TableroAutocomplete";
@@ -841,7 +842,7 @@ export default function NuevaOT() {
   );
 
   return (
-    <div className="page">
+    <div className="page op-mode">
       <h2 className="titulo">Nueva Orden de Trabajo</h2>
 
       <label>Fecha</label>

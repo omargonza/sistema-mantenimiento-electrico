@@ -1,66 +1,67 @@
 /* ===========================================
-   APP.CSS — ESTÉTICA DETALLE (DASHBOARD AZUL)
-   Nueva OT / Historial / Formulario táctil
+   APP.CSS — RÚSTICO INDUSTRIAL (CHAPA MILITAR)
+   - Mantiene clases y lógica
+   - Solo cambia estética visual (verde/oliva + arena)
+   - Sin blur/backdrop-filter (performance OK)
 =========================================== */
 
+/* =========================
+   TOKENS
+========================= */
 :root {
-  --bg: #020617;
-  --bg2: rgba(15, 23, 42, 0.92);
+  /* Fondo (asfalto verdoso) */
+  --bg: #060a08; /* negro verdoso */
+  --bg-soft: #0b1210; /* panel */
+  --bg-soft2: #0f1916; /* panel 2 */
 
-  --text: #e5e7eb;
-  --muted: #9ca3af;
+  /* Texto */
+  --text: #e7efe9;
+  --muted: rgba(231, 239, 233, 0.64);
 
-  --primary: #2563eb;
-  --primary2: #38bdf8;
+  /* Marca (militar oliva + arena) */
+  --primary: #8aa85a; /* oliva */
+  --primary2: #c2d59a; /* oliva pálido */
   --danger: #ef4444;
   --ok: #22c55e;
-  --warning: #f59e0b;
+  --warning: #d6b25e; /* arena */
 
-  --border: rgba(148, 163, 184, 0.25);
-  --border2: rgba(51, 65, 85, 0.9);
+  /* Bordes (chapa) */
+  --border: rgba(231, 239, 233, 0.12);
+  --border-strong: rgba(231, 239, 233, 0.18);
 
-  --radius: 16px;
-  --radius-sm: 12px;
-
+  /* Radios / spacing (más rústico: menos redondeo) */
+  --radius: 12px;
+  --radius-sm: 10px;
   --pad: 16px;
   --gap: 12px;
 
+  /* Alturas */
   --h: 48px;
-  --shadow: 0 12px 25px rgba(15, 23, 42, 0.85);
-  --focus: 0 0 0 3px rgba(56, 189, 248, 0.22);
 
-  /* Chips (tags) */
-  --chip-bg: rgba(15, 23, 42, 0.52);
-  --chip-border: rgba(148, 163, 184, 0.32);
-  --chip-hover: rgba(15, 23, 42, 0.72);
-  --chip-active-bg: rgba(37, 99, 235, 0.18);
-  --chip-active-border: rgba(56, 189, 248, 0.55);
+  /* Bottom nav */
+  --bottom-nav-h: 74px;
+  --page-bottom: calc(var(--bottom-nav-h) + 20px + env(safe-area-inset-bottom));
+
+  /* Sombras (secas, industriales) */
+  --shadow-1: 0 10px 18px rgba(0, 0, 0, 0.58);
+  --shadow-2: 0 16px 30px rgba(0, 0, 0, 0.72);
+
+  /* Focus accesible */
+  --focus: 0 0 0 3px rgba(138, 168, 90, 0.18);
+
+  /* Chips */
+  --chip-bg: rgba(11, 18, 16, 0.96);
+  --chip-border: rgba(231, 239, 233, 0.14);
+  --chip-hover: rgba(15, 25, 22, 0.98);
+  --chip-active-bg: rgba(138, 168, 90, 0.14);
+  --chip-active-border: rgba(194, 213, 154, 0.55);
 
   font-size: 16px;
 }
-:root {
-  /* Ajustá si tu barra mide distinto */
-  --bottom-nav-h: 74px;
-}
 
-/* Cualquier pantalla con bottom-nav fija necesita “aire” abajo */
-.page,
-.detalle-page,
-.dashboard-page,
-.historial-page {
-  padding-bottom: calc(
-    var(--bottom-nav-h) + 20px + env(safe-area-inset-bottom)
-  );
-}
-
-/* Si tu bottom bar es fixed, confirmá altura real */
-.bottom-nav,
-.nav-bottom,
-.tabbar {
-  height: var(--bottom-nav-h);
-}
-
-/* ===== Reset ===== */
+/* =========================
+   RESET / BASE
+========================= */
 *,
 *::before,
 *::after {
@@ -75,18 +76,6 @@ body {
 
 body {
   margin: 0;
-  background:
-    radial-gradient(
-      900px 600px at 15% 0%,
-      rgba(56, 189, 248, 0.12),
-      transparent 55%
-    ),
-    radial-gradient(
-      900px 600px at 90% 20%,
-      rgba(37, 99, 235, 0.12),
-      transparent 55%
-    ),
-    var(--bg);
   color: var(--text);
   font-family:
     system-ui,
@@ -95,6 +84,21 @@ body {
     "Segoe UI",
     sans-serif;
   -webkit-tap-highlight-color: transparent;
+
+  /* Rústico militar: asfalto + tinte oliva (sin blur) */
+  background:
+    linear-gradient(180deg, rgba(231, 239, 233, 0.03), transparent 28%),
+    radial-gradient(
+      900px 600px at 12% 0%,
+      rgba(138, 168, 90, 0.12),
+      transparent 55%
+    ),
+    radial-gradient(
+      900px 600px at 90% 18%,
+      rgba(194, 213, 154, 0.06),
+      transparent 55%
+    ),
+    var(--bg);
 }
 
 #root {
@@ -102,47 +106,56 @@ body {
   overflow: visible !important;
 }
 
-/* ===== Page ===== */
+/* =========================
+   PAGE LAYOUT
+========================= */
+.page,
+.detalle-page,
+.dashboard-page,
+.historial-page {
+  padding-bottom: var(--page-bottom);
+}
+
 .page {
-  padding: 0.75rem 1rem 8.5rem;
+  padding: 0.75rem 1rem var(--page-bottom);
   max-width: 640px;
   margin: 0 auto;
   min-height: 100vh;
   overflow: visible !important;
-  animation: fadeIn 0.2s ease;
-  padding-bottom: calc(8.5rem + env(safe-area-inset-bottom));
+  animation: fadeIn 0.18s ease;
 }
 
-/* ===== Títulos ===== */
+/* =========================
+   TYPO
+========================= */
 .titulo {
   margin: 0.75rem 0 0.25rem;
-  font-size: 1.05rem;
-  font-weight: 700;
-  color: #f9fafb;
-  letter-spacing: 0.02em;
+  font-size: 1.02rem;
+  font-weight: 950;
+  color: #f4fbf6;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
 }
 
 .subtitulo {
   margin: 1.1rem 0 0.6rem;
-  font-size: 0.85rem;
-  font-weight: 600;
-  color: #cbd5f5;
-  letter-spacing: 0.03em;
+  font-size: 0.8rem;
+  font-weight: 950;
+  color: rgba(231, 239, 233, 0.7);
+  letter-spacing: 0.12em;
   text-transform: uppercase;
 }
 
-/* ===== Labels directos ===== */
 .page > label {
   display: block;
   margin: 0.75rem 0 0.35rem;
-  font-size: 0.72rem;
+  font-size: 0.7rem;
   text-transform: uppercase;
   color: var(--muted);
-  letter-spacing: 0.04em;
-  font-weight: 600;
+  letter-spacing: 0.12em;
+  font-weight: 950;
 }
 
-/* ===== Utilidades ===== */
 .text-muted,
 .muted {
   color: var(--muted);
@@ -151,27 +164,37 @@ body {
   margin-top: 1rem;
 }
 
-/* Error (Historial) */
+/* Error */
 .error {
-  color: #fecaca;
-  background: rgba(127, 29, 29, 0.35);
-  border: 1px solid rgba(248, 113, 113, 0.55);
+  color: #ffe0e0;
+  background: rgba(127, 29, 29, 0.24);
+  border: 1px solid rgba(248, 113, 113, 0.42);
   padding: 10px 12px;
-  border-radius: 12px;
+  border-radius: 10px;
 }
 
-/* ===== Inputs / Select / Textarea ===== */
+/* =========================
+   INPUTS
+========================= */
 input,
 select,
 textarea {
   width: 100%;
-  background: rgba(15, 23, 42, 0.9);
   color: var(--text);
-  border: 1px solid var(--border2);
-  border-radius: 0.9rem;
+  border: 1px solid var(--border-strong);
+  border-radius: 0.75rem;
   outline: none;
   box-shadow: none;
   font-size: 0.95rem;
+
+  /* “Pintura epoxi” mate */
+  background:
+    linear-gradient(
+      180deg,
+      rgba(231, 239, 233, 0.04),
+      rgba(231, 239, 233, 0.01)
+    ),
+    rgba(11, 18, 16, 0.96);
 }
 
 input,
@@ -191,17 +214,17 @@ textarea {
 
 input::placeholder,
 textarea::placeholder {
-  color: rgba(156, 163, 175, 0.75);
+  color: rgba(231, 239, 233, 0.42);
 }
 
 input:focus,
 select:focus,
 textarea:focus {
-  border-color: rgba(56, 189, 248, 0.55);
+  border-color: rgba(194, 213, 154, 0.45);
   box-shadow: var(--focus);
 }
 
-/* ===== NumericInput (.campo + .input) ===== */
+/* NumericInput */
 .campo {
   display: block;
   margin-top: 0.75rem;
@@ -219,9 +242,15 @@ label.campo > input.input {
   width: 100%;
   height: var(--h);
   padding: 0 0.85rem;
-  border-radius: 0.9rem;
-  border: 1px solid var(--border2);
-  background: rgba(15, 23, 42, 0.9);
+  border-radius: 0.75rem;
+  border: 1px solid var(--border-strong);
+  background:
+    linear-gradient(
+      180deg,
+      rgba(231, 239, 233, 0.04),
+      rgba(231, 239, 233, 0.01)
+    ),
+    rgba(11, 18, 16, 0.96);
   color: var(--text);
   outline: none;
   font-size: 0.95rem;
@@ -229,11 +258,11 @@ label.campo > input.input {
 
 .input:focus,
 label.campo > input.input:focus {
-  border-color: rgba(56, 189, 248, 0.55);
+  border-color: rgba(194, 213, 154, 0.45);
   box-shadow: var(--focus);
 }
 
-/* ===== SmartSelect ===== */
+/* SmartSelect */
 .smartselect {
   margin-top: 0.75rem;
 }
@@ -241,50 +270,83 @@ label.campo > input.input:focus {
 .smartselect > label {
   display: block;
   margin: 0 0 0.35rem;
-  font-size: 0.72rem;
+  font-size: 0.7rem;
   text-transform: uppercase;
   color: var(--muted);
-  letter-spacing: 0.04em;
-  font-weight: 600;
+  letter-spacing: 0.12em;
+  font-weight: 950;
 }
 
 .smartselect-display {
   width: 100%;
   height: var(--h);
   padding: 0 0.85rem;
-  border-radius: 0.9rem;
-  border: 1px solid var(--border2);
-  background: rgba(15, 23, 42, 0.9);
+  border-radius: 0.75rem;
+  border: 1px solid var(--border-strong);
+  background:
+    linear-gradient(
+      180deg,
+      rgba(231, 239, 233, 0.04),
+      rgba(231, 239, 233, 0.01)
+    ),
+    rgba(11, 18, 16, 0.96);
   color: var(--text);
 }
 
-/* ===========================================
-   CARD — base
-=========================================== */
+/* =========================
+   CARD — chapa militar
+========================= */
 .card {
   border-radius: var(--radius);
-  border: 1px solid rgba(148, 163, 184, 0.18);
-  background: linear-gradient(
-    180deg,
-    rgba(15, 23, 42, 0.92),
-    rgba(2, 6, 23, 0.92)
-  );
-  box-shadow: 0 10px 22px rgba(2, 6, 23, 0.55);
+  border: 1px solid var(--border);
+  /* Chapa: patrón sutil + pintura mate */
+  background:
+    repeating-linear-gradient(
+      135deg,
+      rgba(231, 239, 233, 0.03) 0px,
+      rgba(231, 239, 233, 0.03) 6px,
+      rgba(0, 0, 0, 0) 6px,
+      rgba(0, 0, 0, 0) 14px
+    ),
+    linear-gradient(
+      180deg,
+      rgba(231, 239, 233, 0.05),
+      rgba(231, 239, 233, 0.01)
+    ),
+    rgba(11, 18, 16, 0.92);
+  box-shadow: var(--shadow-1);
   padding: 12px;
+  position: relative;
 }
 
-/* ===========================================
-   BOTONES
-=========================================== */
+/* Filete superior (placa identificatoria) */
+.card::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  height: 3px;
+  width: 100%;
+  background: linear-gradient(
+    90deg,
+    rgba(138, 168, 90, 0.92),
+    rgba(194, 213, 154, 0.55)
+  );
+  opacity: 0.95;
+}
 
-/* Botón X */
+/* =========================
+   BOTONES
+========================= */
 .btn-x {
   width: 44px;
   height: 44px;
-  border-radius: 0.85rem;
-  border: 1px solid rgba(248, 113, 113, 0.65);
-  background: rgba(127, 29, 29, 0.4);
-  color: #fecaca;
+  border-radius: 10px;
+  border: 1px solid rgba(248, 113, 113, 0.52);
+  background:
+    linear-gradient(180deg, rgba(231, 239, 233, 0.03), rgba(0, 0, 0, 0.05)),
+    rgba(127, 29, 29, 0.24);
+  color: #ffd1d1;
   cursor: pointer;
   display: inline-flex;
   align-items: center;
@@ -294,32 +356,43 @@ label.campo > input.input:focus {
   transform: translateY(1px);
 }
 
-/* Agregar */
 .btn-add {
   margin-top: 0.85rem;
   width: 100%;
   height: 50px;
-  border-radius: 999px;
-  font-weight: 700;
-  font-size: 0.9rem;
-  border: 1px solid rgba(148, 163, 184, 0.8);
-  background-color: rgba(15, 23, 42, 0.9);
+  border-radius: 12px;
+  font-weight: 950;
+  font-size: 0.88rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  border: 1px solid rgba(231, 239, 233, 0.18);
+  background:
+    linear-gradient(180deg, rgba(231, 239, 233, 0.05), rgba(0, 0, 0, 0.06)),
+    rgba(11, 18, 16, 0.92);
   color: var(--text);
   cursor: pointer;
+  box-shadow: 0 10px 18px rgba(0, 0, 0, 0.45);
 }
 .btn-add:active {
   transform: translateY(1px);
 }
 
-/* Outline (botones reales) */
 .btn-outline {
   height: 46px;
-  border-radius: 999px;
+  border-radius: 12px;
   padding: 0 14px;
-  border: 1px solid rgba(148, 163, 184, 0.45);
-  background: rgba(15, 23, 42, 0.55);
+  border: 1px solid rgba(231, 239, 233, 0.18);
+  background:
+    linear-gradient(
+      180deg,
+      rgba(231, 239, 233, 0.04),
+      rgba(231, 239, 233, 0.01)
+    ),
+    rgba(11, 18, 16, 0.84);
   color: var(--text);
-  font-weight: 700;
+  font-weight: 950;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
   cursor: pointer;
   transition:
     transform 0.06s ease,
@@ -327,8 +400,14 @@ label.campo > input.input:focus {
     background 0.12s ease;
 }
 .btn-outline:hover {
-  border-color: rgba(56, 189, 248, 0.55);
-  background: rgba(15, 23, 42, 0.7);
+  border-color: rgba(194, 213, 154, 0.4);
+  background:
+    linear-gradient(
+      180deg,
+      rgba(231, 239, 233, 0.05),
+      rgba(231, 239, 233, 0.01)
+    ),
+    rgba(15, 25, 22, 0.92);
 }
 .btn-outline:active {
   transform: translateY(1px);
@@ -338,24 +417,29 @@ label.campo > input.input:focus {
   cursor: not-allowed;
 }
 
-/* CTA final */
+/* CTA final (sticky) */
 .btn-enviar {
   margin-top: 1rem;
   width: 100%;
   height: 54px;
   border: none;
-  border-radius: 999px;
-  font-weight: 800;
-  font-size: 0.95rem;
-  letter-spacing: 0.02em;
-  color: #f9fafb;
-  background: linear-gradient(90deg, var(--primary), var(--primary2));
-  box-shadow: 0 14px 30px rgba(37, 99, 235, 0.25);
+  border-radius: 12px;
+  font-weight: 950;
+  font-size: 0.9rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #0b0f0d;
+
+  /* Oliva + highlight “pintura” */
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.22), rgba(0, 0, 0, 0.1)),
+    linear-gradient(90deg, var(--primary), var(--primary2));
+
+  box-shadow: 0 18px 34px rgba(0, 0, 0, 0.62);
   cursor: pointer;
 
   position: sticky;
   bottom: 12px;
-  margin-top: 14px;
 }
 .btn-enviar:disabled {
   opacity: 0.65;
@@ -366,10 +450,9 @@ label.campo > input.input:focus {
   transform: translateY(1px);
 }
 
-/* ===========================================
-   CHIPS (TAGS) — Circuitos frecuentes
-   - Compactos, táctiles, no “botón grande”
-=========================================== */
+/* =========================
+   CHIPS
+========================= */
 .chips {
   display: flex;
   gap: 8px;
@@ -381,18 +464,24 @@ label.campo > input.input:focus {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-
-  height: 34px; /* compacto */
+  height: 32px;
   padding: 0 10px;
-  border-radius: 999px;
+  border-radius: 10px;
 
   border: 1px solid var(--chip-border);
-  background: var(--chip-bg);
-  color: #e5e7eb;
+  background:
+    linear-gradient(
+      180deg,
+      rgba(231, 239, 233, 0.04),
+      rgba(231, 239, 233, 0.01)
+    ),
+    var(--chip-bg);
+  color: var(--text);
 
-  font-weight: 800;
-  font-size: 0.82rem;
-  letter-spacing: 0.01em;
+  font-weight: 950;
+  font-size: 0.8rem;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
 
   cursor: pointer;
   user-select: none;
@@ -404,8 +493,14 @@ label.campo > input.input:focus {
 }
 
 .chip:hover {
-  background: var(--chip-hover);
-  border-color: rgba(56, 189, 248, 0.45);
+  background:
+    linear-gradient(
+      180deg,
+      rgba(231, 239, 233, 0.05),
+      rgba(231, 239, 233, 0.01)
+    ),
+    var(--chip-hover);
+  border-color: rgba(194, 213, 154, 0.38);
 }
 
 .chip:active {
@@ -413,9 +508,15 @@ label.campo > input.input:focus {
 }
 
 .chip--active {
-  background: var(--chip-active-bg);
+  background:
+    linear-gradient(
+      180deg,
+      rgba(231, 239, 233, 0.05),
+      rgba(231, 239, 233, 0.01)
+    ),
+    var(--chip-active-bg);
   border-color: var(--chip-active-border);
-  box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.12);
+  box-shadow: 0 0 0 3px rgba(138, 168, 90, 0.1);
 }
 
 .chip-count {
@@ -426,33 +527,51 @@ label.campo > input.input:focus {
   min-width: 22px;
   height: 22px;
   padding: 0 6px;
-  border-radius: 999px;
+  border-radius: 10px;
 
-  border: 1px solid rgba(148, 163, 184, 0.25);
-  background: rgba(2, 6, 23, 0.55);
-  color: rgba(229, 231, 235, 0.9);
+  border: 1px solid rgba(231, 239, 233, 0.14);
+  background: rgba(0, 0, 0, 0.28);
+  color: rgba(231, 239, 233, 0.92);
 
   font-size: 0.72rem;
-  font-weight: 900;
+  font-weight: 950;
 }
 
-/* Si querés “chip apagado” cuando carga */
 .chip--disabled {
   opacity: 0.65;
   cursor: not-allowed;
 }
 
-/* ===========================================
-   Filas Técnicos / Materiales
-=========================================== */
+.chip--danger {
+  border-color: rgba(248, 113, 113, 0.42);
+  background:
+    linear-gradient(180deg, rgba(231, 239, 233, 0.03), rgba(0, 0, 0, 0.05)),
+    rgba(127, 29, 29, 0.2);
+}
+.chip--danger:hover {
+  border-color: rgba(248, 113, 113, 0.62);
+  background:
+    linear-gradient(180deg, rgba(231, 239, 233, 0.04), rgba(0, 0, 0, 0.06)),
+    rgba(127, 29, 29, 0.28);
+}
+
+/* =========================
+   FILAS Técnicos / Materiales
+========================= */
 .fila-tecnico,
 .fila-mat {
   margin-top: 0.65rem;
   padding: 0.65rem;
-  border-radius: 1rem;
-  background: rgba(15, 23, 42, 0.9);
-  border: 1px solid rgba(51, 65, 85, 0.9);
-  box-shadow: 0 8px 18px rgba(2, 6, 23, 0.55);
+  border-radius: 12px;
+  background:
+    linear-gradient(
+      180deg,
+      rgba(231, 239, 233, 0.04),
+      rgba(231, 239, 233, 0.01)
+    ),
+    rgba(11, 18, 16, 0.92);
+  border: 1px solid rgba(231, 239, 233, 0.14);
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.48);
   display: grid;
   gap: 0.6rem;
   align-items: center;
@@ -461,7 +580,6 @@ label.campo > input.input:focus {
 .fila-tecnico {
   grid-template-columns: 140px 1fr 44px;
 }
-
 .fila-mat {
   grid-template-columns: 1fr 110px 120px 44px;
 }
@@ -513,9 +631,9 @@ label.campo > input.input:focus {
   }
 }
 
-/* ===========================================
-   Fotos
-=========================================== */
+/* =========================
+   FOTOS
+========================= */
 .foto-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -525,10 +643,16 @@ label.campo > input.input:focus {
 
 .foto-item {
   position: relative;
-  border: 1px solid var(--border);
+  border: 1px solid rgba(231, 239, 233, 0.12);
   border-radius: 12px;
   overflow: hidden;
-  background: var(--bg2);
+  background:
+    linear-gradient(
+      180deg,
+      rgba(231, 239, 233, 0.04),
+      rgba(231, 239, 233, 0.01)
+    ),
+    rgba(11, 18, 16, 0.92);
 }
 
 .foto-item img {
@@ -544,29 +668,30 @@ label.campo > input.input:focus {
   right: 6px;
 }
 
-/* ===========================================
-   Historial / Timeline
-=========================================== */
+/* =========================
+   HISTORIAL / TIMELINE
+========================= */
 .timeline {
   border-radius: var(--radius);
-  border: 1px solid rgba(148, 163, 184, 0.16);
+  border: 1px solid rgba(231, 239, 233, 0.12);
   overflow: hidden;
-  background: rgba(2, 6, 23, 0.35);
+  background: rgba(0, 0, 0, 0.2);
 }
 
 .timeline-item {
   padding: 12px;
-  border-bottom: 1px solid rgba(51, 65, 85, 0.85);
+  border-bottom: 1px dashed rgba(231, 239, 233, 0.14);
+  position: relative;
 }
-
 .timeline-item:last-child {
   border-bottom: none;
 }
 
 .fecha {
   font-size: 0.78rem;
-  color: rgba(156, 163, 175, 0.9);
-  letter-spacing: 0.01em;
+  color: rgba(231, 239, 233, 0.62);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 
 .desc {
@@ -575,35 +700,264 @@ label.campo > input.input:focus {
   line-height: 1.35;
 }
 
-/* ===========================================
-   Autocomplete / Dropdown (compat)
-=========================================== */
+/* Top row */
+.row-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+/* Pendiente (arena) */
+.timeline-item.is-pendiente {
+  border-left: 3px solid rgba(214, 178, 94, 0.72);
+  background: linear-gradient(
+    90deg,
+    rgba(214, 178, 94, 0.1),
+    rgba(0, 0, 0, 0) 62%
+  );
+  box-shadow: inset 0 0 0 1px rgba(214, 178, 94, 0.1);
+  border-radius: 12px;
+}
+
+.badge-pendiente {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 10px;
+  font-size: 0.7rem;
+  font-weight: 950;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(255, 243, 219, 0.96);
+  background: rgba(214, 178, 94, 0.14);
+  border: 1px solid rgba(214, 178, 94, 0.35);
+  box-shadow: 0 10px 18px rgba(0, 0, 0, 0.3);
+  white-space: nowrap;
+}
+
+/* Toggle chip */
+.chip-toggle {
+  border: 1px solid rgba(231, 239, 233, 0.16);
+  background:
+    linear-gradient(
+      180deg,
+      rgba(231, 239, 233, 0.04),
+      rgba(231, 239, 233, 0.01)
+    ),
+    rgba(11, 18, 16, 0.76);
+  color: rgba(231, 239, 233, 0.92);
+  height: 40px;
+  padding: 0 12px;
+  border-radius: 10px;
+  font-weight: 950;
+  font-size: 0.78rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.chip-toggle:active {
+  transform: translateY(1px);
+}
+.chip-toggle.is-on {
+  border-color: rgba(214, 178, 94, 0.55);
+  background:
+    linear-gradient(
+      180deg,
+      rgba(231, 239, 233, 0.05),
+      rgba(231, 239, 233, 0.01)
+    ),
+    rgba(214, 178, 94, 0.1);
+  color: rgba(255, 243, 219, 0.98);
+  box-shadow: 0 0 0 3px rgba(214, 178, 94, 0.08);
+}
+.chip-toggle:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Agrupación */
+.group-block {
+  margin-top: 12px;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid rgba(231, 239, 233, 0.14);
+  background: rgba(11, 18, 16, 0.55);
+}
+
+.group-header {
+  position: sticky;
+  top: 10px;
+  z-index: 5;
+  padding: 10px 12px;
+  background:
+    linear-gradient(
+      180deg,
+      rgba(231, 239, 233, 0.04),
+      rgba(231, 239, 233, 0.01)
+    ),
+    rgba(6, 10, 8, 0.92);
+  border-bottom: 1px solid rgba(231, 239, 233, 0.14);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-weight: 950;
+}
+
+.group-items {
+  display: grid;
+}
+.group-items .timeline-item {
+  border-bottom: 1px dashed rgba(231, 239, 233, 0.12);
+}
+.group-items .timeline-item:last-child {
+  border-bottom: none;
+}
+
+/* =========================
+   DROPDOWN (sin blur)
+========================= */
 .dropdown {
   position: absolute;
   z-index: 50;
-  background: rgba(2, 6, 23, 0.96);
-  border: 1px solid rgba(148, 163, 184, 0.28);
+  background:
+    linear-gradient(
+      180deg,
+      rgba(231, 239, 233, 0.04),
+      rgba(231, 239, 233, 0.01)
+    ),
+    rgba(6, 10, 8, 0.98);
+  border: 1px solid rgba(231, 239, 233, 0.16);
   width: 100%;
   max-height: 38vh;
   overflow-y: auto;
   border-radius: 12px;
-  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.35);
-  backdrop-filter: blur(4px);
+  box-shadow: var(--shadow-2);
 }
 
 .dropdown-item {
   padding: 10px 12px;
-  border-bottom: 1px solid rgba(30, 41, 59, 0.8);
+  border-bottom: 1px solid rgba(231, 239, 233, 0.1);
 }
-
 .dropdown-item:hover {
-  background: rgba(30, 41, 59, 0.7);
+  background: rgba(15, 25, 22, 0.92);
   cursor: pointer;
 }
 
-/* ===========================================
-   Animación
-=========================================== */
+/* =========================
+   BOTTOM NAV Z-INDEX FIX
+========================= */
+.bottom-nav,
+.nav-bottom,
+.tabbar {
+  height: var(--bottom-nav-h);
+  position: fixed;
+  z-index: 20; /* menor que dropdown (50) */
+}
+
+/* Flotantes genéricos */
+.fab,
+.floating,
+.btn-float,
+.round-action {
+  z-index: 15 !important;
+}
+
+/* =========================
+   VOLVER — FAB (militar)
+========================= */
+.back-fab {
+  position: fixed;
+  left: 14px;
+  bottom: 14px;
+  z-index: 60;
+
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+
+  height: 46px;
+  padding: 0 14px 0 10px;
+
+  border-radius: 12px;
+  border: 1px solid rgba(231, 239, 233, 0.16);
+
+  background:
+    linear-gradient(
+      180deg,
+      rgba(231, 239, 233, 0.05),
+      rgba(231, 239, 233, 0.01)
+    ),
+    rgba(11, 18, 16, 0.92);
+
+  color: rgba(231, 239, 233, 0.96);
+  font-weight: 950;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+
+  cursor: pointer;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+
+  box-shadow: var(--shadow-2);
+
+  transition:
+    transform 0.12s ease,
+    box-shadow 0.12s ease,
+    border-color 0.12s ease;
+}
+
+.back-fab:hover {
+  transform: translateY(-1px);
+  border-color: rgba(194, 213, 154, 0.38);
+  box-shadow: 0 22px 52px rgba(0, 0, 0, 0.62);
+}
+
+.back-fab:active {
+  transform: translateY(0);
+  box-shadow: 0 14px 28px rgba(0, 0, 0, 0.52);
+}
+
+.back-fab:focus-visible {
+  outline: none;
+  box-shadow: var(--focus), var(--shadow-2);
+}
+
+.back-fab-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+
+  width: 30px;
+  height: 30px;
+  border-radius: 10px;
+
+  background: rgba(138, 168, 90, 0.14);
+  border: 1px solid rgba(194, 213, 154, 0.22);
+}
+
+.back-fab-text {
+  line-height: 1;
+  transform: translateY(1px);
+  white-space: nowrap;
+}
+
+@media (max-width: 420px) {
+  .back-fab {
+    padding: 0 10px;
+    width: 46px;
+    justify-content: center;
+  }
+  .back-fab-text {
+    display: none;
+  }
+}
+
+/* =========================
+   ANIM
+========================= */
 @keyframes fadeIn {
   from {
     opacity: 0;
@@ -614,251 +968,15 @@ label.campo > input.input:focus {
     transform: translateY(0);
   }
 }
-/* Chip mini de acción (Limpiar) */
-.chip--danger {
-  border-color: rgba(248, 113, 113, 0.55);
-  background: rgba(127, 29, 29, 0.22);
-}
 
-.chip--danger:hover {
-  border-color: rgba(248, 113, 113, 0.75);
-  background: rgba(127, 29, 29, 0.32);
-}
-/* ===========================================
-   HISTORIAL — Pendientes + Agrupación (sticky) + Toggle
-=========================================== */
-
-.timeline-item {
-  position: relative;
-}
-
-.row-top {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-}
-
-/* Borde/halo sutil SOLO cuando hay pendiente */
-.timeline-item.is-pendiente {
-  border-left: 3px solid rgba(245, 158, 11, 0.55);
-  background: linear-gradient(
-    90deg,
-    rgba(245, 158, 11, 0.1),
-    rgba(2, 6, 23, 0) 55%
-  );
-  box-shadow: inset 0 0 0 1px rgba(245, 158, 11, 0.12);
-  border-radius: 12px;
-}
-
-/* Badge tipo tag */
-.badge-pendiente {
-  display: inline-flex;
-  align-items: center;
-  padding: 4px 10px;
-  border-radius: 999px;
-  font-size: 0.72rem;
-  font-weight: 800;
-  letter-spacing: 0.02em;
-  color: rgba(255, 237, 213, 0.95);
-  background: rgba(245, 158, 11, 0.18);
-  border: 1px solid rgba(245, 158, 11, 0.35);
-  box-shadow: 0 8px 18px rgba(2, 6, 23, 0.35);
-  white-space: nowrap;
-}
-
-/* Toggle tipo chip (liviano, no “botón grande”) */
-.chip-toggle {
-  border: 1px solid rgba(148, 163, 184, 0.35);
-  background: rgba(15, 23, 42, 0.55);
-  color: rgba(229, 231, 235, 0.92);
-  height: 40px;
-  padding: 0 12px;
-  border-radius: 999px;
-  font-weight: 800;
-  font-size: 0.82rem;
-  letter-spacing: 0.01em;
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-}
-.chip-toggle:active {
-  transform: translateY(1px);
-}
-.chip-toggle.is-on {
-  border-color: rgba(245, 158, 11, 0.55);
-  background: rgba(245, 158, 11, 0.14);
-  color: rgba(255, 237, 213, 0.98);
-  box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.1);
-}
-.chip-toggle:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-/* =========================
-   Agrupación por tablero (modo “todo”) con sticky header
-========================= */
-
-.group-block {
-  margin-top: 12px;
-  border-radius: 14px;
-  overflow: hidden;
-  border: 1px solid rgba(51, 65, 85, 0.8);
-  background: rgba(15, 23, 42, 0.6);
-}
-
-.group-header {
-  position: sticky;
-  top: 10px; /* dentro del flujo */
-  z-index: 5;
-  padding: 10px 12px;
-  background: rgba(2, 6, 23, 0.88);
-  backdrop-filter: blur(6px);
-  border-bottom: 1px solid rgba(51, 65, 85, 0.85);
-}
-
-.group-items {
-  display: grid;
-}
-
-.group-items .timeline-item {
-  border-bottom: 1px solid rgba(51, 65, 85, 0.65);
-}
-.group-items .timeline-item:last-child {
-  border-bottom: none;
-}
-.page {
-  padding-bottom: calc(
-    var(--bottom-nav-h) + 20px + env(safe-area-inset-bottom)
-  ) !important;
-}
-/* =========================================================
-   PAGE: un solo padding-bottom real (bottom nav)
-   ========================================================= */
-:root {
-  --bottom-nav-h: 74px; /* ajustá si la barra mide distinto */
-  --page-bottom: calc(var(--bottom-nav-h) + 20px + env(safe-area-inset-bottom));
-}
-
-.page {
-  /* conserva tu padding top/side, pero bottom lo manda --page-bottom */
-  padding: 0.75rem 1rem var(--page-bottom) !important;
-}
-/* =========================================================
-   FIX: la barra inferior no puede tapar contenido “arriba”
-   ========================================================= */
-.bottom-nav,
-.nav-bottom,
-.tabbar {
-  position: fixed; /* si ya lo es, no molesta */
-  z-index: 20; /* menor que filtros-box (50) */
-}
-/* Corta-fuego: cualquier flotante genérico no debe tapar formularios */
-.fab,
-.floating,
-.btn-float,
-.round-action {
-  z-index: 15 !important;
-}
-
-/* ===========================
-   VOLVER — FAB FLOTANTE (PRO)
-=========================== */
-.back-fab {
-  --bg: rgba(2, 6, 23, 0.92);
-  --bg2: rgba(15, 23, 42, 0.92);
-  --border: rgba(148, 163, 184, 0.22);
-  --glow: rgba(59, 130, 246, 0.42);
-  --text: rgba(226, 232, 240, 0.95);
-
-  position: fixed;
-  left: 14px;
-  bottom: 14px;
-  z-index: 9999;
-
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-
-  height: 46px;
-  padding: 0 14px 0 10px;
-
-  border-radius: 16px;
-  border: 1px solid var(--border);
-  background: linear-gradient(180deg, var(--bg), var(--bg2));
-  color: var(--text);
-
-  font-weight: 950;
-  letter-spacing: 0.3px;
-
-  cursor: pointer;
-  user-select: none;
-  -webkit-tap-highlight-color: transparent;
-
-  box-shadow:
-    0 18px 40px rgba(0, 0, 0, 0.48),
-    0 0 0 1px rgba(255, 255, 255, 0.04),
-    inset 0 1px 0 rgba(255, 255, 255, 0.06);
-
-  transition:
-    transform 0.12s ease,
-    box-shadow 0.12s ease,
-    background 0.12s ease;
-}
-
-.back-fab:hover {
-  transform: translateY(-1px);
-  box-shadow:
-    0 22px 52px rgba(0, 0, 0, 0.55),
-    0 0 0 2px var(--glow),
-    inset 0 1px 0 rgba(255, 255, 255, 0.08);
-}
-
-.back-fab:active {
-  transform: translateY(0);
-  box-shadow:
-    0 14px 28px rgba(0, 0, 0, 0.52),
-    inset 0 2px 8px rgba(0, 0, 0, 0.45);
-}
-
-.back-fab:focus-visible {
-  outline: none;
-  box-shadow:
-    0 0 0 3px rgba(59, 130, 246, 0.65),
-    0 18px 40px rgba(0, 0, 0, 0.48);
-}
-
-.back-fab-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-
-  width: 30px;
-  height: 30px;
-  border-radius: 12px;
-
-  background: rgba(59, 130, 246, 0.14);
-  box-shadow:
-    inset 0 0 0 1px rgba(59, 130, 246, 0.28),
-    0 6px 14px rgba(0, 0, 0, 0.42);
-}
-
-.back-fab-text {
-  line-height: 1;
-  transform: translateY(1px);
-  white-space: nowrap;
-}
-
-/* Mobile: compacto */
-@media (max-width: 420px) {
-  .back-fab {
-    padding: 0 10px;
-    width: 46px;
-    justify-content: center;
+/* (Opcional) reduce motion */
+@media (prefers-reduced-motion: reduce) {
+  .page {
+    animation: none;
   }
-  .back-fab-text {
-    display: none;
+  .btn-outline,
+  .chip,
+  .back-fab {
+    transition: none;
   }
 }

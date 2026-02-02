@@ -2,13 +2,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import "../styles/dashboard.css";
-import {
-  queryOts,
-  getPdfBlob,
-  setFlags,
-  deleteOt,
-  migrateOtsOperationalFields,
-} from "../storage/ot_db";
+
+import { queryOts, migrateOtsOperationalFields } from "../storage/ot_db";
 
 function isoToday() {
   return new Date().toISOString().slice(0, 10);
@@ -26,58 +21,6 @@ function lastNDaysIso(n) {
 function formatMB(bytes) {
   const mb = bytes / (1024 * 1024);
   return `${mb.toFixed(mb >= 10 ? 0 : 1)} MB`;
-}
-
-function downloadBlob(blob, filename = "OT.pdf") {
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 30_000);
-}
-
-async function sharePdfBlob({ blob, filename, title, text }) {
-  const file = new File([blob], filename, { type: "application/pdf" });
-
-  if (
-    navigator.share &&
-    (!navigator.canShare || navigator.canShare({ files: [file] }))
-  ) {
-    await navigator.share({ title, text, files: [file] });
-    return true;
-  }
-
-  downloadBlob(blob, filename);
-  return false;
-}
-
-// Resaltado seguro (sin dangerouslySetInnerHTML)
-function highlightText(text, query) {
-  const s = String(text || "");
-  const q = String(query || "").trim();
-  if (!q) return s;
-
-  const escaped = q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const re = new RegExp(escaped, "ig");
-
-  const parts = s.split(re);
-  const matches = s.match(re);
-  if (!matches) return s;
-
-  const out = [];
-  for (let i = 0; i < parts.length; i++) {
-    out.push(parts[i]);
-    if (matches[i])
-      out.push(
-        <mark key={`${i}-${matches[i]}`} className="hl">
-          {matches[i]}
-        </mark>
-      );
-  }
-  return out;
 }
 
 function normalizeKey(s) {
@@ -115,7 +58,7 @@ function readOpFields(ot) {
     .trim()
     .toUpperCase();
   const luminaria_estado = String(
-    det?.luminaria_estado ?? ot?.luminaria_estado ?? ""
+    det?.luminaria_estado ?? ot?.luminaria_estado ?? "",
   )
     .trim()
     .toUpperCase();
@@ -126,91 +69,37 @@ function readOpFields(ot) {
 export default function Dashboard() {
   const navigate = useNavigate();
 
-  const [q, setQ] = useState("");
-  const [desde, setDesde] = useState("");
-  const [hasta, setHasta] = useState("");
-  const [soloFavoritos, setSoloFavoritos] = useState(false);
-  const [filtroZona, setFiltroZona] = useState("");
-
-  const [filtroEstado, setFiltroEstado] = useState("");
-  // "" | "CRITICO" | "PARCIAL" | "OK" | "SIN_ESTADO"
-
-  const [compacto, setCompacto] = useState(() => {
-    try {
-      return localStorage.getItem("dashboard_compacto") === "1";
-    } catch {
-      return false;
-    }
-  });
-
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    try {
-      localStorage.setItem("dashboard_compacto", compacto ? "1" : "0");
-    } catch {}
-  }, [compacto]);
+  // Filtro SOLO para el panel semáforo
+  const [filtroEstado, setFiltroEstado] = useState("");
+  // "" | "CRITICO" | "PARCIAL" | "OK" | "SIN_ESTADO"
 
-  // Trae items desde IndexedDB (queryOts)
+  // Trae items desde IndexedDB (universo)
   const refresh = async () => {
     setLoading(true);
     try {
       const data = await queryOts({
-        q,
-        desde,
-        hasta,
-        favorito: soloFavoritos ? true : null,
+        q: "",
+        desde: "",
+        hasta: "",
+        favorito: null,
       });
       setItems(Array.isArray(data) ? data : []);
     } finally {
       setLoading(false);
     }
   };
-  const runMigration = async () => {
-    try {
-      const res = await migrateOtsOperationalFields();
-      console.log("Migración OK:", res);
-      alert(
-        `Migración OK\nEscaneadas: ${res.scanned}\nActualizadas: ${res.updated}`
-      );
-      refresh();
-    } catch (e) {
-      console.error(e);
-      alert("Error en migración. Mirá la consola.");
-    }
-  };
 
   useEffect(() => {
     refresh();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [q, desde, hasta, soloFavoritos]);
+  }, []);
 
-  // Zonas disponibles (derivadas de items actuales)
-  const zonas = useMemo(() => {
-    const set = new Set();
-    for (const ot of items) {
-      const z = String(ot?.zona || "").trim();
-      if (z) set.add(z);
-    }
-    return [...set].sort((a, b) => a.localeCompare(b));
-  }, [items]);
-
-  // Filtro base por zona (rápido y seguro)
-  const itemsFiltrados = useMemo(() => {
-    if (!filtroZona) return items;
-    const target = filtroZona.trim().toLowerCase();
-    return items.filter(
-      (ot) =>
-        String(ot?.zona || "")
-          .trim()
-          .toLowerCase() === target
-    );
-  }, [items, filtroZona]);
-
-  // Insights / KPIs / Stats (sobre itemsFiltrados)
+  // KPIs “globales” (universo)
   const insights = useMemo(() => {
-    const total = itemsFiltrados.length;
+    const total = items.length;
     const hoy = isoToday();
     const ayer = isoYesterday();
     const from7 = lastNDaysIso(7);
@@ -226,7 +115,7 @@ export default function Dashboard() {
     const byTecnico = new Map();
     const byZona = new Map();
 
-    for (const ot of itemsFiltrados) {
+    for (const ot of items) {
       const fecha = ot.fecha || "";
       if (fecha === hoy) countHoy++;
       if (fecha === ayer) countAyer++;
@@ -273,82 +162,10 @@ export default function Dashboard() {
       topTableros,
       topTecnicos,
       topZonas,
-      hoy,
-      ayer,
-      from7,
     };
-  }, [itemsFiltrados]);
-
-  // Timeline (sobre itemsFiltrados)
-  const timeline = useMemo(() => {
-    const hoy = insights.hoy;
-    const ayer = insights.ayer;
-    const from7 = insights.from7;
-
-    const sections = [
-      { key: "hoy", title: "HOY", items: [] },
-      { key: "ayer", title: "AYER", items: [] },
-      { key: "semana", title: "ESTA SEMANA", items: [] },
-      { key: "anteriores", title: "ANTERIORES", items: [] },
-    ];
-
-    for (const ot of itemsFiltrados) {
-      const fecha = ot.fecha || "";
-      if (fecha === hoy) sections[0].items.push(ot);
-      else if (fecha === ayer) sections[1].items.push(ot);
-      else if (fecha >= from7) sections[2].items.push(ot);
-      else sections[3].items.push(ot);
-    }
-
-    return sections.filter((s) => s.items.length > 0);
-  }, [itemsFiltrados, insights.hoy, insights.ayer, insights.from7]);
-
-  const openPdf = async (ot) => {
-    const blob = await getPdfBlob(ot.pdfId || ot.id);
-    if (!blob) return;
-
-    try {
-      await setFlags(ot.id, { reimpreso: (ot.reimpreso || 0) + 1 });
-      refresh();
-    } catch {}
-
-    const url = URL.createObjectURL(blob);
-    window.open(url, "_blank", "noopener,noreferrer");
-    setTimeout(() => URL.revokeObjectURL(url), 60_000);
-  };
-
-  const sharePdf = async (ot) => {
-    const blob = await getPdfBlob(ot.pdfId || ot.id);
-    if (!blob) return;
-
-    const filename = `${ot.fecha || "OT"} - ${ot.tablero || "Tablero"}.pdf`;
-    const title = "Orden de Trabajo";
-    const text = `${ot.fecha || ""} — ${ot.tablero || ""}\n${
-      ot.ubicacion || ""
-    }`.trim();
-
-    try {
-      await sharePdfBlob({ blob, filename, title, text });
-      await setFlags(ot.id, { enviado: true });
-      refresh();
-    } catch (err) {
-      console.warn("Share cancelado o no disponible:", err);
-    }
-  };
-
-  const toggleFav = async (ot) => {
-    await setFlags(ot.id, { favorito: !ot.favorito });
-    refresh();
-  };
-
-  const remove = async (ot) => {
-    if (!confirm("¿Eliminar este PDF del respaldo local?")) return;
-    await deleteOt(ot.id);
-    refresh();
-  };
+  }, [items]);
 
   // ========= Panel tableros (semáforo manual + luminarias aparte) =========
-  // ✅ Se calcula sobre "items" (universo) para no apagarse con filtroZona
   const tableroPanel = useMemo(() => {
     const map = new Map(); // tableroKey -> info
 
@@ -359,9 +176,7 @@ export default function Dashboard() {
       if (!map.has(k)) {
         map.set(k, {
           name: (ot.tablero || "").trim() || "Sin tablero",
-          // estado explícito manual
-          estado: null,
-          // luminarias
+          estado: null, // estado explícito manual (TABLERO/CIRCUITO)
           lumReparadas: 0,
           lumPendientes: 0,
         });
@@ -372,19 +187,16 @@ export default function Dashboard() {
       const { alcance, resultado, estado_tablero, luminaria_estado } =
         readOpFields(ot);
 
-      const estadoExp = estado_tablero;
-      const lumEstado = luminaria_estado;
-
       // Semáforo: solo TABLERO/CIRCUITO con estado explícito
-      if ((alcance === "TABLERO" || alcance === "CIRCUITO") && estadoExp) {
-        info.estado = estadoExp; // último manda
+      if ((alcance === "TABLERO" || alcance === "CIRCUITO") && estado_tablero) {
+        info.estado = estado_tablero; // último manda
       }
 
       // Luminarias aparte (no afectan semáforo)
       if (alcance === "LUMINARIA") {
         const ok =
-          lumEstado === "REPARADO" ||
-          lumEstado === "ENCENDIDO" ||
+          luminaria_estado === "REPARADO" ||
+          luminaria_estado === "ENCENDIDO" ||
           resultado === "COMPLETO";
         if (ok) info.lumReparadas += 1;
         else info.lumPendientes += 1;
@@ -393,11 +205,7 @@ export default function Dashboard() {
 
     let arr = [...map.values()].map((x) => {
       const estadoFinal = x.estado; // null => SIN ESTADO
-      return {
-        ...x,
-        estadoFinal,
-        color: tableroColor(estadoFinal),
-      };
+      return { ...x, estadoFinal, color: tableroColor(estadoFinal) };
     });
 
     // ✅ aplicar filtro de estado (solo panel)
@@ -408,55 +216,82 @@ export default function Dashboard() {
       });
     }
 
-    // Orden: primero sin estado / crítico, después parcial, después ok
+    // Orden: sin estado primero, luego crítico, luego parcial, luego ok
     const rank = (e) =>
       e === "OK" ? 3 : e === "PARCIAL" ? 2 : e === "CRITICO" ? 1 : 0;
+
     arr.sort(
       (a, b) =>
         rank(a.estadoFinal) - rank(b.estadoFinal) ||
-        a.name.localeCompare(b.name)
+        a.name.localeCompare(b.name),
     );
 
     return arr;
   }, [items, filtroEstado]);
 
-  return (
-    <div className={`page ${compacto ? "is-compact" : ""}`}>
-      <h2 className="titulo">Mis PDFs</h2>
-      {/*
-<button
-  type="button"
-  className="btn-mini"
-  style={{ marginBottom: 12 }}
-  onClick={async () => {
-    if (
-      !confirm(
-        "Esto va a actualizar OTs viejas para el semáforo.\n\n¿Continuar?"
-      )
-    )
-      return;
-
+  // (Opcional) Migración: dejada lista por si la necesitás
+  const runMigration = async () => {
     try {
       const res = await migrateOtsOperationalFields();
       console.log("Migración OK:", res);
       alert(
-        `Migración completada\n\nEscaneadas: ${res.scanned}\nActualizadas: ${res.updated}`
+        `Migración OK\nEscaneadas: ${res.scanned}\nActualizadas: ${res.updated}`,
       );
       refresh();
     } catch (e) {
       console.error(e);
-      alert("Error en la migración. Mirá la consola.");
+      alert("Error en migración. Mirá la consola.");
     }
-  }}
->
-  Migrar OTs viejas (semáforo)
-</button>
-*/}
+  };
+
+  return (
+    <div className="page">
+      <h2 className="titulo">Centro de Control</h2>
+
+      {/* Accesos rápidos */}
+      <div className="card" style={{ marginTop: 10 }}>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+            gap: 10,
+          }}
+        >
+          <button
+            type="button"
+            className="btn-outline"
+            onClick={() => navigate("/nueva")}
+          >
+            ➕ Nueva OT
+          </button>
+
+          <button
+            type="button"
+            className="btn-outline"
+            onClick={() => navigate("/mis-pdfs")}
+          >
+            📜 Ver OTs
+          </button>
+
+          <button
+            type="button"
+            className="btn-outline"
+            onClick={() => navigate("/historial-luminarias")}
+          >
+            💡 Luminarias
+          </button>
+        </div>
+
+        <div className="muted" style={{ marginTop: 10, fontSize: 12 }}>
+          Dashboard = KPIs + semáforo + accesos. Los listados completos viven en
+          Historial.
+        </div>
+      </div>
 
       {/* KPIs */}
-      <div className="kpis">
+      <div className="kpis" style={{ marginTop: 12 }}>
         <div className="kpi">
-          <div className="kpi-label">Total</div>
+          <div className="kpi-label">Total OTs</div>
           <div className="kpi-value">{insights.total}</div>
         </div>
         <div className="kpi">
@@ -490,6 +325,7 @@ export default function Dashboard() {
         </div>
       </div>
 
+      {/* Top stats (resumen, no listado largo) */}
       <div className="stats-grid">
         {insights.topZonas.length > 0 && (
           <div className="statbox">
@@ -516,84 +352,54 @@ export default function Dashboard() {
         )}
       </div>
 
-      {/* Filtros */}
-      <div className="filtros-box">
-        <div style={{ flex: 1 }}>
-          <label>Búsqueda</label>
-          <input
-            type="text"
-            placeholder="tablero / ubicación / zona / vehículo…"
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-          />
+      {/* Controles del Panel */}
+      <div className="card" style={{ marginTop: 12 }}>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "1fr 1fr",
+            gap: 10,
+            alignItems: "center",
+          }}
+        >
+          <div>
+            <div className="muted" style={{ fontSize: 12, marginBottom: 6 }}>
+              Filtro (solo semáforo)
+            </div>
+            <select
+              value={filtroEstado}
+              onChange={(e) => setFiltroEstado(e.target.value)}
+            >
+              <option value="">Todos</option>
+              <option value="CRITICO">Crítico</option>
+              <option value="PARCIAL">Parcial</option>
+              <option value="OK">OK</option>
+              <option value="SIN_ESTADO">Sin estado</option>
+            </select>
+          </div>
+
+          <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+            <button type="button" className="btn-outline" onClick={refresh}>
+              🔄 Actualizar
+            </button>
+
+            {/* Opcional: dejalo si lo usás */}
+            <button
+              type="button"
+              className="btn-outline"
+              onClick={runMigration}
+              title="Actualiza campos operativos en OTs viejas (si hace falta)"
+            >
+              🧩 Migrar
+            </button>
+          </div>
         </div>
 
-        <div>
-          <label>Zona</label>
-          <select
-            value={filtroZona}
-            onChange={(e) => setFiltroZona(e.target.value)}
-          >
-            <option value="">Todas</option>
-            {zonas.map((z) => (
-              <option key={z} value={z}>
-                {z}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div>
-          <label>Estado</label>
-          <select
-            value={filtroEstado}
-            onChange={(e) => setFiltroEstado(e.target.value)}
-          >
-            <option value="">Todos</option>
-            <option value="CRITICO">Crítico</option>
-            <option value="PARCIAL">Parcial</option>
-            <option value="OK">OK</option>
-            <option value="SIN_ESTADO">Sin estado</option>
-          </select>
-        </div>
-
-        <div>
-          <label>Desde</label>
-          <input
-            type="date"
-            value={desde}
-            onChange={(e) => setDesde(e.target.value)}
-          />
-        </div>
-
-        <div>
-          <label>Hasta</label>
-          <input
-            type="date"
-            value={hasta}
-            onChange={(e) => setHasta(e.target.value)}
-          />
-        </div>
-
-        <div className="toggles">
-          <label className="toggle">
-            <span>⭐ Favoritos</span>
-            <input
-              type="checkbox"
-              checked={soloFavoritos}
-              onChange={(e) => setSoloFavoritos(e.target.checked)}
-            />
-          </label>
-
-          <label className="toggle">
-            <span>Compacto</span>
-            <input
-              type="checkbox"
-              checked={compacto}
-              onChange={(e) => setCompacto(e.target.checked)}
-            />
-          </label>
-        </div>
+        {loading && (
+          <div className="muted" style={{ marginTop: 10 }}>
+            Cargando…
+          </div>
+        )}
       </div>
 
       {/* Panel semáforo */}
@@ -611,21 +417,9 @@ export default function Dashboard() {
               key={t.name}
               type="button"
               className="tablero-card"
-              onClick={() => {
-                // ✅ evita quedar en 0 por filtros previos
-                setSoloFavoritos(false);
-                setFiltroZona("");
-                setFiltroEstado("");
-
-                setQ(t.name);
-
-                // ✅ no forzar 7 días: solo pone 30 días si no había rango
-                if (!desde && !hasta) setDesde(lastNDaysIso(30));
-                setHasta("");
-              }}
-              title={`${t.name} — Estado: ${
-                t.estadoFinal || "SIN ESTADO"
-              } · Luminarias ok:${t.lumReparadas} pend:${t.lumPendientes}`}
+              onClick={() =>
+                navigate(`/historial?tablero=${encodeURIComponent(t.name)}`)
+              }
               style={{ borderColor: t.color, color: t.color }}
             >
               <div className="tablero-head">
@@ -647,99 +441,12 @@ export default function Dashboard() {
             </button>
           ))}
         </div>
-      </div>
 
-      {/* Timeline */}
-      <div className="tabla-ot">
-        {loading && <p className="sin-datos">Cargando…</p>}
-
-        {!loading &&
-          timeline.map((section) => (
-            <div key={section.key} className="section">
-              <div className="section-title">{section.title}</div>
-
-              <div className="section-list">
-                {section.items.map((ot) => (
-                  <div
-                    key={ot.id}
-                    className={`fila-ot ${ot.enviado ? "is-sent" : ""} ${
-                      ot.favorito ? "is-fav" : ""
-                    }`}
-                  >
-                    <div
-                      className="ot-linea"
-                      onClick={() => navigate(`/detalle/${ot.id}`)}
-                    >
-                      <div className="ot-tablero">
-                        {highlightText(ot.tablero, q)}
-                      </div>
-
-                      <div className="ot-meta">
-                        <span className="ot-fecha">{ot.fecha}</span>
-                        {ot.zona ? (
-                          <span className="zbadge">
-                            {highlightText(ot.zona, q)}
-                          </span>
-                        ) : null}
-                        {ot.favorito && <span className="chip">⭐</span>}
-                        {ot.enviado && <span className="chip ok">ENVIADO</span>}
-                      </div>
-                    </div>
-
-                    <div className="ot-sub">
-                      {highlightText(ot.ubicacion, q)}
-                    </div>
-
-                    <div className="ot-info">
-                      <span className="pill">
-                        {highlightText(ot.tecnico || "-", q)}
-                      </span>
-                      <span className="pill">
-                        {highlightText(ot.vehiculo || "-", q)}
-                      </span>
-                    </div>
-
-                    <div className="ot-actions">
-                      <button
-                        type="button"
-                        className="btn-mini"
-                        onClick={() => openPdf(ot)}
-                      >
-                        Abrir PDF
-                      </button>
-                      <button
-                        type="button"
-                        className="btn-mini primary"
-                        onClick={() => sharePdf(ot)}
-                      >
-                        Compartir
-                      </button>
-                      <button
-                        type="button"
-                        className="btn-mini"
-                        onClick={() => toggleFav(ot)}
-                      >
-                        {ot.favorito ? "Quitar ⭐" : "Favorito ⭐"}
-                      </button>
-                      <button
-                        type="button"
-                        className="btn-mini danger"
-                        onClick={() => remove(ot)}
-                      >
-                        Eliminar
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ))}
-
-        {!loading && itemsFiltrados.length === 0 && (
-          <p className="sin-datos">
-            No hay resultados con esos filtros. Probá limpiar Zona, fechas o
-            búsqueda.
-          </p>
+        {!loading && tableroPanel.length === 0 && (
+          <div className="muted" style={{ marginTop: 10 }}>
+            No hay tableros para mostrar (¿todavía no cargaste OTs con
+            tablero?).
+          </div>
         )}
       </div>
     </div>

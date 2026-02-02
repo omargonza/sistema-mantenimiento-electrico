@@ -1,52 +1,215 @@
-/* ============================================================
-   Barra inferior – optimizada para móvil
-============================================================ */
+/* =========================================================
+   BOTTOM BAR — RÚSTICO MILITAR (CHAPA / HMI)
+   - Sin blur (performance)
+   - Oliva + arena + chapa mate
+   - Mantiene: .bottom-bar / .nav-btn / .nav-btn--active
+========================================================= */
 
+:root {
+  --bottom-bar-h: 78px;
 
-:root{
-  --bottom-bar-h: 58px;
+  /* Base chapa */
+  --mil-950: #060a08; /* fondo verdoso */
+  --mil-900: #0b1210;
+  --mil-800: #0f1916;
+  --mil-700: #15231f;
+  --mil-600: #1c2e28;
+
+  /* Acentos */
+  --oliva: #8aa85a;
+  --oliva-strong: #c2d59a;
+  --arena: #d6b25e;
+
+  /* Texto */
+  --ink: rgba(231, 239, 233, 0.95);
+  --muted: rgba(231, 239, 233, 0.58);
+
+  /* Bordes */
+  --b: rgba(231, 239, 233, 0.14);
+  --b2: rgba(231, 239, 233, 0.2);
 }
 
-.bottom-bar{
+/* =========================
+   BARRA
+========================= */
+.bottom-bar {
   position: fixed;
-  bottom: 0;
   left: 0;
-  width: 100%;
-  height: var(--bottom-bar-h);
+  right: 0;
+  bottom: 0;
 
-  background: #ffffff;
-  border-top: 1px solid #ddd;
+  height: var(--bottom-bar-h);
+  padding: 14px 16px calc(14px + env(safe-area-inset-bottom));
 
   display: flex;
-  justify-content: space-around;
+  gap: 14px;
   align-items: center;
+  justify-content: space-between;
 
-  padding: 0;
+  /* Chapa mate + “rayado” sutil (barato) */
+  background:
+    /* highlight superior */
+    linear-gradient(180deg, rgba(231, 239, 233, 0.06), rgba(0, 0, 0, 0.22)),
+    /* rayado vertical tipo pintura / chapa */
+    repeating-linear-gradient(
+        90deg,
+        rgba(231, 239, 233, 0.018),
+        rgba(231, 239, 233, 0.018) 1px,
+        rgba(0, 0, 0, 0.02) 2px,
+        rgba(0, 0, 0, 0.02) 4px
+      ),
+    /* base */
+    linear-gradient(90deg, var(--mil-900), var(--mil-700), var(--mil-900));
+
+  border-top: 1px solid rgba(231, 239, 233, 0.12);
+
+  box-shadow:
+    0 -24px 48px rgba(0, 0, 0, 0.7),
+    inset 0 1px 0 rgba(231, 239, 233, 0.05),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.45);
+
+  /* performance: NO BLUR */
+  backdrop-filter: none;
   z-index: 2000;
-
-  box-shadow: 0 -2px 6px rgba(0,0,0,0.08);
 }
 
-.bottom-btn{
+/* =========================
+   BOTÓN “HERRAMIENTA”
+========================= */
+.nav-btn {
+  flex: 1;
+  height: 58px;
+
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 6px;
 
-  width: 50%;
-  height: 100%;
+  border-radius: 12px;
 
-  font-size: 0.82rem;
-  color: #444;
+  /* cara mate */
+  background:
+    linear-gradient(180deg, rgba(231, 239, 233, 0.06), rgba(0, 0, 0, 0.26)),
+    linear-gradient(90deg, var(--mil-700), var(--mil-600), var(--mil-700));
+
+  border: 1px solid rgba(231, 239, 233, 0.16);
+
+  color: var(--muted);
   text-decoration: none;
 
-  padding: 6px 0;
+  font-size: 0.72rem;
+  font-weight: 950;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+
+  position: relative;
+  overflow: hidden;
+
+  transition:
+    transform 0.12s ease,
+    color 0.15s ease,
+    border-color 0.15s ease,
+    box-shadow 0.18s ease,
+    background 0.18s ease;
 }
 
-.bottom-btn.active{
-  color: #0a84ff;
+/* “sweep” pero MUY sutil (no brillante) */
+.nav-btn::after {
+  content: "";
+  position: absolute;
+  top: -40%;
+  left: -60%;
+  width: 60%;
+  height: 180%;
+  background: linear-gradient(
+    120deg,
+    transparent,
+    rgba(231, 239, 233, 0.06),
+    transparent
+  );
+  transform: rotate(12deg);
+  opacity: 0;
+  transition:
+    opacity 0.18s ease,
+    left 0.35s ease;
 }
 
-.bottom-btn:active{
-  background: rgba(0,0,0,0.06);
+.nav-btn:hover::after {
+  opacity: 1;
+  left: 120%;
+}
+
+/* Hover */
+.nav-btn:hover {
+  color: var(--ink);
+  border-color: rgba(194, 213, 154, 0.34);
+  box-shadow:
+    0 0 0 2px rgba(138, 168, 90, 0.12),
+    0 8px 22px rgba(0, 0, 0, 0.62);
+}
+
+/* Press */
+.nav-btn:active {
+  transform: translateY(1px) scale(0.985);
+}
+
+/* =========================
+   ACTIVO — “CONTROL ROOM MILITAR”
+========================= */
+.nav-btn--active {
+  color: rgba(194, 213, 154, 0.98);
+  border-color: rgba(194, 213, 154, 0.55);
+
+  background:
+    /* highlight oliva */
+    linear-gradient(180deg, rgba(138, 168, 90, 0.22), rgba(0, 0, 0, 0.38)),
+    linear-gradient(90deg, var(--mil-800), var(--mil-700), var(--mil-800));
+
+  /* glow mínimo (no neón) */
+  box-shadow:
+    0 0 0 3px rgba(138, 168, 90, 0.16),
+    inset 0 0 18px rgba(138, 168, 90, 0.14),
+    0 10px 22px rgba(0, 0, 0, 0.62);
+}
+
+/* Si querés un “punto” arena para activo (tipo testigo) */
+.nav-btn--active::before {
+  content: "";
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(214, 178, 94, 0.85);
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.35);
+  opacity: 0.95;
+}
+
+/* =========================
+   ICONOS
+   - sin drop-shadow pesado
+========================= */
+.nav-btn svg {
+  filter: none;
+  opacity: 0.92;
+}
+
+.nav-btn--active svg {
+  opacity: 1;
+}
+
+/* =========================
+   RESPONSIVE
+========================= */
+@media (max-width: 420px) {
+  .bottom-bar {
+    height: 72px;
+    padding: 10px 10px calc(10px + env(safe-area-inset-bottom));
+  }
+  .nav-btn {
+    height: 52px;
+    font-size: 0.68rem;
+  }
 }
