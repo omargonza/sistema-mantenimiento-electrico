@@ -138,7 +138,7 @@ function Sparkline({ points }) {
 }
 
 /* =======================================================
-   Tabla
+   Tabla: Sort button
 ======================================================= */
 function SortBtn({ active, dir, label, onClick }) {
   return (
@@ -243,8 +243,9 @@ export default function HistorialLuminarias() {
       const a = String(r._fecha || "");
       const b = String(prev._fecha || "");
       if (a > b) map.set(r._codigo, r);
-      else if (a === b && Number(r.ot_id || 0) > Number(prev.ot_id || 0))
+      else if (a === b && Number(r.ot_id || 0) > Number(prev.ot_id || 0)) {
         map.set(r._codigo, r);
+      }
     }
 
     // si no tiene código, lo dejamos igual (son raros, pero no los oculto)
@@ -430,6 +431,7 @@ export default function HistorialLuminarias() {
           .replace(/\s+/g, " ")
           .replace(/,/g, " "),
       ];
+
       lines.push(
         row.map((x) => `"${String(x ?? "").replace(/"/g, '""')}"`).join(","),
       );
@@ -488,7 +490,8 @@ export default function HistorialLuminarias() {
         <div>
           <div className="lumdash-title">Historial de Luminarias</div>
           <div className="lumdash-sub">
-            KPIs · hotspots · dataset exportable
+            KPIs · hotspots · exportable dataset | Indicadores clave · puntos
+            críticos · datos exportables
           </div>
         </div>
 
@@ -624,10 +627,10 @@ export default function HistorialLuminarias() {
             />
 
             <MiniBars
-              title="Hotspots KM"
-              subtitle="Buckets de 1km (top 12)"
+              title="Hotspots KM · Puntos críticos por KM"
+              subtitle="Tramos de 1 km (top 10)"
               items={byKmBucket}
-              maxBars={12}
+              maxBars={10}
             />
           </div>
 
@@ -636,9 +639,7 @@ export default function HistorialLuminarias() {
             <div className="lumdash-tableHead">
               <div>
                 <div className="lumdash-cardtitle">Detalle</div>
-                <div className="lumdash-muted">
-                  {sorted.length} filas · click para abrir OT
-                </div>
+                <div className="lumdash-muted">{sorted.length} filas</div>
               </div>
 
               <div className="lumdash-sortRow">
@@ -670,7 +671,10 @@ export default function HistorialLuminarias() {
             </div>
 
             <div className="lumdash-tableWrap">
-              <table className="lumdash-table">
+              <table
+                className="lumdash-table"
+                aria-label="Tabla analítica de luminarias"
+              >
                 <thead>
                   <tr>
                     <th>Fecha</th>
@@ -682,14 +686,10 @@ export default function HistorialLuminarias() {
                     <th>Ubicación</th>
                   </tr>
                 </thead>
+
                 <tbody>
                   {sorted.map((r) => (
-                    <tr
-                      key={String(r.id)}
-                      className={`row-${r._state}`}
-                      onClick={() => navigate(`/detalle/${r.id}`)}
-                      title="Abrir OT"
-                    >
+                    <tr key={String(r.id)} className={`row-${r._state}`}>
                       <td className="mono">{r._fecha || "—"}</td>
                       <td>{RAMAL_RANGES[r.ramal]?.label || r.ramal || "—"}</td>
                       <td className="mono">
@@ -710,6 +710,7 @@ export default function HistorialLuminarias() {
                       <td className="clip">{r.ubicacion || "—"}</td>
                     </tr>
                   ))}
+
                   {!sorted.length && (
                     <tr>
                       <td

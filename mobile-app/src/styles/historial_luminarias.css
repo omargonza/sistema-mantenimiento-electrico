@@ -408,6 +408,39 @@
   border-color: rgba(148, 163, 184, 0.28);
   background: rgba(148, 163, 184, 0.1);
 }
+/* =========================================================
+   TABLA ANALÍTICA (no clickeable)
+   Pegalo al final de: src/styles/historial_luminarias.css
+========================================================= */
+
+.lumdash-tableWrap {
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.lumdash-table tbody tr {
+  cursor: default !important;
+}
+
+.lumdash-table tbody tr:hover {
+  background: rgba(255, 255, 255, 0.03); /* feedback suave, no "clic" */
+}
+
+/* si antes tenías estilo de fila clickeable, lo neutralizamos */
+.lumdash-table tbody tr[title],
+.lumdash-table tbody tr[role="button"] {
+  cursor: default !important;
+}
+
+/* evita selección rara en mobile si venías con click handlers */
+.lumdash-table tbody tr {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* opcional: que la columna "OT" y "Código" no parezcan links */
+.lumdash-table td.mono {
+  text-decoration: none;
+}
 
 /* Responsive */
 @media (max-width: 640px) {

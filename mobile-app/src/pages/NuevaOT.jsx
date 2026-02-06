@@ -16,9 +16,10 @@ import TableroAutocomplete from "../components/TableroAutocomplete";
 
 import { obtenerHistorial } from "../services/historialApi";
 import { obtenerCircuitosFrecuentes } from "../services/circuitosApi";
-import { saveOtPdf } from "../storage/ot_db";
+
 import LuminariaFields from "../components/LuminariaFields";
 import LuminariasChips from "../components/LuminariasChips";
+import { saveOtPdf, saveOtPhotos, purgeOldMedia } from "../storage/ot_db";
 
 /* =======================================================
    UTILIDADES: cache para autocompletado
@@ -88,6 +89,50 @@ async function fileToCompressedDataURL(file, maxW = 1280, quality = 0.72) {
   URL.revokeObjectURL(url);
   return canvas.toDataURL("image/jpeg", quality);
 }
+async function fileToCompressedBlob(file, maxW = 1280, quality = 0.72) {
+  const img = new Image();
+  const url = URL.createObjectURL(file);
+
+  await new Promise((res, rej) => {
+    img.onload = res;
+    img.onerror = rej;
+    img.src = url;
+  });
+
+  const scale = Math.min(1, maxW / img.width);
+  const w = Math.round(img.width * scale);
+  const h = Math.round(img.height * scale);
+
+  const canvas = document.createElement("canvas");
+  canvas.width = w;
+  canvas.height = h;
+
+  const ctx = canvas.getContext("2d");
+  ctx.fillStyle = "#fff";
+  ctx.fillRect(0, 0, w, h);
+  ctx.drawImage(img, 0, 0, w, h);
+
+  URL.revokeObjectURL(url);
+
+  const blob = await new Promise((resolve, reject) => {
+    canvas.toBlob(
+      (b) => (b ? resolve(b) : reject(new Error("toBlob failed"))),
+      "image/jpeg",
+      quality,
+    );
+  });
+
+  return blob;
+}
+
+async function blobToDataURL(blob) {
+  return await new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(String(r.result || ""));
+    r.onerror = () => reject(r.error);
+    r.readAsDataURL(blob);
+  });
+}
 
 /* =======================================================
    LISTAS
@@ -126,7 +171,8 @@ const initialForm = {
   firmaTecnico: "",
   firmaSupervisor: "",
   firmaTecnicoB64: "",
-  fotosB64: [],
+  fotos: [], // [{ blob, url, bytes }]
+
   printMode: false,
 
   // Clasificación
@@ -662,7 +708,7 @@ export default function NuevaOT() {
     const files = Array.from(e.target.files || []);
     if (!files.length) return;
 
-    const cupo = MAX_FOTOS - (form.fotosB64?.length || 0);
+    const cupo = MAX_FOTOS - (form.fotos?.length || 0);
     const take = files.slice(0, Math.max(0, cupo));
 
     if (!take.length) {
@@ -674,20 +720,22 @@ export default function NuevaOT() {
     setLoading(true);
     try {
       const nuevas = [];
+
       for (const f of take) {
-        const b64 = await fileToCompressedDataURL(f, 1280, 0.72);
-        nuevas.push(b64);
+        const blob = await fileToCompressedBlob(f, 1280, 0.72);
+        const url = URL.createObjectURL(blob);
+        nuevas.push({ blob, url, bytes: blob.size || 0 });
       }
 
       setForm((prev) => ({
         ...prev,
-        fotosB64: [...(prev.fotosB64 || []), ...nuevas].slice(0, MAX_FOTOS),
+        fotos: [...(prev.fotos || []), ...nuevas].slice(0, MAX_FOTOS),
       }));
 
       showToast(
         "ok",
         `Fotos cargadas: ${Math.min(
-          (form.fotosB64?.length || 0) + nuevas.length,
+          (form.fotos?.length || 0) + nuevas.length,
           MAX_FOTOS,
         )}/${MAX_FOTOS}`,
       );
@@ -701,10 +749,16 @@ export default function NuevaOT() {
   }
 
   function borrarFoto(idx) {
-    setForm((prev) => ({
-      ...prev,
-      fotosB64: (prev.fotosB64 || []).filter((_, i) => i !== idx),
-    }));
+    setForm((prev) => {
+      const list = prev.fotos || [];
+      const item = list[idx];
+      if (item?.url) URL.revokeObjectURL(item.url);
+
+      return {
+        ...prev,
+        fotos: list.filter((_, i) => i !== idx),
+      };
+    });
   }
 
   /* =======================================================
@@ -717,7 +771,9 @@ export default function NuevaOT() {
       return;
     }
 
-    // Soft warnings
+    // -------------------------------------------------------
+    // Soft warnings (UX)
+    // -------------------------------------------------------
     const alcance = String(form.alcance || "LUMINARIA")
       .trim()
       .toUpperCase();
@@ -767,29 +823,64 @@ export default function NuevaOT() {
       );
     }
 
+    // -------------------------------------------------------
+    // 1) Payload NORMALIZADO (SIEMPRE primero)
+    // -------------------------------------------------------
     const payload = normalizarPayloadOT(form);
     payload.tablero_catalogado = Boolean(tableroCatalogado);
+
+    // -------------------------------------------------------
+    // 2) Base64 SOLO para envío (temporal)
+    //    (IndexedDB guarda blobs, NO base64)
+    // -------------------------------------------------------
+    payload.fotos_b64 = await Promise.all(
+      (form.fotos || []).map((it) => blobToDataURL(it.blob)),
+    );
+    payload.fotos_b64 = payload.fotos_b64.slice(0, MAX_FOTOS);
 
     saveCache("cache_tableros", form.tablero);
     saveCache("cache_vehiculos", form.vehiculo);
 
     setLoading(true);
+
     try {
       try {
         vibrar?.(30);
       } catch {}
 
+      // -------------------------------------------------------
+      // 3) Envío al backend
+      // -------------------------------------------------------
+      console.log("fotos_b64 count:", payload.fotos_b64?.length);
+      console.log("fotos_b64 first:", payload.fotos_b64?.[0]?.slice(0, 40));
+
       const blob = await enviarOT(payload);
 
-      // Guardado local best-effort
+      // -------------------------------------------------------
+      // 4) Guardado local (PDF + fotos en IndexedDB)
+      // -------------------------------------------------------
       try {
-        await saveOtPdf(
+        const record = await saveOtPdf(
           {
             ...payload,
             tecnico: payload?.tecnicos?.[0]?.nombre || "",
           },
           blob,
         );
+
+        // ⬇️⬇️ Guardar FOTOS como BLOBS (no llenan memoria)
+        try {
+          const blobs = (form.fotos || []).map((x) => x.blob).filter(Boolean);
+          if (blobs.length) {
+            await saveOtPhotos(record.id, blobs);
+          }
+
+          // limpieza automática
+          purgeOldMedia({ olderThanDays: 45 }).catch(() => {});
+        } catch (e) {
+          console.warn("No se pudieron guardar fotos en IndexedDB:", e);
+        }
+        // ⬆️⬆️ Fin guardado fotos
       } catch (dbErr) {
         console.warn(
           "No se pudo guardar en IndexedDB (continúo igual):",
@@ -797,7 +888,9 @@ export default function NuevaOT() {
         );
       }
 
-      // Descarga PDF
+      // -------------------------------------------------------
+      // 5) Descarga PDF
+      // -------------------------------------------------------
       const url = URL.createObjectURL(blob);
       const anchor = document.createElement("a");
       anchor.href = url;
@@ -808,7 +901,6 @@ export default function NuevaOT() {
       clearForm();
       showToast("ok", "Orden generada correctamente. PDF descargado.");
 
-      // Navegación post OK
       navigatePostOT(navigate, payload);
     } catch (e) {
       console.warn("Fallo envío → guardando OT localmente", e);
@@ -827,7 +919,6 @@ export default function NuevaOT() {
         "Sin conexión o servidor no disponible. La OT se guardó para enviar más tarde (sin firma/fotos).",
       );
 
-      // Navegación también cuando queda pendiente
       navigatePostOT(navigate, payloadLiviano);
     } finally {
       setLoading(false);
@@ -1447,19 +1538,40 @@ export default function NuevaOT() {
       />
 
       <h3 className="subtitulo">Evidencias (Fotos)</h3>
-      <input
-        type="file"
-        accept="image/*"
-        multiple
-        capture="environment"
-        onChange={onAddFotos}
-      />
 
-      {(form.fotosB64?.length || 0) > 0 && (
+      <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+        {/* Cámara */}
+        <label className="btn-outline" style={{ cursor: "pointer" }}>
+          📸 Cámara
+          <input
+            type="file"
+            accept="image/*"
+            capture="environment"
+            multiple
+            hidden
+            onChange={onAddFotos}
+          />
+        </label>
+
+        {/* Galería */}
+        <label className="btn-outline" style={{ cursor: "pointer" }}>
+          🖼️ Galería
+          <input
+            type="file"
+            accept="image/*"
+            multiple
+            hidden
+            onChange={onAddFotos}
+          />
+        </label>
+      </div>
+
+      {(form.fotos?.length || 0) > 0 && (
         <>
           <div className="card" style={{ marginTop: 10 }}>
             <div className="text-muted" style={{ marginBottom: 8 }}>
-              Adjuntas: {form.fotosB64?.length || 0}/{MAX_FOTOS} (comprimidas)
+              Adjuntas: {form.fotos?.length || 0}/{MAX_FOTOS} (blobs
+              comprimidos)
             </div>
 
             <div
@@ -1469,10 +1581,10 @@ export default function NuevaOT() {
                 gap: 10,
               }}
             >
-              {(form.fotosB64 || []).map((src, idx) => (
+              {(form.fotos || []).map((it, idx) => (
                 <div key={idx} style={{ position: "relative" }}>
                   <img
-                    src={src}
+                    src={it.url}
                     alt={`Foto ${idx + 1}`}
                     style={{
                       width: "100%",
@@ -1480,6 +1592,7 @@ export default function NuevaOT() {
                       border: "1px solid rgba(148,163,184,.25)",
                     }}
                   />
+
                   <button
                     type="button"
                     className="btn-x"
@@ -1496,8 +1609,8 @@ export default function NuevaOT() {
           </div>
 
           <p className="text-muted" style={{ marginTop: 8 }}>
-            Máximo {MAX_FOTOS} fotos. Se comprimen automáticamente para no hacer
-            pesado el PDF.
+            Máximo {MAX_FOTOS} fotos. Se comprimen automáticamente para no
+            explotar memoria.
           </p>
         </>
       )}
