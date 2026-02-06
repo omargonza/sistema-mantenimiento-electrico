@@ -2,14 +2,14 @@
    BOTTOM BAR — RÚSTICO MILITAR (CHAPA / HMI)
    - Sin blur (performance)
    - Oliva + arena + chapa mate
-   - Mantiene: .bottom-bar / .nav-btn / .nav-btn--active
+   - Icon-only en mobile chico (<= 380px)
 ========================================================= */
 
 :root {
   --bottom-bar-h: 78px;
 
   /* Base chapa */
-  --mil-950: #060a08; /* fondo verdoso */
+  --mil-950: #060a08;
   --mil-900: #0b1210;
   --mil-800: #0f1916;
   --mil-700: #15231f;
@@ -23,10 +23,6 @@
   /* Texto */
   --ink: rgba(231, 239, 233, 0.95);
   --muted: rgba(231, 239, 233, 0.58);
-
-  /* Bordes */
-  --b: rgba(231, 239, 233, 0.14);
-  --b2: rgba(231, 239, 233, 0.2);
 }
 
 /* =========================
@@ -46,19 +42,15 @@
   align-items: center;
   justify-content: space-between;
 
-  /* Chapa mate + “rayado” sutil (barato) */
   background:
-    /* highlight superior */
     linear-gradient(180deg, rgba(231, 239, 233, 0.06), rgba(0, 0, 0, 0.22)),
-    /* rayado vertical tipo pintura / chapa */
     repeating-linear-gradient(
-        90deg,
-        rgba(231, 239, 233, 0.018),
-        rgba(231, 239, 233, 0.018) 1px,
-        rgba(0, 0, 0, 0.02) 2px,
-        rgba(0, 0, 0, 0.02) 4px
-      ),
-    /* base */
+      90deg,
+      rgba(231, 239, 233, 0.018),
+      rgba(231, 239, 233, 0.018) 1px,
+      rgba(0, 0, 0, 0.02) 2px,
+      rgba(0, 0, 0, 0.02) 4px
+    ),
     linear-gradient(90deg, var(--mil-900), var(--mil-700), var(--mil-900));
 
   border-top: 1px solid rgba(231, 239, 233, 0.12);
@@ -68,13 +60,11 @@
     inset 0 1px 0 rgba(231, 239, 233, 0.05),
     inset 0 -1px 0 rgba(0, 0, 0, 0.45);
 
-  /* performance: NO BLUR */
-  backdrop-filter: none;
   z-index: 2000;
 }
 
 /* =========================
-   BOTÓN “HERRAMIENTA”
+   BOTÓN
 ========================= */
 .nav-btn {
   flex: 1;
@@ -87,16 +77,14 @@
   gap: 6px;
 
   border-radius: 12px;
+  text-decoration: none;
 
-  /* cara mate */
   background:
     linear-gradient(180deg, rgba(231, 239, 233, 0.06), rgba(0, 0, 0, 0.26)),
     linear-gradient(90deg, var(--mil-700), var(--mil-600), var(--mil-700));
 
   border: 1px solid rgba(231, 239, 233, 0.16);
-
   color: var(--muted);
-  text-decoration: none;
 
   font-size: 0.72rem;
   font-weight: 950;
@@ -114,32 +102,6 @@
     background 0.18s ease;
 }
 
-/* “sweep” pero MUY sutil (no brillante) */
-.nav-btn::after {
-  content: "";
-  position: absolute;
-  top: -40%;
-  left: -60%;
-  width: 60%;
-  height: 180%;
-  background: linear-gradient(
-    120deg,
-    transparent,
-    rgba(231, 239, 233, 0.06),
-    transparent
-  );
-  transform: rotate(12deg);
-  opacity: 0;
-  transition:
-    opacity 0.18s ease,
-    left 0.35s ease;
-}
-
-.nav-btn:hover::after {
-  opacity: 1;
-  left: 120%;
-}
-
 /* Hover */
 .nav-btn:hover {
   color: var(--ink);
@@ -149,31 +111,29 @@
     0 8px 22px rgba(0, 0, 0, 0.62);
 }
 
-/* Press */
+/* Active press */
 .nav-btn:active {
   transform: translateY(1px) scale(0.985);
 }
 
 /* =========================
-   ACTIVO — “CONTROL ROOM MILITAR”
+   ACTIVO
 ========================= */
 .nav-btn--active {
   color: rgba(194, 213, 154, 0.98);
   border-color: rgba(194, 213, 154, 0.55);
 
   background:
-    /* highlight oliva */
     linear-gradient(180deg, rgba(138, 168, 90, 0.22), rgba(0, 0, 0, 0.38)),
     linear-gradient(90deg, var(--mil-800), var(--mil-700), var(--mil-800));
 
-  /* glow mínimo (no neón) */
   box-shadow:
     0 0 0 3px rgba(138, 168, 90, 0.16),
     inset 0 0 18px rgba(138, 168, 90, 0.14),
     0 10px 22px rgba(0, 0, 0, 0.62);
 }
 
-/* Si querés un “punto” arena para activo (tipo testigo) */
+/* Punto testigo */
 .nav-btn--active::before {
   content: "";
   position: absolute;
@@ -181,18 +141,14 @@
   right: 10px;
   width: 8px;
   height: 8px;
-  border-radius: 999px;
+  border-radius: 50%;
   background: rgba(214, 178, 94, 0.85);
-  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.35);
-  opacity: 0.95;
 }
 
 /* =========================
    ICONOS
-   - sin drop-shadow pesado
 ========================= */
 .nav-btn svg {
-  filter: none;
   opacity: 0.92;
 }
 
@@ -203,13 +159,51 @@
 /* =========================
    RESPONSIVE
 ========================= */
+
+/* Ajuste mobile medio (todavía con texto) */
 @media (max-width: 420px) {
   .bottom-bar {
-    height: 72px;
+    height: 70px;
     padding: 10px 10px calc(10px + env(safe-area-inset-bottom));
+    gap: 8px;
   }
+
   .nav-btn {
     height: 52px;
-    font-size: 0.68rem;
+    font-size: 0.66rem;
+    letter-spacing: 0.07em;
+  }
+}
+
+/* 🔑 ICON-ONLY (cubre 360.xx del emulador y móviles chicos reales) */
+@media (max-width: 380px) {
+  .bottom-bar {
+    height: 64px;
+    padding: 8px 8px calc(8px + env(safe-area-inset-bottom));
+    gap: 6px;
+  }
+
+  .nav-btn {
+    height: 48px;
+    gap: 0;
+    padding: 0;
+    color: var(--ink); /* Lucide usa currentColor */
+  }
+
+  .nav-btn span {
+    display: none;
+  }
+
+  .nav-btn svg {
+    display: block;
+    opacity: 1;
+    width: 22px;
+    height: 22px;
+    color: var(--ink);
+    stroke: currentColor;
+  }
+
+  .nav-btn--active svg {
+    color: var(--oliva-strong);
   }
 }

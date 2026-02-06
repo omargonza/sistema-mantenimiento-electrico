@@ -1,6 +1,11 @@
-// src/components/BottomBar.jsx
 import { NavLink } from "react-router-dom";
-import { Home, PlusCircle, FileText, ListChecks } from "lucide-react";
+import {
+  Home,
+  PlusCircle,
+  FileText,
+  ListChecks,
+  LayoutList,
+} from "lucide-react";
 import "../styles/bottombar.css";
 
 export default function BottomBar() {
@@ -8,22 +13,47 @@ export default function BottomBar() {
 
   return (
     <nav className="bottom-bar" aria-label="Navegación inferior">
-      <NavLink to="/" className={cls}>
+      <NavLink to="/" className={cls} title="Inicio" aria-label="Inicio">
         <Home size={20} />
         <span>Inicio</span>
       </NavLink>
 
-      <NavLink to="/nueva" className={cls}>
+      <NavLink
+        to="/nueva"
+        className={cls}
+        title="Nueva OT"
+        aria-label="Nueva OT"
+      >
         <PlusCircle size={20} />
         <span>Nueva OT</span>
       </NavLink>
 
-      <NavLink to="/mis-pdfs" className={cls}>
+      <NavLink
+        to="/historial"
+        className={cls}
+        title="Historial"
+        aria-label="Historial"
+      >
+        <LayoutList size={20} />
+        <span>Historial</span>
+      </NavLink>
+
+      <NavLink
+        to="/mis-pdfs"
+        className={cls}
+        title="Mis PDFs"
+        aria-label="Mis PDFs"
+      >
         <FileText size={20} />
         <span>Mis PDFs</span>
       </NavLink>
 
-      <NavLink to="/historial-luminarias" className={cls}>
+      <NavLink
+        to="/historial-luminarias"
+        className={cls}
+        title="Luminarias"
+        aria-label="Luminarias"
+      >
         <ListChecks size={20} />
         <span>Luminarias</span>
       </NavLink>
