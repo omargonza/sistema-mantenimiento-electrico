@@ -1,15 +1,14 @@
 /* =========================================================
    BOTTOM BAR — RÚSTICO MILITAR (CHAPA / HMI)
-   - Sin blur (performance)
-   - Oliva + arena + chapa mate
-   - Icon-only en mobile chico (<= 380px)
+   ICON-ONLY SIEMPRE + TOOLTIP EN HOVER/FOCUS (sin JS)
+   - Tooltip usa aria-label/title (ya los ponés en el NavLink)
+   - Performance: 0 JS, 0 blur
 ========================================================= */
 
 :root {
-  --bottom-bar-h: 78px;
+  --bottom-bar-h: 74px;
 
   /* Base chapa */
-  --mil-950: #060a08;
   --mil-900: #0b1210;
   --mil-800: #0f1916;
   --mil-700: #15231f;
@@ -20,9 +19,14 @@
   --oliva-strong: #c2d59a;
   --arena: #d6b25e;
 
-  /* Texto */
+  /* Texto / iconos (lucide usa currentColor) */
   --ink: rgba(231, 239, 233, 0.95);
   --muted: rgba(231, 239, 233, 0.58);
+
+  /* Tooltip */
+  --tip-bg: rgba(7, 10, 9, 0.94);
+  --tip-border: rgba(231, 239, 233, 0.16);
+  --tip-shadow: 0 14px 30px rgba(0, 0, 0, 0.55);
 }
 
 /* =========================
@@ -35,10 +39,10 @@
   bottom: 0;
 
   height: var(--bottom-bar-h);
-  padding: 14px 16px calc(14px + env(safe-area-inset-bottom));
+  padding: 12px 12px calc(12px + env(safe-area-inset-bottom));
 
   display: flex;
-  gap: 14px;
+  gap: 10px;
   align-items: center;
   justify-content: space-between;
 
@@ -64,17 +68,14 @@
 }
 
 /* =========================
-   BOTÓN
+   BOTÓN (icon-only)
 ========================= */
 .nav-btn {
   flex: 1;
-  height: 58px;
+  height: 52px;
 
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
+  display: grid;
+  place-items: center;
 
   border-radius: 12px;
   text-decoration: none;
@@ -86,13 +87,9 @@
   border: 1px solid rgba(231, 239, 233, 0.16);
   color: var(--muted);
 
-  font-size: 0.72rem;
-  font-weight: 950;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-
   position: relative;
-  overflow: hidden;
+  overflow: visible; /* tooltip puede salir */
+  -webkit-tap-highlight-color: transparent;
 
   transition:
     transform 0.12s ease,
@@ -111,9 +108,24 @@
     0 8px 22px rgba(0, 0, 0, 0.62);
 }
 
-/* Active press */
+/* Press */
 .nav-btn:active {
   transform: translateY(1px) scale(0.985);
+}
+
+/* =========================
+   FOCO (teclado / accesibilidad)
+========================= */
+.nav-btn:focus {
+  outline: none;
+}
+
+.nav-btn:focus-visible {
+  color: var(--ink);
+  border-color: rgba(194, 213, 154, 0.45);
+  box-shadow:
+    0 0 0 3px rgba(138, 168, 90, 0.22),
+    0 10px 26px rgba(0, 0, 0, 0.62);
 }
 
 /* =========================
@@ -143,13 +155,16 @@
   height: 8px;
   border-radius: 50%;
   background: rgba(214, 178, 94, 0.85);
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.35);
 }
 
 /* =========================
-   ICONOS
+   ICONOS (Lucide)
 ========================= */
 .nav-btn svg {
-  opacity: 0.92;
+  display: block;
+  opacity: 0.95;
+  stroke: currentColor;
 }
 
 .nav-btn--active svg {
@@ -157,53 +172,78 @@
 }
 
 /* =========================
-   RESPONSIVE
+   TOOLTIP (sin JS)
+   - Muestra el texto de aria-label
+   - Se activa en hover y focus-visible
 ========================= */
+.nav-btn::after {
+  content: attr(aria-label);
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 10px);
+  transform: translateX(-50%) translateY(4px);
 
-/* Ajuste mobile medio (todavía con texto) */
-@media (max-width: 420px) {
-  .bottom-bar {
-    height: 70px;
-    padding: 10px 10px calc(10px + env(safe-area-inset-bottom));
-    gap: 8px;
-  }
+  padding: 8px 10px;
+  border-radius: 10px;
 
-  .nav-btn {
-    height: 52px;
-    font-size: 0.66rem;
-    letter-spacing: 0.07em;
-  }
+  background: var(--tip-bg);
+  border: 1px solid var(--tip-border);
+  box-shadow: var(--tip-shadow);
+
+  color: var(--ink);
+  font-size: 0.72rem;
+  font-weight: 850;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    opacity 0.12s ease,
+    transform 0.12s ease;
 }
 
-/* 🔑 ICON-ONLY (cubre 360.xx del emulador y móviles chicos reales) */
-@media (max-width: 380px) {
-  .bottom-bar {
-    height: 64px;
-    padding: 8px 8px calc(8px + env(safe-area-inset-bottom));
-    gap: 6px;
-  }
+/* Flechita */
+.nav-btn::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 4px);
+  transform: translateX(-50%) translateY(4px);
 
-  .nav-btn {
-    height: 48px;
-    gap: 0;
-    padding: 0;
-    color: var(--ink); /* Lucide usa currentColor */
-  }
+  width: 10px;
+  height: 10px;
+  background: var(--tip-bg);
+  border-left: 1px solid var(--tip-border);
+  border-top: 1px solid var(--tip-border);
+  transform: translateX(-50%) rotate(45deg);
 
-  .nav-btn span {
-    display: none;
-  }
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    opacity 0.12s ease,
+    transform 0.12s ease;
+}
 
-  .nav-btn svg {
-    display: block;
-    opacity: 1;
-    width: 22px;
-    height: 22px;
-    color: var(--ink);
-    stroke: currentColor;
-  }
+/* Mostrar tooltip */
+.nav-btn:hover::after,
+.nav-btn:focus-visible::after {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
 
-  .nav-btn--active svg {
-    color: var(--oliva-strong);
+.nav-btn:hover::before,
+.nav-btn:focus-visible::before {
+  opacity: 1;
+  transform: translateX(-50%) rotate(45deg) translateY(0);
+}
+
+/* En pantallas táctiles, el hover puede “pegarse”:
+   desactivamos tooltip por hover cuando no hay hover real */
+@media (hover: none) {
+  .nav-btn:hover::after,
+  .nav-btn:hover::before {
+    opacity: 0;
   }
 }

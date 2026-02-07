@@ -14,8 +14,7 @@ export default function BottomBar() {
   return (
     <nav className="bottom-bar" aria-label="Navegación inferior">
       <NavLink to="/" className={cls} title="Inicio" aria-label="Inicio">
-        <Home size={20} />
-        <span>Inicio</span>
+        <Home size={22} />
       </NavLink>
 
       <NavLink
@@ -24,8 +23,7 @@ export default function BottomBar() {
         title="Nueva OT"
         aria-label="Nueva OT"
       >
-        <PlusCircle size={20} />
-        <span>Nueva OT</span>
+        <PlusCircle size={22} />
       </NavLink>
 
       <NavLink
@@ -34,8 +32,7 @@ export default function BottomBar() {
         title="Historial"
         aria-label="Historial"
       >
-        <LayoutList size={20} />
-        <span>Historial</span>
+        <LayoutList size={22} />
       </NavLink>
 
       <NavLink
@@ -44,8 +41,7 @@ export default function BottomBar() {
         title="Mis PDFs"
         aria-label="Mis PDFs"
       >
-        <FileText size={20} />
-        <span>Mis PDFs</span>
+        <FileText size={22} />
       </NavLink>
 
       <NavLink
@@ -54,8 +50,7 @@ export default function BottomBar() {
         title="Luminarias"
         aria-label="Luminarias"
       >
-        <ListChecks size={20} />
-        <span>Luminarias</span>
+        <ListChecks size={22} />
       </NavLink>
     </nav>
   );
