@@ -364,7 +364,7 @@ export default function Dashboard() {
         >
           <div>
             <div className="muted" style={{ fontSize: 12, marginBottom: 6 }}>
-              Filtro (solo semáforo)
+              Filtro semáforo
             </div>
             <select
               value={filtroEstado}
