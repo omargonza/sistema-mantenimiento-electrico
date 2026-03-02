@@ -63,66 +63,57 @@ function pickDescripcion(h) {
 /* =======================================================
    IMG: compresión para que no pese (clave)
 ======================================================= */
-async function fileToCompressedDataURL(file, maxW = 1280, quality = 0.72) {
-  const img = new Image();
-  const url = URL.createObjectURL(file);
+async function photoToJpegBlob(blob, { maxSide = 1600, quality = 0.82 } = {}) {
+  if (!blob) return null;
 
-  await new Promise((res, rej) => {
-    img.onload = res;
-    img.onerror = rej;
-    img.src = url;
-  });
+  let src = blob;
+  const type = String(src.type || "").toLowerCase();
 
-  const scale = Math.min(1, maxW / img.width);
-  const w = Math.round(img.width * scale);
-  const h = Math.round(img.height * scale);
+  // iPhone HEIC/HEIF -> JPEG
+  if (type.includes("heic") || type.includes("heif")) {
+    const { default: heic2any } = await import("heic2any");
+    const conv = await heic2any({ blob: src, toType: "image/jpeg", quality });
+    src = Array.isArray(conv) ? conv[0] : conv;
+  }
 
-  const canvas = document.createElement("canvas");
-  canvas.width = w;
-  canvas.height = h;
+  const url = URL.createObjectURL(src);
+  try {
+    const img = await new Promise((res, rej) => {
+      const i = new Image();
+      i.onload = () => res(i);
+      i.onerror = rej;
+      i.src = url;
+    });
 
-  const ctx = canvas.getContext("2d");
-  ctx.fillStyle = "#fff";
-  ctx.fillRect(0, 0, w, h);
-  ctx.drawImage(img, 0, 0, w, h);
+    const w0 = img.naturalWidth || img.width;
+    const h0 = img.naturalHeight || img.height;
 
-  URL.revokeObjectURL(url);
-  return canvas.toDataURL("image/jpeg", quality);
-}
-async function fileToCompressedBlob(file, maxW = 1280, quality = 0.72) {
-  const img = new Image();
-  const url = URL.createObjectURL(file);
+    // ✅ limita por lado mayor (clave para fotos verticales de móvil)
+    const scale = Math.min(1, maxSide / Math.max(w0, h0));
+    const w = Math.max(1, Math.round(w0 * scale));
+    const h = Math.max(1, Math.round(h0 * scale));
 
-  await new Promise((res, rej) => {
-    img.onload = res;
-    img.onerror = rej;
-    img.src = url;
-  });
+    const canvas = document.createElement("canvas");
+    canvas.width = w;
+    canvas.height = h;
 
-  const scale = Math.min(1, maxW / img.width);
-  const w = Math.round(img.width * scale);
-  const h = Math.round(img.height * scale);
+    const ctx = canvas.getContext("2d", { alpha: false });
+    ctx.fillStyle = "#fff";
+    ctx.fillRect(0, 0, w, h);
+    ctx.drawImage(img, 0, 0, w, h);
 
-  const canvas = document.createElement("canvas");
-  canvas.width = w;
-  canvas.height = h;
+    const out = await new Promise((resolve, reject) => {
+      canvas.toBlob(
+        (b) => (b ? resolve(b) : reject(new Error("toBlob failed"))),
+        "image/jpeg",
+        quality,
+      );
+    });
 
-  const ctx = canvas.getContext("2d");
-  ctx.fillStyle = "#fff";
-  ctx.fillRect(0, 0, w, h);
-  ctx.drawImage(img, 0, 0, w, h);
-
-  URL.revokeObjectURL(url);
-
-  const blob = await new Promise((resolve, reject) => {
-    canvas.toBlob(
-      (b) => (b ? resolve(b) : reject(new Error("toBlob failed"))),
-      "image/jpeg",
-      quality,
-    );
-  });
-
-  return blob;
+    return out;
+  } finally {
+    URL.revokeObjectURL(url);
+  }
 }
 
 async function blobToDataURL(blob) {
@@ -833,10 +824,33 @@ export default function NuevaOT() {
     // 2) Base64 SOLO para envío (temporal)
     //    (IndexedDB guarda blobs, NO base64)
     // -------------------------------------------------------
-    payload.fotos_b64 = await Promise.all(
-      (form.fotos || []).map((it) => blobToDataURL(it.blob)),
+
+    const fotosB64 = await Promise.all(
+      (form.fotos || []).map(async (it, idx) => {
+        const b = it?.blob;
+        if (!b) return null;
+
+        // 1) compresión normal
+        let jpeg = await photoToJpegBlob(b, { maxSide: 1600, quality: 0.82 });
+        if (!jpeg) return null;
+
+        let dataUrl = await blobToDataURL(jpeg);
+
+        // 2) si sigue gigante, apretamos más (evita pasar MAX_BYTES y evita truncados)
+        if (dataUrl && dataUrl.length > 1_800_000) {
+          jpeg = await photoToJpegBlob(b, { maxSide: 1280, quality: 0.72 });
+          dataUrl = jpeg ? await blobToDataURL(jpeg) : dataUrl;
+        }
+
+        console.log(
+          `[foto ${idx}] in=${b.type} ${(b.size / 1024 / 1024).toFixed(1)}MB -> b64=${dataUrl?.length}`,
+        );
+
+        return dataUrl;
+      }),
     );
-    payload.fotos_b64 = payload.fotos_b64.slice(0, MAX_FOTOS);
+
+    payload.fotos_b64 = fotosB64.filter(Boolean).slice(0, MAX_FOTOS);
 
     saveCache("cache_tableros", form.tablero);
     saveCache("cache_vehiculos", form.vehiculo);

@@ -351,7 +351,7 @@ def generar_pdf(data):
             card(
                 [
                     P(
-                        "⚠️ Tablero NO catalogado. Avisar a supervisor para cargarlo en el sistema.",
+                        "⚠️ Tablero NO catalogado, No se encuentra en el catálogo oficial. No quedara en el historial de tableros, reportar a supervisión. ⚠️",
                         MUTED,
                     )
                 ],
