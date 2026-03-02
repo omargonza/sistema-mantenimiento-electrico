@@ -5,6 +5,14 @@ import "../styles/dashboard.css";
 
 import { queryOts, migrateOtsOperationalFields } from "../storage/ot_db";
 
+/**
+ * Feature flags (para apagar áreas que hoy confunden en campo)
+ * - Activás cuando decidas usarlas.
+ */
+const SHOW_SEMAFORO_TABLEROS = false;
+const SHOW_SEMAFORO_CONTROLS = false; // filtro + migración (panel semáforo)
+const SHOW_MIGRATION_BUTTON = false; // por defecto apagado (botón "Migrar")
+
 function isoToday() {
   return new Date().toISOString().slice(0, 10);
 }
@@ -72,7 +80,7 @@ export default function Dashboard() {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // Filtro SOLO para el panel semáforo
+  // Filtro SOLO para el panel semáforo (queda listo aunque el panel esté apagado)
   const [filtroEstado, setFiltroEstado] = useState("");
   // "" | "CRITICO" | "PARCIAL" | "OK" | "SIN_ESTADO"
 
@@ -167,6 +175,9 @@ export default function Dashboard() {
 
   // ========= Panel tableros (semáforo manual + luminarias aparte) =========
   const tableroPanel = useMemo(() => {
+    // Si está apagado, devolvemos vacío (igual dejamos el código listo)
+    if (!SHOW_SEMAFORO_TABLEROS) return [];
+
     const map = new Map(); // tableroKey -> info
 
     for (const ot of items) {
@@ -282,9 +293,27 @@ export default function Dashboard() {
           </button>
         </div>
 
+        <div
+          style={{
+            display: "flex",
+            gap: 10,
+            justifyContent: "flex-end",
+            marginTop: 10,
+          }}
+        >
+          <button type="button" className="btn-outline" onClick={refresh}>
+            🔄 Actualizar
+          </button>
+        </div>
+
+        {loading && (
+          <div className="muted" style={{ marginTop: 10 }}>
+            Cargando…
+          </div>
+        )}
+
         <div className="muted" style={{ marginTop: 10, fontSize: 12 }}>
-          Dashboard = KPIs + semáforo + accesos. Los listados completos viven en
-          Historial.
+          Dashboard = KPIs + accesos. Los listados completos viven en Historial.
         </div>
       </div>
 
@@ -352,103 +381,104 @@ export default function Dashboard() {
         )}
       </div>
 
-      {/* Controles del Panel */}
-      <div className="card" style={{ marginTop: 12 }}>
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "1fr 1fr",
-            gap: 10,
-            alignItems: "center",
-          }}
-        >
-          <div>
-            <div className="muted" style={{ fontSize: 12, marginBottom: 6 }}>
-              Filtro semáforo
+      {/* Controles del Panel (SEMÁFORO) — deshabilitado por ahora */}
+      {SHOW_SEMAFORO_CONTROLS && (
+        <div className="card" style={{ marginTop: 12 }}>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "1fr 1fr",
+              gap: 10,
+              alignItems: "center",
+            }}
+          >
+            <div>
+              <div className="muted" style={{ fontSize: 12, marginBottom: 6 }}>
+                Filtro semáforo
+              </div>
+              <select
+                value={filtroEstado}
+                onChange={(e) => setFiltroEstado(e.target.value)}
+              >
+                <option value="">Todos</option>
+                <option value="CRITICO">Crítico</option>
+                <option value="PARCIAL">Parcial</option>
+                <option value="OK">OK</option>
+                <option value="SIN_ESTADO">Sin estado</option>
+              </select>
             </div>
-            <select
-              value={filtroEstado}
-              onChange={(e) => setFiltroEstado(e.target.value)}
+
+            <div
+              style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}
             >
-              <option value="">Todos</option>
-              <option value="CRITICO">Crítico</option>
-              <option value="PARCIAL">Parcial</option>
-              <option value="OK">OK</option>
-              <option value="SIN_ESTADO">Sin estado</option>
-            </select>
-          </div>
+              <button type="button" className="btn-outline" onClick={refresh}>
+                🔄 Actualizar
+              </button>
 
-          <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
-            <button type="button" className="btn-outline" onClick={refresh}>
-              🔄 Actualizar
-            </button>
-
-            {/* Opcional: dejalo si lo usás */}
-            <button
-              type="button"
-              className="btn-outline"
-              onClick={runMigration}
-              title="Actualiza campos operativos en OTs viejas (si hace falta)"
-            >
-              🧩 Migrar
-            </button>
-          </div>
-        </div>
-
-        {loading && (
-          <div className="muted" style={{ marginTop: 10 }}>
-            Cargando…
-          </div>
-        )}
-      </div>
-
-      {/* Panel semáforo */}
-      <div className="panel-tableros">
-        <div className="panel-title">
-          Estado de tableros
-          <span className="panel-sub">
-            Semáforo (TABLERO/CIRCUITO) + luminarias aparte
-          </span>
-        </div>
-
-        <div className="panel-grid">
-          {tableroPanel.map((t) => (
-            <button
-              key={t.name}
-              type="button"
-              className="tablero-card"
-              onClick={() =>
-                navigate(`/historial?tablero=${encodeURIComponent(t.name)}`)
-              }
-              style={{ borderColor: t.color, color: t.color }}
-            >
-              <div className="tablero-head">
-                <span className="dot" style={{ background: t.color }} />
-                <span className="nm">{t.name}</span>
-                <span
-                  className={`badge ${
-                    t.estadoFinal ? t.estadoFinal.toLowerCase() : "none"
-                  }`}
+              {SHOW_MIGRATION_BUTTON && (
+                <button
+                  type="button"
+                  className="btn-outline"
+                  onClick={runMigration}
+                  title="Actualiza campos operativos en OTs viejas (si hace falta)"
                 >
-                  {t.estadoFinal || "SIN ESTADO"}
-                </span>
-              </div>
-
-              <div className="tablero-foot">
-                <span className="mini">Luminarias OK: {t.lumReparadas}</span>
-                <span className="mini">Pend: {t.lumPendientes}</span>
-              </div>
-            </button>
-          ))}
-        </div>
-
-        {!loading && tableroPanel.length === 0 && (
-          <div className="muted" style={{ marginTop: 10 }}>
-            No hay tableros para mostrar (¿todavía no cargaste OTs con
-            tablero?).
+                  🧩 Migrar
+                </button>
+              )}
+            </div>
           </div>
-        )}
-      </div>
+        </div>
+      )}
+
+      {/* Panel semáforo — deshabilitado por ahora */}
+      {SHOW_SEMAFORO_TABLEROS && (
+        <div className="panel-tableros">
+          <div className="panel-title">
+            Estado de tableros
+            <span className="panel-sub">
+              Semáforo (TABLERO/CIRCUITO) + luminarias aparte
+            </span>
+          </div>
+
+          <div className="panel-grid">
+            {tableroPanel.map((t) => (
+              <button
+                key={t.name}
+                type="button"
+                className="tablero-card"
+                onClick={() =>
+                  navigate(`/historial?tablero=${encodeURIComponent(t.name)}`)
+                }
+                style={{ borderColor: t.color, color: t.color }}
+              >
+                <div className="tablero-head">
+                  <span className="dot" style={{ background: t.color }} />
+                  <span className="nm">{t.name}</span>
+                  <span
+                    className={`badge ${
+                      t.estadoFinal ? t.estadoFinal.toLowerCase() : "none"
+                    }`}
+                  >
+                    {t.estadoFinal || "SIN ESTADO"}
+                  </span>
+                </div>
+
+                <div className="tablero-foot">
+                  <span className="mini">Luminarias OK: {t.lumReparadas}</span>
+                  <span className="mini">Pend: {t.lumPendientes}</span>
+                </div>
+              </button>
+            ))}
+          </div>
+
+          {!loading && tableroPanel.length === 0 && (
+            <div className="muted" style={{ marginTop: 10 }}>
+              No hay tableros para mostrar (¿todavía no cargaste OTs con
+              tablero?).
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
