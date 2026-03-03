@@ -61,19 +61,76 @@ function pickDescripcion(h) {
 }
 
 /* =======================================================
-   IMG: compresión para que no pese (clave)
+   IMG: utilidades robustas (Blob/File/dataURL)
 ======================================================= */
-async function photoToJpegBlob(blob, { maxSide = 1600, quality = 0.82 } = {}) {
-  if (!blob) return null;
+function isDataURL(v) {
+  return typeof v === "string" && v.startsWith("data:");
+}
 
-  let src = blob;
+function dataURLToBlob(dataUrl) {
+  const [head, b64] = String(dataUrl).split(",");
+  const mime =
+    (head.match(/data:(.*?);base64/) || [])[1] || "application/octet-stream";
+  const bin = atob(b64 || "");
+  const u8 = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+  return new Blob([u8], { type: mime });
+}
+
+async function blobToDataURL(input) {
+  if (!input) return "";
+  if (isDataURL(input)) return input;
+
+  if (!(input instanceof Blob)) {
+    console.warn("blobToDataURL recibió no-Blob:", input);
+    return "";
+  }
+
+  return await new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(String(r.result || ""));
+    r.onerror = () => reject(r.error || new Error("FileReader error"));
+    r.readAsDataURL(input);
+  });
+}
+
+/* =======================================================
+   IMG: compresión + compat (Android + iPhone HEIC)
+   - acepta Blob/File o dataURL
+   - devuelve Blob JPEG comprimido (o null si no se pudo)
+======================================================= */
+async function photoToJpegBlob(input, { maxSide = 1600, quality = 0.82 } = {}) {
+  if (!input) return null;
+
+  let src = input;
+
+  // dataURL viejo -> Blob
+  if (isDataURL(src)) {
+    src = dataURLToBlob(src);
+  }
+
+  // wrapper { blob: ... }
+  if (src && typeof src === "object" && "blob" in src && src.blob) {
+    src = src.blob;
+  }
+
+  if (!(src instanceof Blob)) {
+    console.warn("photoToJpegBlob recibió no-Blob:", src);
+    return null;
+  }
+
   const type = String(src.type || "").toLowerCase();
 
-  // iPhone HEIC/HEIF -> JPEG
+  // iPhone HEIC/HEIF -> JPEG (requiere heic2any instalado)
   if (type.includes("heic") || type.includes("heif")) {
-    const { default: heic2any } = await import("heic2any");
-    const conv = await heic2any({ blob: src, toType: "image/jpeg", quality });
-    src = Array.isArray(conv) ? conv[0] : conv;
+    try {
+      const { default: heic2any } = await import("heic2any");
+      const conv = await heic2any({ blob: src, toType: "image/jpeg", quality });
+      src = Array.isArray(conv) ? conv[0] : conv;
+    } catch (e) {
+      console.warn("No se pudo convertir HEIC/HEIF:", e);
+      return null;
+    }
   }
 
   const url = URL.createObjectURL(src);
@@ -88,7 +145,7 @@ async function photoToJpegBlob(blob, { maxSide = 1600, quality = 0.82 } = {}) {
     const w0 = img.naturalWidth || img.width;
     const h0 = img.naturalHeight || img.height;
 
-    // ✅ limita por lado mayor (clave para fotos verticales de móvil)
+    // ✅ límite por lado mayor (clave para portrait en móvil)
     const scale = Math.min(1, maxSide / Math.max(w0, h0));
     const w = Math.max(1, Math.round(w0 * scale));
     const h = Math.max(1, Math.round(h0 * scale));
@@ -98,6 +155,8 @@ async function photoToJpegBlob(blob, { maxSide = 1600, quality = 0.82 } = {}) {
     canvas.height = h;
 
     const ctx = canvas.getContext("2d", { alpha: false });
+    if (!ctx) return null;
+
     ctx.fillStyle = "#fff";
     ctx.fillRect(0, 0, w, h);
     ctx.drawImage(img, 0, 0, w, h);
@@ -111,18 +170,21 @@ async function photoToJpegBlob(blob, { maxSide = 1600, quality = 0.82 } = {}) {
     });
 
     return out;
+  } catch (e) {
+    console.warn("photoToJpegBlob error:", e);
+    return null;
   } finally {
     URL.revokeObjectURL(url);
   }
 }
 
-async function blobToDataURL(blob) {
-  return await new Promise((resolve, reject) => {
-    const r = new FileReader();
-    r.onload = () => resolve(String(r.result || ""));
-    r.onerror = () => reject(r.error);
-    r.readAsDataURL(blob);
-  });
+// compat: por si quedó alguna referencia vieja
+async function fileToCompressedBlob(file, maxW = 1280, quality = 0.72) {
+  return photoToJpegBlob(file, { maxSide: maxW, quality });
+}
+async function fileToCompressedDataURL(file, maxW = 1280, quality = 0.72) {
+  const b = await fileToCompressedBlob(file, maxW, quality);
+  return b ? await blobToDataURL(b) : "";
 }
 
 /* =======================================================
@@ -199,17 +261,16 @@ function navigatePostOT(navigate, payload) {
     navigate("/historial");
   }
 }
+
 /* =======================================================
    LUMINARIAS: extraer códigos tipo PC4026 del texto
-   - soporta "PC4026", "PC 4026", "PC-4026"
-   - devuelve lista única manteniendo orden
 ======================================================= */
 function extraerCodigosLuminaria(texto) {
   const s = String(texto || "").toUpperCase();
   const matches = s.match(/\bPC[\s-]?\d{3,6}\b/g) || [];
 
   const norm = matches
-    .map((m) => m.replace(/\s+/g, "").replace("-", "")) // "PC 4026" -> "PC4026"
+    .map((m) => m.replace(/\s+/g, "").replace("-", ""))
     .filter(Boolean);
 
   const seen = new Set();
@@ -240,7 +301,6 @@ function normalizarPayloadOT(form) {
       : form.circuitos) ||
     "";
 
-  // Clasificación
   const alcanceRaw = String(form.alcance || "")
     .trim()
     .toUpperCase();
@@ -248,7 +308,6 @@ function normalizarPayloadOT(form) {
     .trim()
     .toUpperCase();
 
-  // Compat hacia atrás
   let alcance =
     alcanceRaw ||
     (String(form.luminaria || "").trim() ||
@@ -256,7 +315,6 @@ function normalizarPayloadOT(form) {
       ? "LUMINARIA"
       : "TABLERO");
 
-  // estado_tablero (solo TABLERO/CIRCUITO)
   const ESTADOS_TABLERO = new Set(["CRITICO", "PARCIAL", "OK"]);
   let estado_tablero = String(form.estado_tablero || "")
     .trim()
@@ -268,7 +326,6 @@ function normalizarPayloadOT(form) {
     estado_tablero = "";
   }
 
-  // luminaria_estado (solo LUMINARIA)
   const ESTADOS_LUM = new Set(["REPARADO", "APAGADO", "PENDIENTE"]);
   let luminaria_estado = String(form.luminaria_estado || "")
     .trim()
@@ -280,7 +337,6 @@ function normalizarPayloadOT(form) {
     luminaria_estado = "";
   }
 
-  // Compat: si es luminaria y hay tarea realizada, inferimos REPARADO
   if (
     alcance === "LUMINARIA" &&
     !luminaria_estado &&
@@ -289,24 +345,17 @@ function normalizarPayloadOT(form) {
     luminaria_estado = "REPARADO";
   }
 
-  // -------------------------------------------------------
-  // LUMINARIAS: reglas duras por alcance (evita 400 max_length)
-  // -------------------------------------------------------
   const esLum = alcance === "LUMINARIA";
 
-  // lista de códigos desde el texto normalizado (chips)
   const codigos_luminarias = esLum
     ? extraerCodigosLuminaria(form.luminaria)
     : [];
 
-  // compat: codigo principal = input manual o primer código extraído
   const codigoPrincipal = esLum
     ? String(form.codigo_luminaria || "").trim() || codigos_luminarias[0] || ""
     : "";
-  // hard cap por compat (backend actual tiene max_length=30)
   const codigoPrincipalCapped = codigoPrincipal.slice(0, 30);
 
-  // si NO es luminaria, se limpian estos campos para que no viajen
   const ramal = esLum ? String(form.ramal || "").trim() : "";
   const km_luminaria = esLum
     ? form.km_luminaria === "" ||
@@ -357,16 +406,14 @@ function normalizarPayloadOT(form) {
 
     print_mode: Boolean(form.printMode),
 
-    // Clasificación
     alcance,
     resultado,
     estado_tablero,
     luminaria_estado,
 
-    // Luminarias (mapa)
     ramal,
     km_luminaria,
-    codigo_luminaria: codigoPrincipal,
+    codigo_luminaria: codigoPrincipalCapped,
   };
 }
 
@@ -376,12 +423,36 @@ export default function NuevaOT() {
 
   const [form, setForm] = useState(initialForm);
 
+  // ✅ NO cachear fotos (blob/url) para evitar blob: ERR_FILE_NOT_FOUND al rehidratar
+  const formCacheSafe = useMemo(
+    () => ({
+      ...form,
+      fotos: [],
+      // opcional: si querés que el cache sea liviano
+      // firmaTecnicoB64: "",
+    }),
+    [form],
+  );
+
   const { clear: clearForm } = useFormStore(
     "ot_form_cache",
-    form,
+    formCacheSafe,
     setForm,
     initialForm,
   );
+
+  // ✅ purga por si alguien ya tiene cache viejo con fotos sin blob real
+  useEffect(() => {
+    setForm((prev) => {
+      const fotosOk = (prev.fotos || []).filter(
+        (it) => it?.blob instanceof Blob,
+      );
+      if (fotosOk.length !== (prev.fotos || []).length) {
+        return { ...prev, fotos: fotosOk };
+      }
+      return prev;
+    });
+  }, []);
 
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState({
@@ -506,20 +577,17 @@ export default function NuevaOT() {
      VALIDACIÓN
   ======================================================== */
   function validarCampos() {
-    // Mínimos operativos
     if (!String(form.tablero || "").trim())
       return "Debe seleccionar un tablero.";
     if (!String(form.vehiculo || "").trim())
       return "Debe seleccionar un vehículo.";
 
-    // Al menos 1 técnico válido
     const tecnicos = Array.isArray(form.tecnicos) ? form.tecnicos : [];
     const tieneTecnico = tecnicos.some(
       (t) => String(t?.nombre || "").trim() || String(t?.legajo || "").trim(),
     );
     if (!tieneTecnico) return "Cargá al menos un técnico (nombre o legajo).";
 
-    // KM coherentes
     if (
       form.kmIni !== "" &&
       form.kmFin !== "" &&
@@ -530,12 +598,10 @@ export default function NuevaOT() {
       return "El km final no puede ser menor que el inicial.";
     }
 
-    // Firma
     if (!String(form.firmaTecnico || "").trim())
       return "Falta la aclaración (nombre) del técnico.";
     if (!form.firmaTecnicoB64) return "Falta la firma digital del técnico.";
 
-    // Clasificación (negocio)
     const alcance = String(form.alcance || "LUMINARIA")
       .trim()
       .toUpperCase();
@@ -563,7 +629,6 @@ export default function NuevaOT() {
     }
 
     if (alcance === "LUMINARIA") {
-      // Para mapa: pedimos Ramal + KM
       const ramal = String(form.ramal || "").trim();
       const kmLum = form.km_luminaria;
 
@@ -652,6 +717,8 @@ export default function NuevaOT() {
     drawingRef.current = true;
 
     const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
     const { x, y } = getPos(e, canvas);
 
     ctx.lineWidth = 2.2;
@@ -667,6 +734,8 @@ export default function NuevaOT() {
     if (!canvas || !drawingRef.current) return;
 
     const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
     const { x, y } = getPos(e, canvas);
     ctx.lineTo(x, y);
     ctx.stroke();
@@ -680,6 +749,7 @@ export default function NuevaOT() {
     const canvas = sigRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
+    if (!ctx) return;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     setForm((p) => ({ ...p, firmaTecnicoB64: "" }));
   }
@@ -699,7 +769,8 @@ export default function NuevaOT() {
     const files = Array.from(e.target.files || []);
     if (!files.length) return;
 
-    const cupo = MAX_FOTOS - (form.fotos?.length || 0);
+    const prevCount = form.fotos?.length || 0;
+    const cupo = MAX_FOTOS - prevCount;
     const take = files.slice(0, Math.max(0, cupo));
 
     if (!take.length) {
@@ -714,8 +785,22 @@ export default function NuevaOT() {
 
       for (const f of take) {
         const blob = await fileToCompressedBlob(f, 1280, 0.72);
+
+        if (!(blob instanceof Blob)) {
+          console.warn("Foto descartada: no se pudo convertir a Blob", f);
+          continue;
+        }
+
         const url = URL.createObjectURL(blob);
         nuevas.push({ blob, url, bytes: blob.size || 0 });
+      }
+
+      if (!nuevas.length) {
+        showToast(
+          "warn",
+          "No se pudieron procesar las fotos (formato no soportado).",
+        );
+        return;
       }
 
       setForm((prev) => ({
@@ -725,10 +810,7 @@ export default function NuevaOT() {
 
       showToast(
         "ok",
-        `Fotos cargadas: ${Math.min(
-          (form.fotos?.length || 0) + nuevas.length,
-          MAX_FOTOS,
-        )}/${MAX_FOTOS}`,
+        `Fotos cargadas: ${Math.min(prevCount + nuevas.length, MAX_FOTOS)}/${MAX_FOTOS}`,
       );
     } catch (err) {
       console.warn(err);
@@ -762,9 +844,6 @@ export default function NuevaOT() {
       return;
     }
 
-    // -------------------------------------------------------
-    // Soft warnings (UX)
-    // -------------------------------------------------------
     const alcance = String(form.alcance || "LUMINARIA")
       .trim()
       .toUpperCase();
@@ -791,7 +870,7 @@ export default function NuevaOT() {
     if ((alcance === "TABLERO" || alcance === "CIRCUITO") && !estadoTablero) {
       showToast(
         "warn",
-        "Falta 'Estado del tablero'. Elegí: Crítico / Parcial / OK. (Esto alimenta el semáforo del dashboard).",
+        "Falta 'Estado del tablero'. Elegí: Crítico / Parcial / OK.",
       );
       return;
     }
@@ -814,39 +893,36 @@ export default function NuevaOT() {
       );
     }
 
-    // -------------------------------------------------------
-    // 1) Payload NORMALIZADO (SIEMPRE primero)
-    // -------------------------------------------------------
+    // 1) Payload normalizado
     const payload = normalizarPayloadOT(form);
     payload.tablero_catalogado = Boolean(tableroCatalogado);
 
-    // -------------------------------------------------------
-    // 2) Base64 SOLO para envío (temporal)
-    //    (IndexedDB guarda blobs, NO base64)
-    // -------------------------------------------------------
-
+    // 2) Fotos base64 SOLO para envío (temporal)
     const fotosB64 = await Promise.all(
       (form.fotos || []).map(async (it, idx) => {
-        const b = it?.blob;
+        const b = it?.blob ?? it;
         if (!b) return null;
 
-        // 1) compresión normal
+        // ya vienen comprimidas por onAddFotos, pero reaseguramos por robustez
         let jpeg = await photoToJpegBlob(b, { maxSide: 1600, quality: 0.82 });
         if (!jpeg) return null;
 
         let dataUrl = await blobToDataURL(jpeg);
 
-        // 2) si sigue gigante, apretamos más (evita pasar MAX_BYTES y evita truncados)
+        // si sigue grande, apretamos más
         if (dataUrl && dataUrl.length > 1_800_000) {
-          jpeg = await photoToJpegBlob(b, { maxSide: 1280, quality: 0.72 });
-          dataUrl = jpeg ? await blobToDataURL(jpeg) : dataUrl;
+          const jpeg2 = await photoToJpegBlob(b, {
+            maxSide: 1280,
+            quality: 0.72,
+          });
+          dataUrl = jpeg2 ? await blobToDataURL(jpeg2) : dataUrl;
         }
 
         console.log(
-          `[foto ${idx}] in=${b.type} ${(b.size / 1024 / 1024).toFixed(1)}MB -> b64=${dataUrl?.length}`,
+          `[foto ${idx}] in=${b.type || "?"} ${(b.size ? b.size / 1024 / 1024 : 0).toFixed(1)}MB -> b64=${dataUrl?.length}`,
         );
 
-        return dataUrl;
+        return dataUrl || null;
       }),
     );
 
@@ -862,39 +938,27 @@ export default function NuevaOT() {
         vibrar?.(30);
       } catch {}
 
-      // -------------------------------------------------------
-      // 3) Envío al backend
-      // -------------------------------------------------------
       console.log("fotos_b64 count:", payload.fotos_b64?.length);
       console.log("fotos_b64 first:", payload.fotos_b64?.[0]?.slice(0, 40));
 
       const blob = await enviarOT(payload);
 
-      // -------------------------------------------------------
       // 4) Guardado local (PDF + fotos en IndexedDB)
-      // -------------------------------------------------------
       try {
         const record = await saveOtPdf(
-          {
-            ...payload,
-            tecnico: payload?.tecnicos?.[0]?.nombre || "",
-          },
+          { ...payload, tecnico: payload?.tecnicos?.[0]?.nombre || "" },
           blob,
         );
 
-        // ⬇️⬇️ Guardar FOTOS como BLOBS (no llenan memoria)
         try {
           const blobs = (form.fotos || []).map((x) => x.blob).filter(Boolean);
           if (blobs.length) {
             await saveOtPhotos(record.id, blobs);
           }
-
-          // limpieza automática
           purgeOldMedia({ olderThanDays: 45 }).catch(() => {});
         } catch (e) {
           console.warn("No se pudieron guardar fotos en IndexedDB:", e);
         }
-        // ⬆️⬆️ Fin guardado fotos
       } catch (dbErr) {
         console.warn(
           "No se pudo guardar en IndexedDB (continúo igual):",
@@ -902,15 +966,20 @@ export default function NuevaOT() {
         );
       }
 
-      // -------------------------------------------------------
       // 5) Descarga PDF
-      // -------------------------------------------------------
       const url = URL.createObjectURL(blob);
       const anchor = document.createElement("a");
       anchor.href = url;
       anchor.download = `OT_${payload.fecha}_${payload.tablero}.pdf`;
       anchor.click();
       setTimeout(() => URL.revokeObjectURL(url), 30_000);
+
+      // limpiar previews blob para no filtrar memoria
+      try {
+        (form.fotos || []).forEach(
+          (it) => it?.url && URL.revokeObjectURL(it.url),
+        );
+      } catch {}
 
       clearForm();
       showToast("ok", "Orden generada correctamente. PDF descargado.");
@@ -1275,11 +1344,11 @@ export default function NuevaOT() {
       <select
         value={form.alcance || "LUMINARIA"}
         onChange={(e) => {
-          const alcance = e.target.value;
+          const alcanceSel = e.target.value;
 
           setForm((prev) => {
             let estado_tablero = prev.estado_tablero || "";
-            const esLum = alcance === "LUMINARIA";
+            const esLum = alcanceSel === "LUMINARIA";
 
             if (esLum) {
               estado_tablero = "";
@@ -1289,10 +1358,8 @@ export default function NuevaOT() {
 
             return {
               ...prev,
-              alcance,
+              alcance: alcanceSel,
               estado_tablero,
-
-              // limpieza dura al salir de LUMINARIA (evita que viaje basura al backend)
               ...(esLum
                 ? {}
                 : {
@@ -1350,7 +1417,10 @@ export default function NuevaOT() {
           <select
             value={form.luminaria_estado || ""}
             onChange={(e) =>
-              setForm((prev) => ({ ...prev, luminaria_estado: e.target.value }))
+              setForm((prev) => ({
+                ...prev,
+                luminaria_estado: e.target.value,
+              }))
             }
           >
             <option value="">—</option>
@@ -1391,7 +1461,7 @@ export default function NuevaOT() {
           onChange={({ text }) =>
             setForm((prev) => ({
               ...prev,
-              luminaria: text, // acá guardamos el string normalizado
+              luminaria: text,
             }))
           }
         />
@@ -1502,18 +1572,9 @@ export default function NuevaOT() {
           onMouseMove={moveDraw}
           onMouseUp={endDraw}
           onMouseLeave={endDraw}
-          onTouchStart={(e) => {
-            e.preventDefault();
-            startDraw(e);
-          }}
-          onTouchMove={(e) => {
-            e.preventDefault();
-            moveDraw(e);
-          }}
-          onTouchEnd={(e) => {
-            e.preventDefault();
-            endDraw();
-          }}
+          onTouchStart={startDraw}
+          onTouchMove={moveDraw}
+          onTouchEnd={endDraw}
         />
 
         <div style={{ display: "flex", gap: 10, marginTop: 10 }}>
@@ -1554,7 +1615,6 @@ export default function NuevaOT() {
       <h3 className="subtitulo">Evidencias (Fotos)</h3>
 
       <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-        {/* Cámara */}
         <label className="btn-outline" style={{ cursor: "pointer" }}>
           📸 Cámara
           <input
@@ -1567,7 +1627,6 @@ export default function NuevaOT() {
           />
         </label>
 
-        {/* Galería */}
         <label className="btn-outline" style={{ cursor: "pointer" }}>
           🖼️ Galería
           <input
