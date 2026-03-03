@@ -1,8 +1,12 @@
 from io import BytesIO
 import os
+import re
+import base64
+import logging
 from datetime import datetime
 
 from django.conf import settings
+from django.contrib.staticfiles import finders
 
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import cm
@@ -17,8 +21,163 @@ from reportlab.platypus import (
     KeepTogether,
     Image,
 )
-from django.contrib.staticfiles import finders
 from reportlab.lib.utils import ImageReader
+
+logger = logging.getLogger(__name__)
+
+# ==========================================================
+# PIL / HEIC (blindado)
+# ==========================================================
+PIL_OK = False
+try:
+    from PIL import Image as PILImage, ImageOps  # Pillow
+
+    PIL_OK = True
+except Exception:
+    PIL_OK = False
+
+# HEIC/HEIF (iPhone) -> requiere pillow-heif
+try:
+    from pillow_heif import register_heif_opener
+
+    register_heif_opener()
+except Exception:
+    pass
+
+_DATAURL_RE = re.compile(r"^data:(image\/[a-zA-Z0-9.+-]+);base64,(.*)$", re.S)
+
+
+def _dataurl_to_bytes(data_url: str):
+    """Devuelve bytes decodificados desde data:image/...;base64,... o None."""
+    if not data_url:
+        return None
+    s = str(data_url).strip()
+    m = _DATAURL_RE.match(s)
+    if not m:
+        return None
+    b64 = m.group(2)
+    try:
+        return base64.b64decode(b64, validate=False)
+    except Exception:
+        return None
+
+
+def _image_bytes_to_jpeg_buffer(raw: bytes, max_side: int = 1800, quality: int = 82):
+    """
+    Convierte bytes de imagen (png/jpg/webp/heic si soportado) a JPEG optimizado.
+    - Respeta EXIF orientation
+    - Compone sobre blanco si hay alpha
+    - Escala por lado mayor
+    Retorna BytesIO listo para ReportLab, o None si falla.
+    """
+    if not raw:
+        return None
+
+    # Si no hay Pillow, intentamos pasar bytes crudos (solo jpg/png típicamente)
+    if not PIL_OK:
+        try:
+            buf = BytesIO(raw)
+            buf.seek(0)
+            return buf
+        except Exception:
+            return None
+
+    try:
+        im = PILImage.open(BytesIO(raw))
+        im = ImageOps.exif_transpose(im)
+
+        # Asegurar fondo blanco si hay alpha
+        if im.mode in ("RGBA", "LA") or (im.mode == "P" and "transparency" in im.info):
+            bg = PILImage.new("RGB", im.size, (255, 255, 255))
+            bg.paste(im, mask=im.split()[-1] if im.mode in ("RGBA", "LA") else None)
+            im = bg
+        else:
+            if im.mode != "RGB":
+                im = im.convert("RGB")
+
+        im.thumbnail((max_side, max_side), PILImage.LANCZOS)
+
+        out = BytesIO()
+        im.save(out, format="JPEG", quality=quality, optimize=True)
+        out.seek(0)
+        return out
+    except Exception as e:
+        logger.warning("No se pudo convertir imagen a JPEG: %s", e)
+        return None
+
+
+def _abs_media(rel_path: str) -> str:
+    if not rel_path:
+        return ""
+    return os.path.join(settings.MEDIA_ROOT, rel_path.replace("/", os.sep))
+
+
+def _static_abs(static_rel: str) -> str:
+    """
+    Devuelve el path absoluto real de un archivo en staticfiles.
+    Funciona en desarrollo y producción (collectstatic).
+    """
+    p = finders.find(static_rel)
+    return p or ""
+
+
+def _img_flowable_path(abs_path: str, w_cm: float, h_cm: float, h_align="LEFT"):
+    """Crea Image desde path si existe. Si no, devuelve None."""
+    if not abs_path or not os.path.exists(abs_path):
+        return None
+    try:
+        im = Image(abs_path, width=w_cm * cm, height=h_cm * cm)
+        im.hAlign = h_align
+        return im
+    except Exception as e:
+        logger.warning("Error creando Image desde path '%s': %s", abs_path, e)
+        return None
+
+
+def _img_flowable_dataurl(
+    data_url: str, w_cm: float, h_cm: float, h_align="LEFT", max_side=1800, quality=82
+):
+    """
+    Crea Image desde dataURL base64 (foto/firma).
+    Convierte a JPEG optimizado para evitar formatos raros (HEIC/WEBP).
+    """
+    raw = _dataurl_to_bytes(data_url)
+    if not raw:
+        return None
+
+    buf = _image_bytes_to_jpeg_buffer(raw, max_side=max_side, quality=quality)
+    if not buf:
+        return None
+
+    try:
+        im = Image(buf, width=w_cm * cm, height=h_cm * cm)
+        im.hAlign = h_align
+        return im
+    except Exception as e:
+        logger.warning("Error creando Image desde dataURL: %s", e)
+        return None
+
+
+def _placeholder_box(text: str, theme, w_cm: float, h_cm: float):
+    """Placeholder visual cuando una imagen falla."""
+    t = Table(
+        [[Paragraph(text, getSampleStyleSheet()["Normal"])]],
+        colWidths=[w_cm * cm],
+        rowHeights=[h_cm * cm],
+    )
+    t.setStyle(
+        TableStyle(
+            [
+                ("BACKGROUND", (0, 0), (-1, -1), theme["panel2"]),
+                ("BOX", (0, 0), (-1, -1), 1, theme["border"]),
+                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+                ("LEFTPADDING", (0, 0), (-1, -1), 6),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 6),
+            ]
+        )
+    )
+    return t
 
 
 # =========================
@@ -53,30 +212,6 @@ def get_theme(data):
         "prose_bg": colors.HexColor("#070d18"),
         "accent": colors.HexColor("#38bdf8"),
     }
-
-
-def _abs_media(rel_path: str) -> str:
-    if not rel_path:
-        return ""
-    return os.path.join(settings.MEDIA_ROOT, rel_path.replace("/", os.sep))
-
-
-def _img_flowable(abs_path: str, w_cm: float, h_cm: float, h_align="LEFT"):
-    """Crea Image si existe el archivo. Si no, devuelve None."""
-    if not abs_path or not os.path.exists(abs_path):
-        return None
-    im = Image(abs_path, width=w_cm * cm, height=h_cm * cm)
-    im.hAlign = h_align
-    return im
-
-
-def _static_abs(static_rel: str) -> str:
-    """
-    Devuelve el path absoluto real de un archivo en staticfiles.
-    Funciona en desarrollo y producción (collectstatic).
-    """
-    p = finders.find(static_rel)
-    return p or ""
 
 
 def generar_pdf(data):
@@ -175,20 +310,17 @@ def generar_pdf(data):
     # LUMINARIAS: lista canónica para PDF
     # =========================
     def get_codigos_luminarias(pdf_data: dict):
-        # 1) lista persistida/canónica
         cods = pdf_data.get("codigos_luminarias") or []
         if isinstance(cods, (tuple, set)):
             cods = list(cods)
         if isinstance(cods, list):
             cods = [str(x).strip().upper() for x in cods if str(x).strip()]
 
-        # 2) fallback: codigo_luminaria único
         if not cods:
             c = str(pdf_data.get("codigo_luminaria") or "").strip().upper()
             if c:
                 cods = [c]
 
-        # 3) fallback final: parseo desde texto libre (OTs viejas)
         if not cods:
             try:
                 from .views_luminarias import parse_luminaria_codes
@@ -199,7 +331,6 @@ def generar_pdf(data):
             except Exception:
                 cods = []
 
-        # únicos manteniendo orden
         seen = set()
         out = []
         for c in cods:
@@ -296,7 +427,6 @@ def generar_pdf(data):
 
     km_text = f"{km_ini or '-'} → {km_fin or '-'}" if (km_ini or km_fin) else "-"
 
-    # ✅ KM TOTAL
     km_total = data.get("km_total")
     km_total_text = f"{km_total} km" if km_total not in (None, "", 0) else "-"
 
@@ -345,7 +475,6 @@ def generar_pdf(data):
     story.append(card([resumen], pad=12))
     story.append(Spacer(1, 11))
 
-    # Aviso si tablero no está catalogado (no bloquea)
     if tablero_nombre and (not tablero_catalogado):
         story.append(
             card(
@@ -361,7 +490,7 @@ def generar_pdf(data):
     story.append(Spacer(1, 9))
 
     # =========================
-    # CLASIFICACIÓN (SEMAFORO)
+    # CLASIFICACIÓN
     # =========================
     alcance = safe(data.get("alcance")).strip() or "-"
     resultado = safe(data.get("resultado")).strip() or "-"
@@ -427,13 +556,11 @@ def generar_pdf(data):
     story.append(bloque_texto("Tarea realizada", data.get("tarea_realizada")))
     story.append(bloque_texto("Tarea pendiente", data.get("tarea_pendiente")))
 
-    # Solo mostrar bloques de luminaria si aplica
     if safe(data.get("alcance")).strip().upper() == "LUMINARIA":
         cods = get_codigos_luminarias(data)
         cods_txt = ", ".join(cods) if cods else "-"
         story.append(bloque_texto("Códigos de luminarias", cods_txt, empty="-"))
 
-        # Sub-card operativa (ramal/km) opcional
         ramal = safe(data.get("ramal")).strip()
         km_lum = data.get("km_luminaria")
         if ramal or km_lum not in (None, "", 0):
@@ -539,20 +666,29 @@ def generar_pdf(data):
     )
 
     # =========================
-    # FIRMAS + FIRMA DIGITAL REAL
+    # FIRMAS + FIRMA DIGITAL (path o base64)
     # =========================
     story.append(Paragraph("FIRMAS", H2))
 
-    firma_rel = (data.get("firma_tecnico_path") or "").strip()
-    firma_abs = _abs_media(firma_rel) if firma_rel else ""
-
-    firma_img = _img_flowable(firma_abs, w_cm=7.0, h_cm=2.4)
+    # 1) Firma técnico: preferimos base64 (firma_tecnico_img), luego path
+    firma_img_flow = None
+    firma_b64 = (data.get("firma_tecnico_img") or "").strip()
+    if firma_b64:
+        firma_img_flow = _img_flowable_dataurl(
+            firma_b64, w_cm=7.0, h_cm=2.4, h_align="LEFT", max_side=900, quality=90
+        )
+    if not firma_img_flow:
+        firma_rel = (data.get("firma_tecnico_path") or "").strip()
+        firma_abs = _abs_media(firma_rel) if firma_rel else ""
+        firma_img_flow = _img_flowable_path(
+            firma_abs, w_cm=7.0, h_cm=2.4, h_align="LEFT"
+        )
 
     bloque_tec = [
         linea_firma("Firma técnico", aclaracion=data.get("firma_tecnico") or "")
     ]
-    if firma_img:
-        bloque_tec += [Spacer(1, 6), firma_img]
+    if firma_img_flow:
+        bloque_tec += [Spacer(1, 6), firma_img_flow]
     story.append(KeepTogether(bloque_tec))
     story.append(Spacer(1, 10))
 
@@ -562,26 +698,62 @@ def generar_pdf(data):
     story.append(Spacer(1, 12))
 
     # =========================
-    # EVIDENCIAS (FOTOS) — hasta 4 (2x2)
+    # EVIDENCIAS (FOTOS) — 2x2 (hasta 4)
+    # - Preferimos fotos_b64 (frontend actual)
+    # - Fallback: fotos_paths / fotos (paths en media)
     # =========================
+    fotos_b64 = data.get("fotos_b64") or []
+    if isinstance(fotos_b64, (tuple, set)):
+        fotos_b64 = list(fotos_b64)
+    if not isinstance(fotos_b64, list):
+        fotos_b64 = []
+
     fotos_rel = data.get("fotos_paths") or data.get("fotos") or []
-    fotos_rel = list(fotos_rel)[:4]
+    if isinstance(fotos_rel, (tuple, set)):
+        fotos_rel = list(fotos_rel)
+    if not isinstance(fotos_rel, list):
+        fotos_rel = []
 
-    fotos_abs = []
-    for rel in fotos_rel:
-        ap = _abs_media(rel)
-        if ap and os.path.exists(ap):
-            fotos_abs.append(ap)
+    fotos_sources = []
+    for s in fotos_b64[:4]:
+        if isinstance(s, str) and s.strip().startswith("data:image/"):
+            fotos_sources.append(("b64", s.strip()))
+    if not fotos_sources:
+        for rel in fotos_rel[:4]:
+            ap = _abs_media(rel)
+            if ap and os.path.exists(ap):
+                fotos_sources.append(("path", ap))
 
-    if fotos_abs:
+    if fotos_sources:
         story.append(Paragraph("EVIDENCIAS (FOTOS)", H2))
 
         cells = []
-        for ap in fotos_abs:
-            cells.append(_img_flowable(ap, w_cm=8.2, h_cm=6.0, h_align="CENTER"))
+        for idx, (kind, val) in enumerate(fotos_sources):
+            if kind == "b64":
+                im = _img_flowable_dataurl(
+                    val, w_cm=8.2, h_cm=6.0, h_align="CENTER", max_side=1800, quality=82
+                )
+                if not im:
+                    cells.append(
+                        _placeholder_box(
+                            f"Foto {idx+1}\n(no soportada)", theme, 8.2, 6.0
+                        )
+                    )
+                else:
+                    cells.append(im)
+            else:
+                im = _img_flowable_path(val, w_cm=8.2, h_cm=6.0, h_align="CENTER")
+                if not im:
+                    cells.append(
+                        _placeholder_box(
+                            f"Foto {idx+1}\n(no encontrada)", theme, 8.2, 6.0
+                        )
+                    )
+                else:
+                    cells.append(im)
 
         while len(cells) < 4:
-            cells.append(Paragraph("", BODY))
+            cells.append(_placeholder_box("—", theme, 8.2, 6.0))
 
         grid = Table(
             [[cells[0], cells[1]], [cells[2], cells[3]]],
@@ -709,11 +881,7 @@ def generar_pdf(data):
 
         canv.drawString(1.6 * cm, 1.2 * cm, footer_left)
 
-        canv.drawRightString(
-            w - 1.6 * cm,
-            1.2 * cm,
-            f"Página {_doc.page}",
-        )
+        canv.drawRightString(w - 1.6 * cm, 1.2 * cm, f"Página {_doc.page}")
 
         canv.restoreState()
 

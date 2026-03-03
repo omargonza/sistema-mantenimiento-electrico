@@ -27,19 +27,22 @@
 
   color: var(--op-text);
 }
+/* Fondo: sobrio, gris plata */
+:root {
+  --op-bg: #0b1220;
+}
 
-/* Fondo: sobrio, no “glossy” */
 .op-mode.page {
   background:
     radial-gradient(
       900px 520px at 15% 0%,
-      rgba(34, 197, 94, 0.1),
-      transparent 55%
+      rgba(192, 198, 210, 0.14),
+      /* plata */ transparent 55%
     ),
     radial-gradient(
       900px 520px at 90% 15%,
-      rgba(56, 189, 248, 0.1),
-      transparent 55%
+      rgba(170, 178, 192, 0.12),
+      /* plata (variante) */ transparent 55%
     ),
     var(--op-bg);
 }
@@ -245,6 +248,7 @@
   border: 1px solid var(--op-border2) !important;
   border-radius: 14px !important;
   box-sizing: border-box;
+  appearance: none;
   -webkit-appearance: none;
   font-weight: 800;
 }
