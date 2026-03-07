@@ -1026,7 +1026,7 @@ export default function NuevaOT() {
         onChange={(e) => setForm({ ...form, fecha: e.target.value })}
       />
 
-      <label>Ubicación</label>
+      <label>Ubicación/Referencia</label>
       <input
         type="text"
         placeholder="Ej: Poste 23 / KM 12.4 / Peaje / Referencia…"

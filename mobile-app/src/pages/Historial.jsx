@@ -378,15 +378,18 @@ export default function Historial() {
           </button>
 
           {/* ✅ Toggle local: Solo pendientes */}
-          <button
-            type="button"
-            className={`chip-toggle ${soloPendientes ? "is-on" : ""}`}
-            onClick={toggleSoloPendientes}
-            disabled={loading}
-            title="Filtra en pantalla (no recarga)."
-          >
-            {soloPendientes ? "✓ Solo pendientes" : "Solo pendientes"}
-          </button>
+
+          {false && (
+            <button
+              type="button"
+              className={`chip-toggle ${soloPendientes ? "is-on" : ""}`}
+              onClick={toggleSoloPendientes}
+              disabled={loading}
+              title="Filtra en pantalla (no recarga)."
+            >
+              {soloPendientes ? "✓ Solo pendientes" : "Solo pendientes"}
+            </button>
+          )}
         </div>
       </div>
 
