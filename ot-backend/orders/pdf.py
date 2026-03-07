@@ -304,7 +304,7 @@ def generar_pdf(data):
         return Paragraph(safe(txt).replace("\n", "<br/>"), style)
 
     def now_iso():
-        return datetime.now().strftime("%Y-%m-%d %H:%M")
+        return datetime.now().strftime("%d-%m-%Y")
 
     # =========================
     # LUMINARIAS: lista canónica para PDF
