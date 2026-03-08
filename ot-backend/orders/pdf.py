@@ -306,6 +306,15 @@ def generar_pdf(data):
     def now_iso():
         return datetime.now().strftime("%d-%m-%Y")
 
+    def fmt_fecha(v):
+        s = safe(v).strip()
+        if not s:
+            return "-"
+        try:
+            return datetime.strptime(s[:10], "%Y-%m-%d").strftime("%d/%m/%Y")
+        except Exception:
+            return s
+
     # =========================
     # LUMINARIAS: lista canónica para PDF
     # =========================
@@ -433,7 +442,7 @@ def generar_pdf(data):
     resumen_rows = [
         [
             P("FECHA", LABEL),
-            P(safe(data.get("fecha")), VALUE),
+            P(fmt_fecha(data.get("fecha")), VALUE),
             P("UBICACIÓN", LABEL),
             P(safe(data.get("ubicacion")), VALUE),
         ],
