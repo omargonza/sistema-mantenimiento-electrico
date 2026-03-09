@@ -1,23 +1,124 @@
 import re
 from rest_framework import serializers
-from .models import OrdenTrabajo
+
+from historial.models import Tablero
+
+from .models import (
+    OrdenTrabajo,
+    OrdenTrabajoLuminariaGrupo,
+    OrdenTrabajoLuminariaItem,
+    RAMAL_CHOICES,
+)
 
 # Extrae códigos tipo: PC4026, CC4105, GP0012, etc.
 CODE_RE = re.compile(r"\b[A-Z]{1,4}\d{3,6}\b")
 
 
+class OrdenTrabajoLuminariaItemSerializer(serializers.ModelSerializer):
+    km_luminaria = serializers.FloatField(required=False, allow_null=True)
+
+    class Meta:
+        model = OrdenTrabajoLuminariaItem
+        fields = [
+            "id",
+            "orden",
+            "codigo_luminaria",
+            "km_luminaria",
+        ]
+
+
+class OrdenTrabajoLuminariaGrupoSerializer(serializers.Serializer):
+    # Puede venir id directo
+    tablero_id = serializers.PrimaryKeyRelatedField(
+        queryset=Tablero.objects.all(),
+        source="tablero_obj",
+        required=False,
+        allow_null=True,
+    )
+
+    # O puede venir el nombre del tablero desde el frontend
+    tablero = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        default="",
+        write_only=True,
+    )
+
+    zona = serializers.CharField(required=False, allow_blank=True, default="")
+    circuito = serializers.CharField(required=False, allow_blank=True, default="")
+    ramal = serializers.ChoiceField(
+        choices=RAMAL_CHOICES,
+        required=False,
+        allow_blank=True,
+        default="",
+    )
+    resultado = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        default="COMPLETO",
+    )
+    luminaria_estado = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        default="",
+    )
+    tarea_pedida = serializers.CharField(required=False, allow_blank=True, default="")
+    tarea_realizada = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        default="",
+    )
+    tarea_pendiente = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        default="",
+    )
+    observaciones = serializers.CharField(required=False, allow_blank=True, default="")
+    items = OrdenTrabajoLuminariaItemSerializer(many=True, required=False)
+
+    def validate(self, attrs):
+        """
+        Acepta:
+        - tablero_id (preferido)
+        - o tablero por nombre exacto/iexact
+        """
+        tablero_obj = attrs.get("tablero_obj")
+        tablero_nombre = str(attrs.get("tablero") or "").strip()
+
+        if not tablero_obj and tablero_nombre:
+            tablero_obj = Tablero.objects.filter(nombre__iexact=tablero_nombre).first()
+
+        # Normalizamos todo a la key final 'tablero'
+        attrs["tablero"] = tablero_obj
+        attrs.pop("tablero_obj", None)
+
+        return attrs
+
+
 class OrdenTrabajoSerializer(serializers.ModelSerializer):
     # Entradas SOLO request (no van al modelo)
     firma_tecnico_img = serializers.CharField(
-        required=False, allow_blank=True, write_only=True
+        required=False,
+        allow_blank=True,
+        write_only=True,
     )
     fotos_b64 = serializers.ListField(
-        child=serializers.CharField(), required=False, write_only=True
+        child=serializers.CharField(),
+        required=False,
+        write_only=True,
     )
     print_mode = serializers.BooleanField(required=False, write_only=True)
 
     codigos_luminarias = serializers.ListField(
-        child=serializers.CharField(), required=False, allow_empty=True
+        child=serializers.CharField(),
+        required=False,
+        allow_empty=True,
+    )
+
+    luminarias_por_tablero = OrdenTrabajoLuminariaGrupoSerializer(
+        many=True,
+        required=False,
+        write_only=True,
     )
 
     class Meta:
@@ -25,7 +126,6 @@ class OrdenTrabajoSerializer(serializers.ModelSerializer):
         fields = "__all__"
         extra_kwargs = {
             "ubicacion": {"required": False, "allow_blank": True},
-            # ✅ Luminarias: permitir vacío (cuando NO es luminaria)
             "ramal": {"required": False, "allow_blank": True},
             "codigo_luminaria": {"required": False, "allow_blank": True},
             "km_luminaria": {"required": False, "allow_null": True},
@@ -47,13 +147,10 @@ class OrdenTrabajoSerializer(serializers.ModelSerializer):
         """
         Reglas:
         - Si alcance=LUMINARIA:
-            * ramal requerido
-            * km_luminaria requerido
-            * codigos_luminarias opcional pero recomendado
-            * codigo_luminaria (compat) se normaliza
+            * modo nuevo: usa luminarias_por_tablero
+            * modo viejo: ramal + km_luminaria obligatorios
         - Si NO es LUMINARIA:
-            * limpiar ramal/km/codigo_luminaria/codigos_luminarias/luminaria_estado/luminaria_equipos
-              para evitar basura y errores max_length
+            * limpiar todo lo específico
         """
         alcance = str(attrs.get("alcance") or "").strip().upper()
 
@@ -66,7 +163,6 @@ class OrdenTrabajoSerializer(serializers.ModelSerializer):
         if raw_list is None:
             raw_list = []
 
-        # limpiar, upper, únicos, mantener orden
         clean = []
         seen = set()
         for x in raw_list:
@@ -80,26 +176,128 @@ class OrdenTrabajoSerializer(serializers.ModelSerializer):
 
         attrs["codigos_luminarias"] = clean
 
+        initial_groups = []
+        if hasattr(self, "initial_data"):
+            maybe_groups = self.initial_data.get("luminarias_por_tablero")
+            if isinstance(maybe_groups, list):
+                initial_groups = maybe_groups
+
+        requested_new_mode = alcance == "LUMINARIA" and len(initial_groups) > 0
+        luminarias_por_tablero = attrs.get("luminarias_por_tablero") or []
+
         if alcance == "LUMINARIA":
-            ramal = (attrs.get("ramal") or "").strip()
-            km_lum = attrs.get("km_luminaria", None)
+            # =========================
+            # MODO NUEVO: grupos por tablero
+            # =========================
+            if requested_new_mode or luminarias_por_tablero:
+                if not isinstance(luminarias_por_tablero, list):
+                    raise serializers.ValidationError(
+                        {"luminarias_por_tablero": "Formato inválido."}
+                    )
 
-            if not ramal:
-                raise serializers.ValidationError(
-                    {"ramal": "En LUMINARIA, el ramal es obligatorio."}
-                )
-            if km_lum is None:
-                raise serializers.ValidationError(
-                    {"km_luminaria": "En LUMINARIA, el KM es obligatorio."}
-                )
+                if not luminarias_por_tablero:
+                    raise serializers.ValidationError(
+                        {
+                            "luminarias_por_tablero": (
+                                "No se pudo validar ningún grupo de luminarias."
+                            )
+                        }
+                    )
 
-            # compat: si no hay codigo_luminaria pero hay lista, setear principal
-            if not (attrs.get("codigo_luminaria") or "").strip() and clean:
-                attrs["codigo_luminaria"] = clean[0]
+                for i, grupo in enumerate(luminarias_por_tablero):
+                    tablero = grupo.get("tablero")
+                    if not tablero:
+                        raise serializers.ValidationError(
+                            {
+                                "luminarias_por_tablero": (
+                                    f"Grupo {i+1}: tablero obligatorio."
+                                )
+                            }
+                        )
 
-            # hard cap por tu modelo actual (max_length=30)
-            if "codigo_luminaria" in attrs and attrs["codigo_luminaria"]:
-                attrs["codigo_luminaria"] = attrs["codigo_luminaria"][:30]
+                    ramal = str(grupo.get("ramal") or "").strip()
+                    if not ramal:
+                        raise serializers.ValidationError(
+                            {
+                                "luminarias_por_tablero": (
+                                    f"Grupo {i+1}: ramal obligatorio."
+                                )
+                            }
+                        )
+
+                    items = grupo.get("items") or []
+                    if not items:
+                        raise serializers.ValidationError(
+                            {
+                                "luminarias_por_tablero": (
+                                    f"Grupo {i+1}: cargá al menos una luminaria."
+                                )
+                            }
+                        )
+
+                    seen_codes = set()
+                    for j, item in enumerate(items):
+                        codigo = str(item.get("codigo_luminaria") or "").strip().upper()
+                        if not codigo:
+                            raise serializers.ValidationError(
+                                {
+                                    "luminarias_por_tablero": (
+                                        f"Grupo {i+1}, item {j+1}: código obligatorio."
+                                    )
+                                }
+                            )
+
+                        if not CODE_RE.match(codigo):
+                            raise serializers.ValidationError(
+                                {
+                                    "luminarias_por_tablero": (
+                                        f"Grupo {i+1}, item {j+1}: "
+                                        f"código inválido ({codigo})."
+                                    )
+                                }
+                            )
+
+                        if codigo in seen_codes:
+                            raise serializers.ValidationError(
+                                {
+                                    "luminarias_por_tablero": (
+                                        f"Grupo {i+1}: código repetido ({codigo})."
+                                    )
+                                }
+                            )
+
+                        seen_codes.add(codigo)
+                        item["codigo_luminaria"] = codigo
+
+                # si viene estructura nueva, anulamos compat vieja
+                attrs["codigos_luminarias"] = []
+                attrs["codigo_luminaria"] = ""
+                attrs["luminaria_equipos"] = ""
+                attrs["ramal"] = ""
+                attrs["km_luminaria"] = None
+
+            # =========================
+            # MODO VIEJO: OT plana
+            # =========================
+            else:
+                ramal = (attrs.get("ramal") or "").strip()
+                km_lum = attrs.get("km_luminaria", None)
+
+                if not ramal:
+                    raise serializers.ValidationError(
+                        {"ramal": "En LUMINARIA, el ramal es obligatorio."}
+                    )
+
+                if km_lum is None:
+                    raise serializers.ValidationError(
+                        {"km_luminaria": "En LUMINARIA, el KM es obligatorio."}
+                    )
+
+                if not (attrs.get("codigo_luminaria") or "").strip() and clean:
+                    attrs["codigo_luminaria"] = clean[0]
+
+                if "codigo_luminaria" in attrs and attrs["codigo_luminaria"]:
+                    attrs["codigo_luminaria"] = attrs["codigo_luminaria"][:30]
 
         else:
             # NO luminaria: limpiar todo lo específico
@@ -109,6 +307,7 @@ class OrdenTrabajoSerializer(serializers.ModelSerializer):
             attrs["codigos_luminarias"] = []
             attrs["luminaria_estado"] = ""
             attrs["luminaria_equipos"] = ""
+            attrs["luminarias_por_tablero"] = []
 
         return attrs
 
@@ -117,7 +316,6 @@ class OrdenTrabajoSerializer(serializers.ModelSerializer):
         if not v:
             return ""
 
-        # si hay letras/números pero no hay ningún código válido, rechazamos
         has_any_alnum = any(ch.isalnum() for ch in v)
         codes = CODE_RE.findall(v.upper())
 
@@ -126,8 +324,6 @@ class OrdenTrabajoSerializer(serializers.ModelSerializer):
                 "Formato inválido. Cargá códigos tipo PC4026 separados por coma."
             )
 
-        # normalizamos a formato único
-        # (preservando orden y quitando duplicados)
         seen = set()
         out = []
         for c in codes:

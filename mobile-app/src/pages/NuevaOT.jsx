@@ -17,9 +17,8 @@ import TableroAutocomplete from "../components/TableroAutocomplete";
 import { obtenerHistorial } from "../services/historialApi";
 import { obtenerCircuitosFrecuentes } from "../services/circuitosApi";
 
-import LuminariaFields from "../components/LuminariaFields";
-import LuminariasChips from "../components/LuminariasChips";
 import { saveOtPdf, saveOtPhotos, purgeOldMedia } from "../storage/ot_db";
+import LuminariaGrupoTableroBlock from "../components/LuminariaGrupoTableroBlock";
 
 /* =======================================================
    UTILIDADES: cache para autocompletado
@@ -73,7 +72,11 @@ function dataURLToBlob(dataUrl) {
     (head.match(/data:(.*?);base64/) || [])[1] || "application/octet-stream";
   const bin = atob(b64 || "");
   const u8 = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+
+  for (let i = 0; i < bin.length; i++) {
+    u8[i] = bin.charCodeAt(i);
+  }
+
   return new Blob([u8], { type: mime });
 }
 
@@ -96,20 +99,16 @@ async function blobToDataURL(input) {
 
 /* =======================================================
    IMG: compresión + compat (Android + iPhone HEIC)
-   - acepta Blob/File o dataURL
-   - devuelve Blob JPEG comprimido (o null si no se pudo)
 ======================================================= */
 async function photoToJpegBlob(input, { maxSide = 1600, quality = 0.82 } = {}) {
   if (!input) return null;
 
   let src = input;
 
-  // dataURL viejo -> Blob
   if (isDataURL(src)) {
     src = dataURLToBlob(src);
   }
 
-  // wrapper { blob: ... }
   if (src && typeof src === "object" && "blob" in src && src.blob) {
     src = src.blob;
   }
@@ -121,7 +120,6 @@ async function photoToJpegBlob(input, { maxSide = 1600, quality = 0.82 } = {}) {
 
   const type = String(src.type || "").toLowerCase();
 
-  // iPhone HEIC/HEIF -> JPEG (requiere heic2any instalado)
   if (type.includes("heic") || type.includes("heif")) {
     try {
       const { default: heic2any } = await import("heic2any");
@@ -134,6 +132,7 @@ async function photoToJpegBlob(input, { maxSide = 1600, quality = 0.82 } = {}) {
   }
 
   const url = URL.createObjectURL(src);
+
   try {
     const img = await new Promise((res, rej) => {
       const i = new Image();
@@ -144,8 +143,6 @@ async function photoToJpegBlob(input, { maxSide = 1600, quality = 0.82 } = {}) {
 
     const w0 = img.naturalWidth || img.width;
     const h0 = img.naturalHeight || img.height;
-
-    // ✅ límite por lado mayor (clave para portrait en móvil)
     const scale = Math.min(1, maxSide / Math.max(w0, h0));
     const w = Math.max(1, Math.round(w0 * scale));
     const h = Math.max(1, Math.round(h0 * scale));
@@ -178,13 +175,8 @@ async function photoToJpegBlob(input, { maxSide = 1600, quality = 0.82 } = {}) {
   }
 }
 
-// compat: por si quedó alguna referencia vieja
 async function fileToCompressedBlob(file, maxW = 1280, quality = 0.72) {
   return photoToJpegBlob(file, { maxSide: maxW, quality });
-}
-async function fileToCompressedDataURL(file, maxW = 1280, quality = 0.72) {
-  const b = await fileToCompressedBlob(file, maxW, quality);
-  return b ? await blobToDataURL(b) : "";
 }
 
 /* =======================================================
@@ -224,20 +216,33 @@ const initialForm = {
   firmaTecnico: "",
   firmaSupervisor: "",
   firmaTecnicoB64: "",
-  fotos: [], // [{ blob, url, bytes }]
-
+  fotos: [],
   printMode: false,
-
-  // Clasificación
   alcance: "LUMINARIA",
   resultado: "COMPLETO",
   estado_tablero: "",
   luminaria_estado: "",
-
-  // Luminarias (mapa por ramal)
   ramal: "",
   km_luminaria: "",
   codigo_luminaria: "",
+  luminariasPorTablero: [
+    {
+      uid: crypto.randomUUID(),
+      tablero_id: null,
+      tablero: "",
+      tablero_confirmado: false,
+      zona: "",
+      circuito: "",
+      ramal: "",
+      resultado: "COMPLETO",
+      luminaria_estado: "",
+      tarea_pedida: "",
+      tarea_realizada: "",
+      tarea_pendiente: "",
+      observaciones: "",
+      items: [],
+    },
+  ],
 };
 
 /* =======================================================
@@ -253,99 +258,193 @@ function navigatePostOT(navigate, payload) {
   const alcanceUp = String(payload?.alcance || "").toUpperCase();
 
   if (alcanceUp === "LUMINARIA") {
-    const q = payload?.ramal
-      ? `?ramal=${encodeURIComponent(payload.ramal)}`
-      : "";
+    const ramal =
+      payload?.ramal || payload?.luminarias_por_tablero?.[0]?.ramal || "";
+    const q = ramal ? `?ramal=${encodeURIComponent(ramal)}` : "";
     navigate(`/historial-luminarias${q}`);
   } else {
     navigate("/historial");
   }
 }
 
-/* =======================================================
-   LUMINARIAS: extraer códigos tipo PC4026 del texto
-======================================================= */
 function extraerCodigosLuminaria(texto) {
   const s = String(texto || "").toUpperCase();
-  const matches = s.match(/\bPC[\s-]?\d{3,6}\b/g) || [];
-
+  const matches = s.match(/\b[A-Z]{1,4}[\s-]?\d{3,6}\b/g) || [];
   const norm = matches
     .map((m) => m.replace(/\s+/g, "").replace("-", ""))
     .filter(Boolean);
 
   const seen = new Set();
   const out = [];
+
   for (const c of norm) {
     if (!seen.has(c)) {
       seen.add(c);
       out.push(c);
     }
   }
+
+  return out;
+}
+
+function emptyLuminariaGrupo() {
+  return {
+    uid: crypto.randomUUID(),
+    tablero_id: null,
+    tablero: "",
+    tablero_confirmado: false,
+    zona: "",
+    circuito: "",
+    ramal: "",
+    resultado: "COMPLETO",
+    luminaria_estado: "",
+    tarea_pedida: "",
+    tarea_realizada: "",
+    tarea_pendiente: "",
+    observaciones: "",
+    items: [],
+  };
+}
+
+function normalizeCode(raw) {
+  return String(raw || "")
+    .trim()
+    .toUpperCase()
+    .replace(/\s+/g, "");
+}
+
+function uniqCodes(list) {
+  const out = [];
+  const seen = new Set();
+
+  for (const x of list || []) {
+    const c = normalizeCode(x);
+    if (!c) continue;
+    if (seen.has(c)) continue;
+    seen.add(c);
+    out.push(c);
+  }
+
   return out;
 }
 
 /* =======================================================
-   NORMALIZACIÓN PAYLOAD (SIN DUPLICADOS)
+   NORMALIZACIÓN PAYLOAD
 ======================================================= */
 function normalizarPayloadOT(form) {
-  const tableroFinal = canonTableroUI(
-    form.tablero ||
-      (Array.isArray(form.tableros) ? form.tableros[0] : "") ||
-      "",
-  );
-
-  const circuitoFinal =
-    form.circuito ||
-    (Array.isArray(form.circuitos)
-      ? form.circuitos.join(", ")
-      : form.circuitos) ||
-    "";
-
-  const alcanceRaw = String(form.alcance || "")
+  const alcance = String(form.alcance || "LUMINARIA")
     .trim()
     .toUpperCase();
-  const resultado = String(form.resultado || "COMPLETO")
-    .trim()
-    .toUpperCase();
-
-  let alcance =
-    alcanceRaw ||
-    (String(form.luminaria || "").trim() ||
-    String(form.luminaria_estado || "").trim()
-      ? "LUMINARIA"
-      : "TABLERO");
+  const esLum = alcance === "LUMINARIA";
 
   const ESTADOS_TABLERO = new Set(["CRITICO", "PARCIAL", "OK"]);
+  const ESTADOS_LUM = new Set(["REPARADO", "APAGADO", "PENDIENTE"]);
+
   let estado_tablero = String(form.estado_tablero || "")
     .trim()
     .toUpperCase();
-
-  if (!(alcance === "TABLERO" || alcance === "CIRCUITO")) {
+  if (!["TABLERO", "CIRCUITO"].includes(alcance)) {
     estado_tablero = "";
   } else if (!ESTADOS_TABLERO.has(estado_tablero)) {
     estado_tablero = "";
   }
 
-  const ESTADOS_LUM = new Set(["REPARADO", "APAGADO", "PENDIENTE"]);
-  let luminaria_estado = String(form.luminaria_estado || "")
-    .trim()
-    .toUpperCase();
+  const luminarias_por_tablero = esLum
+    ? (form.luminariasPorTablero || [])
+        .map((g) => ({
+          tablero_id: g.tablero_id || null,
+          tablero: canonTableroUI(g.tablero || ""),
+          tablero_confirmado: Boolean(g.tablero_confirmado),
+          zona: g.zona || "",
+          circuito: g.circuito || "",
+          ramal: g.ramal || "",
+          resultado: String(g.resultado || "COMPLETO")
+            .trim()
+            .toUpperCase(),
+          luminaria_estado: ESTADOS_LUM.has(
+            String(g.luminaria_estado || "")
+              .trim()
+              .toUpperCase(),
+          )
+            ? String(g.luminaria_estado || "")
+                .trim()
+                .toUpperCase()
+            : "",
+          tarea_pedida: g.tarea_pedida || "",
+          tarea_realizada: g.tarea_realizada || "",
+          tarea_pendiente: g.tarea_pendiente || "",
+          observaciones: g.observaciones || "",
+          items: (g.items || [])
+            .map((it, j) => ({
+              orden: j,
+              codigo_luminaria: String(it.codigo_luminaria || "")
+                .trim()
+                .toUpperCase(),
+              km_luminaria:
+                it.km_luminaria === "" ||
+                it.km_luminaria === null ||
+                it.km_luminaria === undefined
+                  ? null
+                  : Number(it.km_luminaria),
+            }))
+            .filter((it) => it.codigo_luminaria),
+        }))
+        .filter(
+          (g) =>
+            g.tablero_confirmado &&
+            String(g.tablero || "").trim() &&
+            String(g.ramal || "").trim() &&
+            Array.isArray(g.items) &&
+            g.items.length > 0,
+        )
+    : [];
 
-  if (alcance !== "LUMINARIA") {
-    luminaria_estado = "";
-  } else if (luminaria_estado && !ESTADOS_LUM.has(luminaria_estado)) {
-    luminaria_estado = "";
-  }
+  const primerGrupoLum =
+    esLum && luminarias_por_tablero.length ? luminarias_por_tablero[0] : null;
 
-  if (
-    alcance === "LUMINARIA" &&
-    !luminaria_estado &&
-    String(form.tareaRealizada || "").trim()
-  ) {
-    luminaria_estado = "REPARADO";
-  }
+  const resultadoFinal = esLum
+    ? String(primerGrupoLum?.resultado || "COMPLETO")
+        .trim()
+        .toUpperCase()
+    : String(form.resultado || "COMPLETO")
+        .trim()
+        .toUpperCase();
 
-  const esLum = alcance === "LUMINARIA";
+  const luminariaEstadoFinal = esLum
+    ? String(primerGrupoLum?.luminaria_estado || "")
+        .trim()
+        .toUpperCase()
+    : String(form.luminaria_estado || "")
+        .trim()
+        .toUpperCase();
+
+  const tableroFinal = esLum
+    ? canonTableroUI(primerGrupoLum?.tablero || "")
+    : canonTableroUI(form.tablero || "");
+
+  const zonaFinal = esLum ? primerGrupoLum?.zona || "" : form.zona || "";
+  const circuitoFinal = esLum
+    ? primerGrupoLum?.circuito || ""
+    : form.circuito || "";
+  const ramalFinal = esLum
+    ? String(primerGrupoLum?.ramal || "").trim()
+    : String(form.ramal || "").trim();
+
+  const tareaPedidaFinal = esLum
+    ? primerGrupoLum?.tarea_pedida || ""
+    : form.tareaPedida || "";
+
+  const tareaRealizadaFinal = esLum
+    ? primerGrupoLum?.tarea_realizada || ""
+    : form.tareaRealizada || "";
+
+  const tareaPendienteFinal = esLum
+    ? primerGrupoLum?.tarea_pendiente || ""
+    : form.tareaPendiente || "";
+
+  const observacionesFinal = esLum
+    ? primerGrupoLum?.observaciones || ""
+    : form.observaciones || "";
 
   const codigos_luminarias = esLum
     ? extraerCodigosLuminaria(form.luminaria)
@@ -354,9 +453,9 @@ function normalizarPayloadOT(form) {
   const codigoPrincipal = esLum
     ? String(form.codigo_luminaria || "").trim() || codigos_luminarias[0] || ""
     : "";
+
   const codigoPrincipalCapped = codigoPrincipal.slice(0, 30);
 
-  const ramal = esLum ? String(form.ramal || "").trim() : "";
   const km_luminaria = esLum
     ? form.km_luminaria === "" ||
       form.km_luminaria === null ||
@@ -371,12 +470,11 @@ function normalizarPayloadOT(form) {
     fecha: form.fecha,
     ubicacion: form.ubicacion || "",
     tablero: tableroFinal,
-    zona: form.zona || "",
+    zona: zonaFinal,
     circuito: circuitoFinal,
     vehiculo: form.vehiculo || "",
     km_inicial: form.kmIni === "" ? null : Number(form.kmIni),
     km_final: form.kmFin === "" ? null : Number(form.kmFin),
-
     km_total:
       form.kmIni !== "" &&
       form.kmFin !== "" &&
@@ -384,36 +482,32 @@ function normalizarPayloadOT(form) {
       Number.isFinite(Number(form.kmFin))
         ? Number(form.kmFin) - Number(form.kmIni)
         : null,
-
     tecnicos: form.tecnicos || [],
     materiales: form.materiales || [],
-
-    tarea_pedida: form.tareaPedida || "",
-    tarea_realizada: form.tareaRealizada || "",
-    tarea_pendiente: form.tareaPendiente || "",
-
-    luminaria_equipos,
-    codigos_luminarias,
-
+    tarea_pedida: tareaPedidaFinal,
+    tarea_realizada: tareaRealizadaFinal,
+    tarea_pendiente: tareaPendienteFinal,
     firma_tecnico_img: form.firmaTecnicoB64 || "",
     fotos_b64: Array.isArray(form.fotosB64)
       ? form.fotosB64.slice(0, MAX_FOTOS)
       : [],
-
-    observaciones: form.observaciones || "",
+    observaciones: observacionesFinal,
     firma_tecnico: form.firmaTecnico || "",
     firma_supervisor: form.firmaSupervisor || "",
-
     print_mode: Boolean(form.printMode),
-
     alcance,
-    resultado,
+    resultado: resultadoFinal,
     estado_tablero,
-    luminaria_estado,
-
-    ramal,
-    km_luminaria,
-    codigo_luminaria: codigoPrincipalCapped,
+    luminaria_estado: esLum ? luminariaEstadoFinal : "",
+    ramal: ramalFinal,
+    km_luminaria: esLum && luminarias_por_tablero.length ? null : km_luminaria,
+    codigo_luminaria:
+      esLum && luminarias_por_tablero.length ? "" : codigoPrincipalCapped,
+    codigos_luminarias:
+      esLum && luminarias_por_tablero.length ? [] : codigos_luminarias,
+    luminaria_equipos:
+      esLum && luminarias_por_tablero.length ? "" : luminaria_equipos,
+    luminarias_por_tablero,
   };
 }
 
@@ -423,13 +517,10 @@ export default function NuevaOT() {
 
   const [form, setForm] = useState(initialForm);
 
-  // ✅ NO cachear fotos (blob/url) para evitar blob: ERR_FILE_NOT_FOUND al rehidratar
   const formCacheSafe = useMemo(
     () => ({
       ...form,
       fotos: [],
-      // opcional: si querés que el cache sea liviano
-      // firmaTecnicoB64: "",
     }),
     [form],
   );
@@ -441,7 +532,6 @@ export default function NuevaOT() {
     initialForm,
   );
 
-  // ✅ purga por si alguien ya tiene cache viejo con fotos sin blob real
   useEffect(() => {
     setForm((prev) => {
       const fotosOk = (prev.fotos || []).filter(
@@ -465,14 +555,9 @@ export default function NuevaOT() {
     setToast({ open: true, type, message });
   }
 
-  /* =======================================================
-     Historial preview (liviano)
-  ======================================================== */
   const tableroKey = useMemo(() => (form.tablero || "").trim(), [form.tablero]);
-
   const [histPreview, setHistPreview] = useState([]);
   const [histLoading, setHistLoading] = useState(false);
-
   const [tableroCatalogado, setTableroCatalogado] = useState(true);
 
   useEffect(() => {
@@ -504,9 +589,6 @@ export default function NuevaOT() {
     };
   }, [tableroKey]);
 
-  /* =======================================================
-     Circuitos frecuentes (chips)
-  ======================================================== */
   const [circuitosFreq, setCircuitosFreq] = useState([]);
   const [circuitosLoading, setCircuitosLoading] = useState(false);
 
@@ -539,10 +621,12 @@ export default function NuevaOT() {
     };
   }, [tableroKey]);
 
-  /* =======================================================
-     Exists tablero (debounce)
-  ======================================================== */
   useEffect(() => {
+    if (form.alcance === "LUMINARIA") {
+      setTableroCatalogado(true);
+      return;
+    }
+
     const nombre = (form.tablero || "").trim();
     if (!nombre || nombre.length < 2) {
       setTableroCatalogado(true);
@@ -550,6 +634,7 @@ export default function NuevaOT() {
     }
 
     const controller = new AbortController();
+
     const t = setTimeout(async () => {
       try {
         const res = await tableroExists(nombre, { signal: controller.signal });
@@ -571,22 +656,25 @@ export default function NuevaOT() {
       controller.abort();
       clearTimeout(t);
     };
-  }, [form.tablero]);
+  }, [form.tablero, form.alcance]);
 
-  /* =======================================================
-     VALIDACIÓN
-  ======================================================== */
   function validarCampos() {
-    if (!String(form.tablero || "").trim())
-      return "Debe seleccionar un tablero.";
-    if (!String(form.vehiculo || "").trim())
+    const alcance = String(form.alcance || "LUMINARIA")
+      .trim()
+      .toUpperCase();
+
+    if (!String(form.vehiculo || "").trim()) {
       return "Debe seleccionar un vehículo.";
+    }
 
     const tecnicos = Array.isArray(form.tecnicos) ? form.tecnicos : [];
     const tieneTecnico = tecnicos.some(
       (t) => String(t?.nombre || "").trim() || String(t?.legajo || "").trim(),
     );
-    if (!tieneTecnico) return "Cargá al menos un técnico (nombre o legajo).";
+
+    if (!tieneTecnico) {
+      return "Cargá al menos un técnico (nombre o legajo).";
+    }
 
     if (
       form.kmIni !== "" &&
@@ -598,72 +686,90 @@ export default function NuevaOT() {
       return "El km final no puede ser menor que el inicial.";
     }
 
-    if (!String(form.firmaTecnico || "").trim())
+    if (!String(form.firmaTecnico || "").trim()) {
       return "Falta la aclaración (nombre) del técnico.";
-    if (!form.firmaTecnicoB64) return "Falta la firma digital del técnico.";
+    }
 
-    const alcance = String(form.alcance || "LUMINARIA")
-      .trim()
-      .toUpperCase();
-    const resultado = String(form.resultado || "COMPLETO")
-      .trim()
-      .toUpperCase();
-    const estadoTab = String(form.estado_tablero || "")
-      .trim()
-      .toUpperCase();
-    const lumEstado = String(form.luminaria_estado || "")
-      .trim()
-      .toUpperCase();
+    if (!form.firmaTecnicoB64) {
+      return "Falta la firma digital del técnico.";
+    }
 
     const ESTADOS_TABLERO = new Set(["CRITICO", "PARCIAL", "OK"]);
     const ESTADOS_LUM = new Set(["REPARADO", "APAGADO", "PENDIENTE"]);
 
+    if (alcance === "LUMINARIA") {
+      const grupos = form.luminariasPorTablero || [];
+
+      if (!grupos.length) {
+        return "Agregá al menos un tablero trabajado.";
+      }
+
+      for (let i = 0; i < grupos.length; i++) {
+        const g = grupos[i];
+        const resultadoGrupo = String(g.resultado || "COMPLETO")
+          .trim()
+          .toUpperCase();
+        const tareaRealizadaGrupo = String(g.tarea_realizada || "").trim();
+        const tareaPendienteGrupo = String(g.tarea_pendiente || "").trim();
+
+        if (!String(g.tablero || "").trim() || !g.tablero_confirmado) {
+          return `Grupo ${i + 1}: seleccioná un tablero del catálogo.`;
+        }
+
+        if (!String(g.ramal || "").trim()) {
+          return `Grupo ${i + 1}: seleccioná el ramal.`;
+        }
+
+        if (!Array.isArray(g.items) || g.items.length === 0) {
+          return `Grupo ${i + 1}: cargá al menos una luminaria.`;
+        }
+
+        if (
+          g.luminaria_estado &&
+          !ESTADOS_LUM.has(String(g.luminaria_estado).trim().toUpperCase())
+        ) {
+          return `Grupo ${i + 1}: estado de luminaria inválido.`;
+        }
+
+        if (resultadoGrupo === "COMPLETO" && !tareaRealizadaGrupo) {
+          return `Grupo ${i + 1}: si el resultado es COMPLETO, completá 'Tarea realizada'.`;
+        }
+
+        if (resultadoGrupo === "PARCIAL" && !tareaPendienteGrupo) {
+          return `Grupo ${i + 1}: si el resultado es PARCIAL, completá 'Tarea pendiente'.`;
+        }
+      }
+
+      return null;
+    }
+
+    if (!String(form.tablero || "").trim()) {
+      return "Debe seleccionar un tablero.";
+    }
+
+    const resultado = String(form.resultado || "COMPLETO")
+      .trim()
+      .toUpperCase();
+    const estadoTablero = String(form.estado_tablero || "")
+      .trim()
+      .toUpperCase();
     const tareaRealizada = String(form.tareaRealizada || "").trim();
     const tareaPendiente = String(form.tareaPendiente || "").trim();
 
     if (resultado === "PARCIAL" && !tareaPendiente) {
-      return "Si el resultado es PARCIAL, completá 'Tarea pendiente' (qué quedó faltando).";
+      return "Si el resultado es PARCIAL, completá 'Tarea pendiente'.";
     }
+
     if (resultado === "COMPLETO" && !tareaRealizada) {
-      return "Si el resultado es COMPLETO, completá 'Tarea realizada' (qué se hizo).";
-    }
-
-    if (alcance === "LUMINARIA") {
-      const ramal = String(form.ramal || "").trim();
-      const kmLum = form.km_luminaria;
-
-      if (!ramal) {
-        return "En LUMINARIA, seleccioná el Ramal (esto alimenta el mapa de luminarias).";
-      }
-
-      if (
-        kmLum === "" ||
-        kmLum === null ||
-        kmLum === undefined ||
-        !Number.isFinite(Number(kmLum))
-      ) {
-        return "En LUMINARIA, completá el KM (ej: 41.05) para ubicar la reparación en el mapa.";
-      }
-
-      if (estadoTab) {
-        return "En LUMINARIA no se marca 'Estado del tablero'. Cambiá a TABLERO/CIRCUITO si corresponde.";
-      }
-
-      const lumTexto = String(form.luminaria || "").trim();
-      if (!lumEstado && !lumTexto && !tareaRealizada) {
-        return "En LUMINARIA, indicá 'Estado luminaria' o completá 'Luminarias / Equipos' o 'Tarea realizada'.";
-      }
-
-      if (lumEstado && !ESTADOS_LUM.has(lumEstado)) {
-        return "Estado luminaria inválido.";
-      }
+      return "Si el resultado es COMPLETO, completá 'Tarea realizada'.";
     }
 
     if (alcance === "CIRCUITO" || alcance === "TABLERO") {
-      if (!estadoTab) {
-        return "Si el alcance es TABLERO/CIRCUITO, elegí 'Estado del tablero' (Crítico/Parcial/OK).";
+      if (!estadoTablero) {
+        return "Si el alcance es TABLERO/CIRCUITO, elegí 'Estado del tablero'.";
       }
-      if (!ESTADOS_TABLERO.has(estadoTab)) {
+
+      if (!ESTADOS_TABLERO.has(estadoTablero)) {
         return "Estado del tablero inválido.";
       }
 
@@ -671,8 +777,8 @@ export default function NuevaOT() {
         return "Si el alcance es CIRCUITO, completá el campo 'Circuito'.";
       }
 
-      if (estadoTab === "OK" && resultado === "PARCIAL") {
-        return "No podés marcar tablero OK si el resultado fue PARCIAL. Poné PARCIAL o CRÍTICO.";
+      if (estadoTablero === "OK" && resultado === "PARCIAL") {
+        return "No podés marcar tablero OK si el resultado fue PARCIAL.";
       }
     }
 
@@ -685,10 +791,8 @@ export default function NuevaOT() {
     return null;
   }
 
-  // KM TOTAL
   const kmIniNum = Number(form.kmIni);
   const kmFinNum = Number(form.kmFin);
-
   const kmTotal =
     form.kmIni !== "" &&
     form.kmFin !== "" &&
@@ -697,9 +801,6 @@ export default function NuevaOT() {
       ? kmFinNum - kmIniNum
       : null;
 
-  /* =======================================================
-     FIRMA (canvas)
-  ======================================================== */
   const sigRef = useRef(null);
   const drawingRef = useRef(false);
 
@@ -714,17 +815,15 @@ export default function NuevaOT() {
   function startDraw(e) {
     const canvas = sigRef.current;
     if (!canvas) return;
-    drawingRef.current = true;
 
+    drawingRef.current = true;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
     const { x, y } = getPos(e, canvas);
-
     ctx.lineWidth = 2.2;
     ctx.lineCap = "round";
     ctx.strokeStyle = "#111";
-
     ctx.beginPath();
     ctx.moveTo(x, y);
   }
@@ -748,8 +847,10 @@ export default function NuevaOT() {
   function limpiarFirma() {
     const canvas = sigRef.current;
     if (!canvas) return;
+
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
+
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     setForm((p) => ({ ...p, firmaTecnicoB64: "" }));
   }
@@ -757,14 +858,12 @@ export default function NuevaOT() {
   function guardarFirma() {
     const canvas = sigRef.current;
     if (!canvas) return;
+
     const dataUrl = canvas.toDataURL("image/png");
     setForm((p) => ({ ...p, firmaTecnicoB64: dataUrl }));
     showToast("ok", "Firma digital capturada.");
   }
 
-  /* =======================================================
-     FOTOS
-  ======================================================== */
   async function onAddFotos(e) {
     const files = Array.from(e.target.files || []);
     if (!files.length) return;
@@ -780,6 +879,7 @@ export default function NuevaOT() {
     }
 
     setLoading(true);
+
     try {
       const nuevas = [];
 
@@ -825,7 +925,10 @@ export default function NuevaOT() {
     setForm((prev) => {
       const list = prev.fotos || [];
       const item = list[idx];
-      if (item?.url) URL.revokeObjectURL(item.url);
+
+      if (item?.url) {
+        URL.revokeObjectURL(item.url);
+      }
 
       return {
         ...prev,
@@ -834,11 +937,58 @@ export default function NuevaOT() {
     });
   }
 
-  /* =======================================================
-     ENVÍO / PDF
-  ======================================================== */
+  function updateLuminariaGrupo(index, patch) {
+    setForm((prev) => ({
+      ...prev,
+      luminariasPorTablero: prev.luminariasPorTablero.map((g, i) =>
+        i === index ? { ...g, ...patch } : g,
+      ),
+    }));
+  }
+
+  function addLuminariaGrupo() {
+    setForm((prev) => ({
+      ...prev,
+      luminariasPorTablero: [
+        ...(prev.luminariasPorTablero || []),
+        emptyLuminariaGrupo(),
+      ],
+    }));
+  }
+
+  function removeLuminariaGrupo(index) {
+    setForm((prev) => {
+      const next = (prev.luminariasPorTablero || []).filter(
+        (_, i) => i !== index,
+      );
+
+      return {
+        ...prev,
+        luminariasPorTablero: next.length ? next : [emptyLuminariaGrupo()],
+      };
+    });
+  }
+
+  function updateLuminariaGrupoItems(index, list) {
+    setForm((prev) => ({
+      ...prev,
+      luminariasPorTablero: prev.luminariasPorTablero.map((g, i) =>
+        i === index
+          ? {
+              ...g,
+              items: uniqCodes(list).map((codigo) => ({
+                codigo_luminaria: codigo,
+                km_luminaria: null,
+              })),
+            }
+          : g,
+      ),
+    }));
+  }
+
   async function generarPDF() {
     const error = validarCampos();
+
     if (error) {
       showToast("warn", error);
       return;
@@ -847,13 +997,7 @@ export default function NuevaOT() {
     const alcance = String(form.alcance || "LUMINARIA")
       .trim()
       .toUpperCase();
-    const resultado = String(form.resultado || "COMPLETO")
-      .trim()
-      .toUpperCase();
     const estadoTablero = String(form.estado_tablero || "")
-      .trim()
-      .toUpperCase();
-    const lumEstado = String(form.luminaria_estado || "")
       .trim()
       .toUpperCase();
 
@@ -875,41 +1019,24 @@ export default function NuevaOT() {
       return;
     }
 
-    if (alcance === "LUMINARIA" && !lumEstado) {
-      showToast(
-        "info",
-        "Tip: si elegís 'Estado luminaria' (Reparado / Apagado / Pendiente), el panel va a contar Luminarias OK y Pendientes automáticamente.",
-      );
-    }
-
-    if (
-      alcance === "LUMINARIA" &&
-      resultado === "PARCIAL" &&
-      !String(form.tareaPendiente || "").trim()
-    ) {
-      showToast(
-        "warn",
-        "Marcaste 'Parcial' pero no escribiste 'Tarea pendiente'. Si quedó algo por hacer, anotá qué faltó (material, falla, etc.).",
-      );
-    }
-
-    // 1) Payload normalizado
     const payload = normalizarPayloadOT(form);
-    payload.tablero_catalogado = Boolean(tableroCatalogado);
+    payload.tablero_catalogado =
+      alcance === "LUMINARIA" ? true : Boolean(tableroCatalogado);
 
-    // 2) Fotos base64 SOLO para envío (temporal)
     const fotosB64 = await Promise.all(
       (form.fotos || []).map(async (it, idx) => {
         const b = it?.blob ?? it;
         if (!b) return null;
 
-        // ya vienen comprimidas por onAddFotos, pero reaseguramos por robustez
-        let jpeg = await photoToJpegBlob(b, { maxSide: 1600, quality: 0.82 });
+        let jpeg = await photoToJpegBlob(b, {
+          maxSide: 1600,
+          quality: 0.82,
+        });
+
         if (!jpeg) return null;
 
         let dataUrl = await blobToDataURL(jpeg);
 
-        // si sigue grande, apretamos más
         if (dataUrl && dataUrl.length > 1_800_000) {
           const jpeg2 = await photoToJpegBlob(b, {
             maxSide: 1280,
@@ -928,7 +1055,12 @@ export default function NuevaOT() {
 
     payload.fotos_b64 = fotosB64.filter(Boolean).slice(0, MAX_FOTOS);
 
-    saveCache("cache_tableros", form.tablero);
+    const tableroCacheValue =
+      alcance === "LUMINARIA"
+        ? form.luminariasPorTablero?.[0]?.tablero || ""
+        : form.tablero;
+
+    saveCache("cache_tableros", tableroCacheValue);
     saveCache("cache_vehiculos", form.vehiculo);
 
     setLoading(true);
@@ -938,23 +1070,27 @@ export default function NuevaOT() {
         vibrar?.(30);
       } catch {}
 
+      console.log("payload normalizado:", payload);
       console.log("fotos_b64 count:", payload.fotos_b64?.length);
-      console.log("fotos_b64 first:", payload.fotos_b64?.[0]?.slice(0, 40));
 
       const blob = await enviarOT(payload);
 
-      // 4) Guardado local (PDF + fotos en IndexedDB)
       try {
         const record = await saveOtPdf(
-          { ...payload, tecnico: payload?.tecnicos?.[0]?.nombre || "" },
+          {
+            ...payload,
+            tecnico: payload?.tecnicos?.[0]?.nombre || "",
+          },
           blob,
         );
 
         try {
           const blobs = (form.fotos || []).map((x) => x.blob).filter(Boolean);
+
           if (blobs.length) {
             await saveOtPhotos(record.id, blobs);
           }
+
           purgeOldMedia({ olderThanDays: 45 }).catch(() => {});
         } catch (e) {
           console.warn("No se pudieron guardar fotos en IndexedDB:", e);
@@ -966,24 +1102,22 @@ export default function NuevaOT() {
         );
       }
 
-      // 5) Descarga PDF
       const url = URL.createObjectURL(blob);
       const anchor = document.createElement("a");
       anchor.href = url;
-      anchor.download = `OT_${payload.fecha}_${payload.tablero}.pdf`;
+      anchor.download = `OT_${payload.fecha}_${payload.tablero || "LUMINARIAS"}.pdf`;
       anchor.click();
-      setTimeout(() => URL.revokeObjectURL(url), 30_000);
 
-      // limpiar previews blob para no filtrar memoria
+      setTimeout(() => URL.revokeObjectURL(url), 30000);
+
       try {
-        (form.fotos || []).forEach(
-          (it) => it?.url && URL.revokeObjectURL(it.url),
-        );
+        (form.fotos || []).forEach((it) => {
+          if (it?.url) URL.revokeObjectURL(it.url);
+        });
       } catch {}
 
       clearForm();
       showToast("ok", "Orden generada correctamente. PDF descargado.");
-
       navigatePostOT(navigate, payload);
     } catch (e) {
       console.warn("Fallo envío → guardando OT localmente", e);
@@ -1001,16 +1135,12 @@ export default function NuevaOT() {
         "warn",
         "Sin conexión o servidor no disponible. La OT se guardó para enviar más tarde (sin firma/fotos).",
       );
-
       navigatePostOT(navigate, payloadLiviano);
     } finally {
       setLoading(false);
     }
   }
 
-  /* =======================================================
-     AUTOCOMPLETADO
-  ======================================================== */
   const sugeridosVehiculos = Array.from(
     new Set([...loadCache("cache_vehiculos"), ...VEHICULOS].filter(Boolean)),
   );
@@ -1034,205 +1164,221 @@ export default function NuevaOT() {
         onChange={(e) => setForm({ ...form, ubicacion: e.target.value })}
       />
 
-      <label>Zona</label>
-      <input
-        type="text"
-        value={form.zona}
-        onChange={(e) => setForm({ ...form, zona: e.target.value })}
-      />
+      {form.alcance !== "LUMINARIA" ? (
+        <>
+          <label>Zona</label>
+          <input
+            type="text"
+            value={form.zona}
+            onChange={(e) => setForm({ ...form, zona: e.target.value })}
+          />
 
-      <label>Tablero</label>
-      <TableroAutocomplete
-        value={form.tablero}
-        placeholder="Buscar/seleccionar tablero…"
-        limit={20}
-        minChars={2}
-        onChangeText={(v) => {
-          setForm((prev) => ({ ...prev, tablero: v }));
-        }}
-        onSelect={(t) => {
-          setForm((prev) => ({
-            ...prev,
-            tablero: t.nombre,
-            zona: t.zona,
-          }));
-        }}
-        onSubmit={(texto) => {
-          setForm((prev) => ({
-            ...prev,
-            tablero: (texto || prev.tablero || "").trim(),
-          }));
-        }}
-      />
-
-      {form.tablero?.trim() && tableroCatalogado === false && (
-        <div className="muted" style={{ marginTop: 6 }}>
-          ⚠️ Tablero no catalogado. Genera OT igual, pero avisar supervisor.
-        </div>
-      )}
-
-      {form.zona && (
-        <div className="muted" style={{ marginTop: 6 }}>
-          Zona: {form.zona}
-        </div>
-      )}
-
-      {tableroKey && (
-        <button
-          type="button"
-          className="btn-outline"
-          style={{ marginTop: 8 }}
-          onClick={() =>
-            navigate(`/historial?tablero=${encodeURIComponent(tableroKey)}`)
-          }
-        >
-          Ver historial de este tablero
-        </button>
-      )}
-
-      {/* Preview historial */}
-      {tableroKey && (
-        <div className="card" style={{ marginTop: 10, padding: 12 }}>
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              gap: 10,
+          <label>Tablero</label>
+          <TableroAutocomplete
+            value={form.tablero}
+            placeholder="Buscar/seleccionar tablero…"
+            limit={20}
+            minChars={2}
+            onChangeText={(v) => {
+              setForm((prev) => ({ ...prev, tablero: v }));
             }}
-          >
-            <div style={{ fontWeight: 800 }}>Últimos registros</div>
+            onSelect={(t) => {
+              setForm((prev) => ({
+                ...prev,
+                tablero: t.nombre,
+                zona: t.zona,
+              }));
+            }}
+            onSubmit={(texto) => {
+              setForm((prev) => ({
+                ...prev,
+                tablero: (texto || prev.tablero || "").trim(),
+              }));
+            }}
+          />
 
+          {form.tablero?.trim() && tableroCatalogado === false && (
+            <div className="muted" style={{ marginTop: 6 }}>
+              ⚠️ Tablero no catalogado. Genera OT igual, pero avisar supervisor.
+            </div>
+          )}
+
+          {form.zona && (
+            <div className="muted" style={{ marginTop: 6 }}>
+              Zona: {form.zona}
+            </div>
+          )}
+
+          {tableroKey && (
             <button
               type="button"
               className="btn-outline"
+              style={{ marginTop: 8 }}
               onClick={() =>
                 navigate(`/historial?tablero=${encodeURIComponent(tableroKey)}`)
               }
             >
-              Ver completo
+              Ver historial de este tablero
             </button>
-          </div>
-
-          {histLoading && (
-            <div className="muted" style={{ marginTop: 8 }}>
-              Cargando…
-            </div>
           )}
 
-          {!histLoading && histPreview.length === 0 && (
-            <div className="muted" style={{ marginTop: 8 }}>
-              Sin registros recientes.
-            </div>
-          )}
+          {tableroKey && (
+            <div className="card" style={{ marginTop: 10, padding: 12 }}>
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  gap: 10,
+                }}
+              >
+                <div style={{ fontWeight: 800 }}>Últimos registros</div>
 
-          {!histLoading && histPreview.length > 0 && (
-            <div style={{ marginTop: 10, display: "grid", gap: 10 }}>
-              {histPreview.map((h, idx) => (
-                <div
-                  key={h.id ?? `${h.fecha}-${h.creado ?? ""}-${idx}`}
-                  style={{
-                    padding: "10px 12px",
-                    borderRadius: 12,
-                    border: "1px solid rgba(148,163,184,.20)",
-                    background: "rgba(2,6,23,.35)",
-                  }}
+                <button
+                  type="button"
+                  className="btn-outline"
+                  onClick={() =>
+                    navigate(
+                      `/historial?tablero=${encodeURIComponent(tableroKey)}`,
+                    )
+                  }
                 >
-                  <div className="muted" style={{ fontSize: 12 }}>
-                    {fmtDateISO(h.fecha)}
-                    {h.circuito ? ` · ${h.circuito}` : ""}
-                  </div>
+                  Ver completo
+                </button>
+              </div>
 
-                  <div style={{ marginTop: 6, lineHeight: 1.25 }}>
-                    {pickDescripcion(h)}
-                  </div>
+              {histLoading && (
+                <div className="muted" style={{ marginTop: 8 }}>
+                  Cargando…
+                </div>
+              )}
 
-                  {(h.tarea_pedida || h.tarea_pendiente) && (
+              {!histLoading && histPreview.length === 0 && (
+                <div className="muted" style={{ marginTop: 8 }}>
+                  Sin registros recientes.
+                </div>
+              )}
+
+              {!histLoading && histPreview.length > 0 && (
+                <div style={{ marginTop: 10, display: "grid", gap: 10 }}>
+                  {histPreview.map((h, idx) => (
                     <div
-                      className="muted"
-                      style={{ marginTop: 8, fontSize: 12 }}
+                      key={h.id ?? `${h.fecha}-${h.creado ?? ""}-${idx}`}
+                      style={{
+                        padding: "10px 12px",
+                        borderRadius: 12,
+                        border: "1px solid rgba(148,163,184,.20)",
+                        background: "rgba(2,6,23,.35)",
+                      }}
                     >
-                      {h.tarea_pedida ? (
-                        <div>
-                          <strong>Pedida:</strong> {h.tarea_pedida}
+                      <div className="muted" style={{ fontSize: 12 }}>
+                        {fmtDateISO(h.fecha)}
+                        {h.circuito ? ` · ${h.circuito}` : ""}
+                      </div>
+
+                      <div style={{ marginTop: 6, lineHeight: 1.25 }}>
+                        {pickDescripcion(h)}
+                      </div>
+
+                      {(h.tarea_pedida || h.tarea_pendiente) && (
+                        <div
+                          className="muted"
+                          style={{ marginTop: 8, fontSize: 12 }}
+                        >
+                          {h.tarea_pedida ? (
+                            <div>
+                              <strong>Pedida:</strong> {h.tarea_pedida}
+                            </div>
+                          ) : null}
+
+                          {h.tarea_pendiente ? (
+                            <div>
+                              <strong>Pendiente:</strong> {h.tarea_pendiente}
+                            </div>
+                          ) : null}
                         </div>
-                      ) : null}
-                      {h.tarea_pendiente ? (
-                        <div>
-                          <strong>Pendiente:</strong> {h.tarea_pendiente}
-                        </div>
-                      ) : null}
+                      )}
                     </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          <label>Circuito</label>
+          <input
+            type="text"
+            placeholder="FD1, Alum. exterior…"
+            value={form.circuito}
+            onChange={(e) => setForm({ ...form, circuito: e.target.value })}
+          />
+
+          {tableroKey && (
+            <div style={{ marginTop: 8 }}>
+              <div className="muted" style={{ fontSize: 12, marginBottom: 6 }}>
+                {circuitosLoading
+                  ? "Cargando circuitos frecuentes…"
+                  : circuitosFreq.length
+                    ? "Circuitos frecuentes:"
+                    : ""}
+              </div>
+
+              {(circuitosFreq.length > 0 || form.circuito?.trim()) && (
+                <div className="chips">
+                  {circuitosFreq.length > 0 && (
+                    <button
+                      type="button"
+                      className={`chip ${!form.circuito?.trim() ? "chip--active" : ""}`}
+                      onClick={() =>
+                        setForm((prev) => ({ ...prev, circuito: "" }))
+                      }
+                      title="Mostrar todos (sin circuito)"
+                    >
+                      Todos
+                    </button>
+                  )}
+
+                  {circuitosFreq.map((c) => {
+                    const active = (form.circuito || "").trim() === c.circuito;
+
+                    return (
+                      <button
+                        key={c.circuito}
+                        type="button"
+                        className={`chip ${active ? "chip--active" : ""}`}
+                        onClick={() =>
+                          setForm((prev) => ({ ...prev, circuito: c.circuito }))
+                        }
+                        title={`Usar circuito (${c.n} registros)`}
+                      >
+                        {c.circuito}
+                        <span className="chip-count">{c.n}</span>
+                      </button>
+                    );
+                  })}
+
+                  {form.circuito?.trim() && (
+                    <button
+                      type="button"
+                      className="chip chip--danger"
+                      onClick={() =>
+                        setForm((prev) => ({ ...prev, circuito: "" }))
+                      }
+                      title="Limpiar circuito"
+                    >
+                      Limpiar
+                    </button>
                   )}
                 </div>
-              ))}
+              )}
             </div>
           )}
-        </div>
-      )}
-
-      <label>Circuito</label>
-      <input
-        type="text"
-        placeholder="FD1, Alum. exterior…"
-        value={form.circuito}
-        onChange={(e) => setForm({ ...form, circuito: e.target.value })}
-      />
-
-      {/* Chips: circuitos frecuentes del tablero */}
-      {tableroKey && (
-        <div style={{ marginTop: 8 }}>
-          <div className="muted" style={{ fontSize: 12, marginBottom: 6 }}>
-            {circuitosLoading
-              ? "Cargando circuitos frecuentes…"
-              : circuitosFreq.length
-                ? "Circuitos frecuentes:"
-                : ""}
+        </>
+      ) : (
+        <div className="card" style={{ marginTop: 10, padding: 12 }}>
+          <div className="muted">
+            En <b>LUMINARIA</b>, el tablero, zona, circuito, ramal, resultado,
+            estado y tareas se cargan dentro de cada grupo.
           </div>
-
-          {(circuitosFreq.length > 0 || form.circuito?.trim()) && (
-            <div className="chips">
-              {circuitosFreq.length > 0 && (
-                <button
-                  type="button"
-                  className={`chip ${!form.circuito?.trim() ? "chip--active" : ""}`}
-                  onClick={() => setForm((prev) => ({ ...prev, circuito: "" }))}
-                  title="Mostrar todos (sin circuito)"
-                >
-                  Todos
-                </button>
-              )}
-
-              {circuitosFreq.map((c) => {
-                const active = (form.circuito || "").trim() === c.circuito;
-
-                return (
-                  <button
-                    key={c.circuito}
-                    type="button"
-                    className={`chip ${active ? "chip--active" : ""}`}
-                    onClick={() =>
-                      setForm((prev) => ({ ...prev, circuito: c.circuito }))
-                    }
-                    title={`Usar circuito (${c.n} registros)`}
-                  >
-                    {c.circuito}
-                    <span className="chip-count">{c.n}</span>
-                  </button>
-                );
-              })}
-
-              {form.circuito?.trim() && (
-                <button
-                  type="button"
-                  className="chip chip--danger"
-                  onClick={() => setForm((prev) => ({ ...prev, circuito: "" }))}
-                  title="Limpiar circuito"
-                >
-                  Limpiar
-                </button>
-              )}
-            </div>
-          )}
         </div>
       )}
 
@@ -1280,6 +1426,7 @@ export default function NuevaOT() {
               })
             }
           />
+
           <input
             placeholder="Nombre"
             value={tec.nombre}
@@ -1292,6 +1439,7 @@ export default function NuevaOT() {
               })
             }
           />
+
           {idx > 0 && (
             <button
               type="button"
@@ -1328,7 +1476,7 @@ export default function NuevaOT() {
         <strong>¿Qué estás haciendo hoy?</strong>
         <ul>
           <li>
-            <b>Luminaria</b>: arreglás una luz puntual (NO evalúa el tablero)
+            <b>Luminaria</b>: arreglás luces agrupadas por tablero
           </li>
           <li>
             <b>Circuito / Tablero</b>: trabajo eléctrico del tablero
@@ -1352,8 +1500,8 @@ export default function NuevaOT() {
 
             if (esLum) {
               estado_tablero = "";
-            } else {
-              if (!estado_tablero) estado_tablero = "PARCIAL";
+            } else if (!estado_tablero) {
+              estado_tablero = "PARCIAL";
             }
 
             return {
@@ -1361,13 +1509,19 @@ export default function NuevaOT() {
               alcance: alcanceSel,
               estado_tablero,
               ...(esLum
-                ? {}
+                ? {
+                    luminariasPorTablero:
+                      prev.luminariasPorTablero?.length > 0
+                        ? prev.luminariasPorTablero
+                        : [emptyLuminariaGrupo()],
+                  }
                 : {
                     ramal: "",
                     km_luminaria: "",
                     codigo_luminaria: "",
                     luminaria_estado: "",
                     luminaria: "",
+                    luminariasPorTablero: [],
                   }),
             };
           });
@@ -1379,16 +1533,22 @@ export default function NuevaOT() {
         <option value="OTRO">Otro</option>
       </select>
 
-      <label>Resultado</label>
-      <select
-        value={form.resultado || "COMPLETO"}
-        onChange={(e) =>
-          setForm((prev) => ({ ...prev, resultado: e.target.value }))
-        }
-      >
-        <option value="COMPLETO">Completo (se resolvió lo planificado)</option>
-        <option value="PARCIAL">Parcial (quedó pendiente)</option>
-      </select>
+      {form.alcance !== "LUMINARIA" && (
+        <>
+          <label>Resultado</label>
+          <select
+            value={form.resultado || "COMPLETO"}
+            onChange={(e) =>
+              setForm((prev) => ({ ...prev, resultado: e.target.value }))
+            }
+          >
+            <option value="COMPLETO">
+              Completo (se resolvió lo planificado)
+            </option>
+            <option value="PARCIAL">Parcial (quedó pendiente)</option>
+          </select>
+        </>
+      )}
 
       {(form.alcance === "TABLERO" || form.alcance === "CIRCUITO") && (
         <>
@@ -1412,59 +1572,67 @@ export default function NuevaOT() {
       )}
 
       {form.alcance === "LUMINARIA" && (
-        <>
-          <label>Estado luminaria (opcional)</label>
-          <select
-            value={form.luminaria_estado || ""}
-            onChange={(e) =>
-              setForm((prev) => ({
-                ...prev,
-                luminaria_estado: e.target.value,
-              }))
-            }
-          >
-            <option value="">—</option>
-            <option value="REPARADO">Reparado / encendido</option>
-            <option value="APAGADO">Sigue apagado</option>
-            <option value="PENDIENTE">Pendiente (falta material/otro)</option>
-          </select>
+        <div className="card" style={{ marginTop: 12, padding: 12 }}>
+          <div style={{ fontWeight: 800, marginBottom: 8 }}>
+            Luminarias por tablero
+          </div>
 
-          <LuminariaFields form={form} setForm={setForm} />
-        </>
+          <div className="muted" style={{ marginBottom: 10 }}>
+            Primero elegí el tablero, después cargá todas las luminarias
+            reparadas de ese tablero. Resultado, estado y tareas se completan
+            por grupo.
+          </div>
+
+          {(form.luminariasPorTablero || []).map((grupo, index) => (
+            <LuminariaGrupoTableroBlock
+              key={grupo.uid}
+              grupo={grupo}
+              index={index}
+              onChange={updateLuminariaGrupo}
+              onRemove={removeLuminariaGrupo}
+              onItemsChange={updateLuminariaGrupoItems}
+            />
+          ))}
+
+          <button
+            type="button"
+            className="btn-add"
+            style={{ marginTop: 12 }}
+            onClick={addLuminariaGrupo}
+          >
+            + Agregar tablero trabajado
+          </button>
+        </div>
       )}
 
-      <h3 className="subtitulo">Tareas</h3>
+      {form.alcance !== "LUMINARIA" && (
+        <>
+          <h3 className="subtitulo">Tareas</h3>
 
-      <label>Tarea pedida</label>
-      <input
-        value={form.tareaPedida}
-        onChange={(e) => setForm({ ...form, tareaPedida: e.target.value })}
-      />
+          <label>Tarea pedida</label>
+          <input
+            value={form.tareaPedida}
+            onChange={(e) => setForm({ ...form, tareaPedida: e.target.value })}
+          />
 
-      <label>Tarea realizada</label>
-      <textarea
-        rows={3}
-        value={form.tareaRealizada}
-        onChange={(e) => setForm({ ...form, tareaRealizada: e.target.value })}
-      />
+          <label>Tarea realizada</label>
+          <textarea
+            rows={3}
+            value={form.tareaRealizada}
+            onChange={(e) =>
+              setForm({ ...form, tareaRealizada: e.target.value })
+            }
+          />
 
-      <label>Tarea pendiente</label>
-      <textarea
-        rows={3}
-        value={form.tareaPendiente}
-        onChange={(e) => setForm({ ...form, tareaPendiente: e.target.value })}
-      />
-
-      {form.alcance === "LUMINARIA" && (
-        <LuminariasChips
-          valueText={form.luminaria}
-          onChange={({ text }) =>
-            setForm((prev) => ({
-              ...prev,
-              luminaria: text,
-            }))
-          }
-        />
+          <label>Tarea pendiente</label>
+          <textarea
+            rows={3}
+            value={form.tareaPendiente}
+            onChange={(e) =>
+              setForm({ ...form, tareaPendiente: e.target.value })
+            }
+          />
+        </>
       )}
 
       <h3 className="subtitulo">Materiales</h3>
@@ -1483,6 +1651,7 @@ export default function NuevaOT() {
               })
             }
           />
+
           <NumericInput
             placeholder="Cant."
             value={m.cant}
@@ -1495,6 +1664,7 @@ export default function NuevaOT() {
               })
             }
           />
+
           <input
             placeholder="Unidad/Mtrs"
             value={m.unidad}
@@ -1507,6 +1677,7 @@ export default function NuevaOT() {
               })
             }
           />
+
           {idx > 0 && (
             <button
               type="button"
@@ -1540,12 +1711,18 @@ export default function NuevaOT() {
         ➕ Agregar material
       </button>
 
-      <label>Observaciones</label>
-      <textarea
-        rows={3}
-        value={form.observaciones}
-        onChange={(e) => setForm({ ...form, observaciones: e.target.value })}
-      />
+      {form.alcance !== "LUMINARIA" && (
+        <>
+          <label>Observaciones</label>
+          <textarea
+            rows={3}
+            value={form.observaciones}
+            onChange={(e) =>
+              setForm({ ...form, observaciones: e.target.value })
+            }
+          />
+        </>
+      )}
 
       <label>Aclaración firma técnico</label>
       <input
@@ -1581,6 +1758,7 @@ export default function NuevaOT() {
           <button type="button" className="btn-add" onClick={guardarFirma}>
             💾 Guardar firma
           </button>
+
           <button type="button" className="btn-outline" onClick={limpiarFirma}>
             🧼 Limpiar
           </button>
@@ -1591,6 +1769,7 @@ export default function NuevaOT() {
             <div className="text-muted" style={{ marginBottom: 6 }}>
               Vista previa:
             </div>
+
             <img
               src={form.firmaTecnicoB64}
               alt="Firma técnico"

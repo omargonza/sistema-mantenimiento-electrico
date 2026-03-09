@@ -1,4 +1,5 @@
 from django.db import models
+from historial.models import Tablero
 
 
 RAMAL_CHOICES = [
@@ -88,6 +89,91 @@ class OrdenTrabajo(models.Model):
     # Solo aplica si alcance es LUMINARIA
     luminaria_estado = models.CharField(max_length=20, blank=True, default="")
 
-    ramal = models.CharField(
-        max_length=20, choices=RAMAL_CHOICES, blank=True, default=""
+    from historial.models import Tablero
+
+
+class OrdenTrabajoLuminariaGrupo(models.Model):
+    ot = models.ForeignKey(
+        "OrdenTrabajo",
+        on_delete=models.CASCADE,
+        related_name="luminaria_grupos",
     )
+
+    tablero = models.ForeignKey(
+        Tablero,
+        on_delete=models.PROTECT,
+        related_name="ot_luminaria_grupos",
+    )
+
+    orden = models.PositiveIntegerField(default=0)
+
+    zona = models.CharField(max_length=200, blank=True, default="")
+    circuito = models.CharField(max_length=100, blank=True, default="")
+    ramal = models.CharField(
+        max_length=20,
+        choices=RAMAL_CHOICES,
+        blank=True,
+        default="",
+        db_index=True,
+    )
+
+    resultado = models.CharField(max_length=20, blank=True, default="COMPLETO")
+    luminaria_estado = models.CharField(max_length=20, blank=True, default="")
+
+    tarea_pedida = models.TextField(blank=True, default="")
+    tarea_realizada = models.TextField(blank=True, default="")
+    tarea_pendiente = models.TextField(blank=True, default="")
+    observaciones = models.TextField(blank=True, default="")
+
+    creado = models.DateTimeField(auto_now_add=True)
+    actualizado = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["orden", "id"]
+        indexes = [
+            models.Index(fields=["ot"]),
+            models.Index(fields=["tablero"]),
+            models.Index(fields=["ramal"]),
+        ]
+
+    def __str__(self):
+        return f"OT {self.ot_id} - {self.tablero.nombre}"
+
+
+class OrdenTrabajoLuminariaItem(models.Model):
+    grupo = models.ForeignKey(
+        OrdenTrabajoLuminariaGrupo,
+        on_delete=models.CASCADE,
+        related_name="items",
+    )
+
+    orden = models.PositiveIntegerField(default=0)
+
+    codigo_luminaria = models.CharField(max_length=30, db_index=True)
+    km_luminaria = models.DecimalField(
+        max_digits=6,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        db_index=True,
+    )
+
+    creado = models.DateTimeField(auto_now_add=True)
+    actualizado = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["orden", "id"]
+        indexes = [
+            models.Index(fields=["grupo"]),
+            models.Index(fields=["codigo_luminaria"]),
+            models.Index(fields=["km_luminaria"]),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["grupo", "codigo_luminaria"],
+                name="uniq_grupo_codigo_luminaria",
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.codigo_luminaria} ({self.grupo.tablero.nombre})"

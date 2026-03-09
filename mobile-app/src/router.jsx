@@ -6,6 +6,8 @@ import DetalleOT from "./pages/DetalleOT";
 import BottomBar from "./components/BottomBar";
 import Historial from "./pages/Historial";
 import HistorialLuminarias from "./pages/HistorialLuminarias";
+import DashboardLuminarias from "./pages/DashboardLuminarias";
+
 import MisPdfs from "./pages/MisPdfs";
 
 export default function Router() {
@@ -21,6 +23,7 @@ export default function Router() {
 
         {/* Historial luminarias (backend) */}
         <Route path="/historial-luminarias" element={<HistorialLuminarias />} />
+        <Route path="/dashboard-luminarias" element={<DashboardLuminarias />} />
 
         {/* PDFs locales (IndexedDB) */}
         <Route path="/mis-pdfs" element={<MisPdfs />} />

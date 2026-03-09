@@ -11,7 +11,11 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 
-from .models import OrdenTrabajo
+from .models import (
+    OrdenTrabajo,
+    OrdenTrabajoLuminariaGrupo,
+    OrdenTrabajoLuminariaItem,
+)
 from .serializers import OrdenTrabajoSerializer
 from .pdf import generar_pdf
 
@@ -22,12 +26,6 @@ from historial.models import Tablero
 # Canon / helpers de identidad
 # ==========================================================
 def _canon_tablero(nombre: str) -> str:
-    """
-    Canonicaliza para evitar falsos distintos:
-    - trim
-    - espacios múltiples
-    - guiones raros
-    """
     s = (nombre or "").strip()
     s = re.sub(r"\s+", " ", s)
     s = s.replace("–", "-").replace("—", "-")
@@ -35,11 +33,6 @@ def _canon_tablero(nombre: str) -> str:
 
 
 def _resolve_tablero_catalogo(raw: str):
-    """
-    NO crea tablero.
-    Devuelve:
-      (nombre_final, tablero_ok)
-    """
     raw = _canon_tablero(raw)
     if not raw:
         return "", False
@@ -103,6 +96,81 @@ def _safe_filename(s: str) -> str:
 
 
 # ==========================================================
+# Helpers luminarias por tablero
+# ==========================================================
+def _serialize_grupos_for_pdf(grupos_data):
+    out = []
+
+    for grupo in grupos_data or []:
+        tablero_obj = grupo.get("tablero")
+        tablero_nombre = getattr(tablero_obj, "nombre", "") if tablero_obj else ""
+
+        items_out = []
+        for item in grupo.get("items", []) or []:
+            items_out.append(
+                {
+                    "orden": item.get("orden", 0),
+                    "codigo_luminaria": item.get("codigo_luminaria", ""),
+                    "km_luminaria": item.get("km_luminaria", None),
+                }
+            )
+
+        out.append(
+            {
+                "tablero": tablero_nombre,
+                "zona": grupo.get("zona", ""),
+                "circuito": grupo.get("circuito", ""),
+                "ramal": grupo.get("ramal", ""),
+                "resultado": grupo.get("resultado", "COMPLETO"),
+                "luminaria_estado": grupo.get("luminaria_estado", ""),
+                "tarea_pedida": grupo.get("tarea_pedida", ""),
+                "tarea_realizada": grupo.get("tarea_realizada", ""),
+                "tarea_pendiente": grupo.get("tarea_pendiente", ""),
+                "observaciones": grupo.get("observaciones", ""),
+                "items": items_out,
+            }
+        )
+
+    return out
+
+
+def _persistir_ot_y_grupos(data: dict):
+    payload = dict(data)
+    grupos_data = payload.pop("luminarias_por_tablero", []) or []
+
+    ot = OrdenTrabajo.objects.create(**payload)
+
+    for idx, grupo in enumerate(grupos_data):
+        tablero_obj = grupo.get("tablero")
+        items = grupo.get("items", []) or []
+
+        grupo_obj = OrdenTrabajoLuminariaGrupo.objects.create(
+            ot=ot,
+            tablero=tablero_obj,
+            orden=idx,
+            zona=grupo.get("zona", ""),
+            circuito=grupo.get("circuito", ""),
+            ramal=grupo.get("ramal", ""),
+            resultado=grupo.get("resultado", "COMPLETO"),
+            luminaria_estado=grupo.get("luminaria_estado", ""),
+            tarea_pedida=grupo.get("tarea_pedida", ""),
+            tarea_realizada=grupo.get("tarea_realizada", ""),
+            tarea_pendiente=grupo.get("tarea_pendiente", ""),
+            observaciones=grupo.get("observaciones", ""),
+        )
+
+        for item in items:
+            OrdenTrabajoLuminariaItem.objects.create(
+                grupo=grupo_obj,
+                orden=item.get("orden", 0) or 0,
+                codigo_luminaria=(item.get("codigo_luminaria") or "").strip().upper(),
+                km_luminaria=item.get("km_luminaria", None),
+            )
+
+    return ot
+
+
+# ==========================================================
 # API: List + Create (debug / admin)
 # ==========================================================
 class OrdenListCreateView(APIView):
@@ -114,7 +182,14 @@ class OrdenListCreateView(APIView):
     def post(self, request):
         serializer = OrdenTrabajoSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        ot = serializer.save()
+
+        data = dict(serializer.validated_data)
+        data.pop("firma_tecnico_img", None)
+        data.pop("fotos_b64", None)
+        data.pop("print_mode", None)
+
+        ot = _persistir_ot_y_grupos(data)
+
         return Response(
             OrdenTrabajoSerializer(ot).data,
             status=status.HTTP_201_CREATED,
@@ -126,13 +201,7 @@ class OrdenListCreateView(APIView):
 # ==========================================================
 class OrdenPDFView(APIView):
     def post(self, request):
-
-        # ------------------------------------------
-        # 0) Copia mutable del request (para pop)
-        # ------------------------------------------
         request_data = dict(request.data)
-
-        # flag solo informativo (frontend)
         request_data.pop("tablero_catalogado", None)
 
         serializer = OrdenTrabajoSerializer(data=request_data)
@@ -141,38 +210,59 @@ class OrdenPDFView(APIView):
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
         data = dict(serializer.validated_data)
-
         alcance = (data.get("alcance") or "").strip().upper()
 
-        # Si llega lista, ok. Si no llega, intentar derivarla desde luminaria_equipos (por compat)
         cods = data.get("codigos_luminarias") or []
         if alcance == "LUMINARIA":
             if not cods:
-                # fallback desde texto libre (mismo criterio que views_luminarias)
                 from .views_luminarias import parse_luminaria_codes
 
                 cods = parse_luminaria_codes(data.get("luminaria_equipos", "")) or []
 
-            # setear lista canónica persistida
             data["codigos_luminarias"] = cods
 
-            # compat: codigo principal (max 30)
             if not (data.get("codigo_luminaria") or "").strip() and cods:
                 data["codigo_luminaria"] = cods[0]
             data["codigo_luminaria"] = (data.get("codigo_luminaria") or "")[:30]
-
         else:
-            # por seguridad extra: si no es luminaria, limpiar (aunque serializer ya lo haga)
             data["codigos_luminarias"] = []
             data["codigo_luminaria"] = ""
             data["ramal"] = ""
             data["km_luminaria"] = None
             data["luminaria_equipos"] = ""
             data["luminaria_estado"] = ""
+            data["luminarias_por_tablero"] = []
 
-        # ------------------------------------------
-        # 1) Normalizar identidad (SIN CREAR TABLERO)
-        # ------------------------------------------
+        grupos_data = data.get("luminarias_por_tablero", []) or []
+
+        if alcance == "LUMINARIA" and grupos_data:
+            primer = grupos_data[0]
+            tablero_obj = primer.get("tablero")
+            tablero_nombre = getattr(tablero_obj, "nombre", "") if tablero_obj else ""
+
+            data["tablero"] = tablero_nombre or data.get("tablero", "")
+            data["zona"] = primer.get("zona", "") or data.get("zona", "")
+            data["circuito"] = primer.get("circuito", "") or data.get("circuito", "")
+            data["ramal"] = primer.get("ramal", "") or data.get("ramal", "")
+            data["resultado"] = primer.get("resultado", "COMPLETO") or data.get(
+                "resultado", "COMPLETO"
+            )
+            data["luminaria_estado"] = primer.get("luminaria_estado", "") or data.get(
+                "luminaria_estado", ""
+            )
+            data["tarea_pedida"] = primer.get("tarea_pedida", "") or data.get(
+                "tarea_pedida", ""
+            )
+            data["tarea_realizada"] = primer.get("tarea_realizada", "") or data.get(
+                "tarea_realizada", ""
+            )
+            data["tarea_pendiente"] = primer.get("tarea_pendiente", "") or data.get(
+                "tarea_pendiente", ""
+            )
+            data["observaciones"] = primer.get("observaciones", "") or data.get(
+                "observaciones", ""
+            )
+
         tablero_raw = data.get("tablero")
         tablero_final, tablero_ok = _resolve_tablero_catalogo(tablero_raw)
 
@@ -180,9 +270,6 @@ class OrdenPDFView(APIView):
         data["zona"] = (data.get("zona") or "").strip()
         data["circuito"] = (data.get("circuito") or "").strip()
 
-        # ------------------------------------------
-        # 2) Preparar carpetas
-        # ------------------------------------------
         ahora = timezone.now()
         year = ahora.strftime("%Y")
         month = ahora.strftime("%m")
@@ -192,16 +279,10 @@ class OrdenPDFView(APIView):
         evidence_abs = os.path.join(settings.MEDIA_ROOT, evidence_rel)
         os.makedirs(evidence_abs, exist_ok=True)
 
-        # ------------------------------------------
-        # 3) Campos SOLO request
-        # ------------------------------------------
         firma_b64 = data.pop("firma_tecnico_img", "")
         fotos_b64 = data.pop("fotos_b64", []) or []
         print_mode = bool(data.pop("print_mode", False))
 
-        # ------------------------------------------
-        # 4) Guardar firma
-        # ------------------------------------------
         firma_rel = ""
         if firma_b64:
             firma_abs = _save_b64_image(
@@ -211,9 +292,6 @@ class OrdenPDFView(APIView):
             )
             firma_rel = _rel_media_path(firma_abs)
 
-        # ------------------------------------------
-        # 5) Guardar fotos (máx 4)
-        # ------------------------------------------
         fotos_rel = []
         for idx, fb64 in enumerate(list(fotos_b64)[:4], start=1):
             p_abs = _save_b64_image(
@@ -225,36 +303,23 @@ class OrdenPDFView(APIView):
             if p_rel:
                 fotos_rel.append(p_rel)
 
-        # ------------------------------------------
-        # 6) Persistir OT (SIEMPRE)
-        # ------------------------------------------
         if firma_rel:
             data["firma_tecnico_path"] = firma_rel
         if fotos_rel:
             data["fotos"] = fotos_rel
 
-        ot = OrdenTrabajo.objects.create(**data)
+        ot = _persistir_ot_y_grupos(data)
 
-        # ------------------------------------------
-        # 7) Preparar data PDF
-        # ------------------------------------------
         pdf_data = dict(data)
         pdf_data["print_mode"] = print_mode
         pdf_data["id_ot"] = f"OT-{ot.id:06d}"
         pdf_data["firma_tecnico_path"] = firma_rel
         pdf_data["fotos_paths"] = fotos_rel
-
-        # 🔴 CLAVE: flag REAL para leyenda / watermark
+        pdf_data["luminarias_por_tablero"] = _serialize_grupos_for_pdf(grupos_data)
         pdf_data["tablero_catalogado"] = bool(tablero_ok)
 
-        # ------------------------------------------
-        # 8) Generar PDF
-        # ------------------------------------------
         pdf_bytes = generar_pdf(pdf_data)
 
-        # ------------------------------------------
-        # 9) Guardar PDF
-        # ------------------------------------------
         pdf_folder = os.path.join(settings.MEDIA_ROOT, "ordenes", year, month)
         os.makedirs(pdf_folder, exist_ok=True)
 
@@ -266,9 +331,6 @@ class OrdenPDFView(APIView):
         with open(filepath, "wb") as f:
             f.write(pdf_bytes)
 
-        # ------------------------------------------
-        # 10) Responder
-        # ------------------------------------------
         resp = HttpResponse(pdf_bytes, content_type="application/pdf")
         resp["Content-Disposition"] = f'attachment; filename="{filename}"'
         return resp

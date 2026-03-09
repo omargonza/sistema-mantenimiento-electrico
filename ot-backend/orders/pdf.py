@@ -1,9 +1,11 @@
+# orders/pdf.py
 from io import BytesIO
 import os
 import re
 import base64
 import logging
 from datetime import datetime
+from xml.sax.saxutils import escape
 
 from django.conf import settings
 from django.contrib.staticfiles import finders
@@ -30,13 +32,12 @@ logger = logging.getLogger(__name__)
 # ==========================================================
 PIL_OK = False
 try:
-    from PIL import Image as PILImage, ImageOps  # Pillow
+    from PIL import Image as PILImage, ImageOps
 
     PIL_OK = True
 except Exception:
     PIL_OK = False
 
-# HEIC/HEIF (iPhone) -> requiere pillow-heif
 try:
     from pillow_heif import register_heif_opener
 
@@ -48,7 +49,6 @@ _DATAURL_RE = re.compile(r"^data:(image\/[a-zA-Z0-9.+-]+);base64,(.*)$", re.S)
 
 
 def _dataurl_to_bytes(data_url: str):
-    """Devuelve bytes decodificados desde data:image/...;base64,... o None."""
     if not data_url:
         return None
     s = str(data_url).strip()
@@ -63,17 +63,9 @@ def _dataurl_to_bytes(data_url: str):
 
 
 def _image_bytes_to_jpeg_buffer(raw: bytes, max_side: int = 1800, quality: int = 82):
-    """
-    Convierte bytes de imagen (png/jpg/webp/heic si soportado) a JPEG optimizado.
-    - Respeta EXIF orientation
-    - Compone sobre blanco si hay alpha
-    - Escala por lado mayor
-    Retorna BytesIO listo para ReportLab, o None si falla.
-    """
     if not raw:
         return None
 
-    # Si no hay Pillow, intentamos pasar bytes crudos (solo jpg/png típicamente)
     if not PIL_OK:
         try:
             buf = BytesIO(raw)
@@ -86,14 +78,12 @@ def _image_bytes_to_jpeg_buffer(raw: bytes, max_side: int = 1800, quality: int =
         im = PILImage.open(BytesIO(raw))
         im = ImageOps.exif_transpose(im)
 
-        # Asegurar fondo blanco si hay alpha
         if im.mode in ("RGBA", "LA") or (im.mode == "P" and "transparency" in im.info):
             bg = PILImage.new("RGB", im.size, (255, 255, 255))
             bg.paste(im, mask=im.split()[-1] if im.mode in ("RGBA", "LA") else None)
             im = bg
-        else:
-            if im.mode != "RGB":
-                im = im.convert("RGB")
+        elif im.mode != "RGB":
+            im = im.convert("RGB")
 
         im.thumbnail((max_side, max_side), PILImage.LANCZOS)
 
@@ -113,16 +103,11 @@ def _abs_media(rel_path: str) -> str:
 
 
 def _static_abs(static_rel: str) -> str:
-    """
-    Devuelve el path absoluto real de un archivo en staticfiles.
-    Funciona en desarrollo y producción (collectstatic).
-    """
     p = finders.find(static_rel)
     return p or ""
 
 
 def _img_flowable_path(abs_path: str, w_cm: float, h_cm: float, h_align="LEFT"):
-    """Crea Image desde path si existe. Si no, devuelve None."""
     if not abs_path or not os.path.exists(abs_path):
         return None
     try:
@@ -135,12 +120,13 @@ def _img_flowable_path(abs_path: str, w_cm: float, h_cm: float, h_align="LEFT"):
 
 
 def _img_flowable_dataurl(
-    data_url: str, w_cm: float, h_cm: float, h_align="LEFT", max_side=1800, quality=82
+    data_url: str,
+    w_cm: float,
+    h_cm: float,
+    h_align="LEFT",
+    max_side=1800,
+    quality=82,
 ):
-    """
-    Crea Image desde dataURL base64 (foto/firma).
-    Convierte a JPEG optimizado para evitar formatos raros (HEIC/WEBP).
-    """
     raw = _dataurl_to_bytes(data_url)
     if not raw:
         return None
@@ -159,9 +145,14 @@ def _img_flowable_dataurl(
 
 
 def _placeholder_box(text: str, theme, w_cm: float, h_cm: float):
-    """Placeholder visual cuando una imagen falla."""
     t = Table(
-        [[Paragraph(text, getSampleStyleSheet()["Normal"])]],
+        [
+            [
+                Paragraph(
+                    escape(text).replace("\n", "<br/>"), getSampleStyleSheet()["Normal"]
+                )
+            ]
+        ],
         colWidths=[w_cm * cm],
         rowHeights=[h_cm * cm],
     )
@@ -184,10 +175,9 @@ def _placeholder_box(text: str, theme, w_cm: float, h_cm: float):
 # TEMA PREMIUM (DUAL MODE)
 # =========================
 def get_theme(data):
-    PRINT_MODE = bool((data or {}).get("print_mode"))
+    print_mode = bool((data or {}).get("print_mode"))
 
-    if PRINT_MODE:
-        # ---- IMPRESIÓN (B/N seguro) ----
+    if print_mode:
         return {
             "bg": colors.white,
             "panel": colors.HexColor("#f7f7f7"),
@@ -198,9 +188,9 @@ def get_theme(data):
             "row_alt": colors.HexColor("#f0f0f0"),
             "prose_bg": colors.white,
             "accent": colors.black,
+            "soft": colors.HexColor("#d9d9d9"),
         }
 
-    # ---- PANTALLA (más contraste) ----
     return {
         "bg": colors.HexColor("#020617"),
         "panel": colors.HexColor("#0b1220"),
@@ -211,6 +201,7 @@ def get_theme(data):
         "row_alt": colors.HexColor("#0a1020"),
         "prose_bg": colors.HexColor("#070d18"),
         "accent": colors.HexColor("#38bdf8"),
+        "soft": colors.HexColor("#162235"),
     }
 
 
@@ -218,9 +209,6 @@ def generar_pdf(data):
     data = data or {}
     theme = get_theme(data)
 
-    # ==========================================
-    # FLAG: Tablero catalogado (para avisos/watermark)
-    # ==========================================
     tablero_catalogado = bool(data.get("tablero_catalogado", True))
     tablero_nombre = (str(data.get("tablero") or "")).strip()
 
@@ -237,9 +225,10 @@ def generar_pdf(data):
     )
 
     styles = getSampleStyleSheet()
+    print_mode = bool(data.get("print_mode"))
 
     # =========================
-    # TIPOGRAFÍA (más legible)
+    # TIPOGRAFÍA
     # =========================
     H2 = ParagraphStyle(
         "H2",
@@ -247,9 +236,20 @@ def generar_pdf(data):
         fontName="Helvetica-Bold",
         fontSize=10.8,
         leading=13,
-        textColor=theme["text"] if data.get("print_mode") else theme["muted"],
+        textColor=theme["text"] if print_mode else theme["muted"],
         spaceBefore=10,
         spaceAfter=6,
+    )
+
+    H3 = ParagraphStyle(
+        "H3",
+        parent=styles["Normal"],
+        fontName="Helvetica-Bold",
+        fontSize=9.6,
+        leading=12,
+        textColor=theme["text"],
+        spaceBefore=4,
+        spaceAfter=4,
     )
 
     LABEL = ParagraphStyle(
@@ -264,8 +264,8 @@ def generar_pdf(data):
     VALUE = ParagraphStyle(
         "VALUE",
         parent=styles["Normal"],
-        fontName="Helvetica-Bold" if not data.get("print_mode") else "Helvetica",
-        fontSize=10.2,
+        fontName="Helvetica-Bold" if not print_mode else "Helvetica",
+        fontSize=10.0,
         leading=12.8,
         textColor=theme["text"],
     )
@@ -274,8 +274,8 @@ def generar_pdf(data):
         "BODY",
         parent=styles["Normal"],
         fontName="Helvetica",
-        fontSize=9.8,
-        leading=14,
+        fontSize=9.6,
+        leading=13.6,
         textColor=theme["text"],
     )
 
@@ -301,10 +301,7 @@ def generar_pdf(data):
         return "" if v is None else str(v)
 
     def P(txt, style=BODY):
-        return Paragraph(safe(txt).replace("\n", "<br/>"), style)
-
-    def now_iso():
-        return datetime.now().strftime("%d-%m-%Y")
+        return Paragraph(escape(safe(txt)).replace("\n", "<br/>"), style)
 
     def fmt_fecha(v):
         s = safe(v).strip()
@@ -315,44 +312,132 @@ def generar_pdf(data):
         except Exception:
             return s
 
-    # =========================
-    # LUMINARIAS: lista canónica para PDF
-    # =========================
+    def now_iso():
+        return datetime.now().strftime("%d-%m-%Y")
+
+    def clean_join(values, fallback="-", max_items=None):
+        vals = []
+        seen = set()
+        for v in values or []:
+            txt = safe(v).strip()
+            if not txt:
+                continue
+            if txt in seen:
+                continue
+            seen.add(txt)
+            vals.append(txt)
+
+        if not vals:
+            return fallback
+
+        if max_items and len(vals) > max_items:
+            shown = ", ".join(vals[:max_items])
+            restantes = len(vals) - max_items
+            return f"{shown} + {restantes} más"
+
+        return ", ".join(vals)
+
+    def get_luminaria_grupos(pdf_data: dict):
+        grupos = pdf_data.get("luminarias_por_tablero") or []
+        if isinstance(grupos, (tuple, set)):
+            grupos = list(grupos)
+        if not isinstance(grupos, list):
+            return []
+
+        out = []
+        for g in grupos:
+            if not isinstance(g, dict):
+                continue
+
+            items = g.get("items") or []
+            if isinstance(items, (tuple, set)):
+                items = list(items)
+            if not isinstance(items, list):
+                items = []
+
+            out.append(
+                {
+                    "tablero": safe(g.get("tablero")).strip(),
+                    "zona": safe(g.get("zona")).strip(),
+                    "circuito": safe(g.get("circuito")).strip(),
+                    "ramal": safe(g.get("ramal")).strip(),
+                    "resultado": safe(g.get("resultado")).strip(),
+                    "luminaria_estado": safe(g.get("luminaria_estado")).strip(),
+                    "tarea_pedida": safe(g.get("tarea_pedida")).strip(),
+                    "tarea_realizada": safe(g.get("tarea_realizada")).strip(),
+                    "tarea_pendiente": safe(g.get("tarea_pendiente")).strip(),
+                    "observaciones": safe(g.get("observaciones")).strip(),
+                    "items": items,
+                }
+            )
+
+        return out
+
     def get_codigos_luminarias(pdf_data: dict):
+        grupos = get_luminaria_grupos(pdf_data)
+        out = []
+        seen = set()
+
+        for grupo in grupos:
+            for item in grupo.get("items", []) or []:
+                c = str(item.get("codigo_luminaria") or "").strip().upper()
+                if not c:
+                    continue
+                if c in seen:
+                    continue
+                seen.add(c)
+                out.append(c)
+
+        if out:
+            return out
+
         cods = pdf_data.get("codigos_luminarias") or []
         if isinstance(cods, (tuple, set)):
             cods = list(cods)
         if isinstance(cods, list):
             cods = [str(x).strip().upper() for x in cods if str(x).strip()]
 
-        if not cods:
-            c = str(pdf_data.get("codigo_luminaria") or "").strip().upper()
-            if c:
-                cods = [c]
+        if cods:
+            return cods
 
-        if not cods:
-            try:
-                from .views_luminarias import parse_luminaria_codes
+        c = str(pdf_data.get("codigo_luminaria") or "").strip().upper()
+        if c:
+            return [c]
 
-                cods = (
-                    parse_luminaria_codes(pdf_data.get("luminaria_equipos", "")) or []
-                )
-            except Exception:
-                cods = []
+        try:
+            from .views_luminarias import parse_luminaria_codes
 
-        seen = set()
-        out = []
-        for c in cods:
-            if c in seen:
-                continue
-            seen.add(c)
-            out.append(c)
+            return parse_luminaria_codes(pdf_data.get("luminaria_equipos", "")) or []
+        except Exception:
+            return []
 
-        return out
+    def get_tableros_resumen(pdf_data: dict):
+        grupos = get_luminaria_grupos(pdf_data)
+        if grupos:
+            return clean_join(
+                [g.get("tablero") for g in grupos], fallback="-", max_items=4
+            )
+        return safe(pdf_data.get("tablero")).strip() or "-"
 
-    # =========================
-    # Card (panel)
-    # =========================
+    def get_circuitos_resumen(pdf_data: dict):
+        grupos = get_luminaria_grupos(pdf_data)
+        if grupos:
+            return clean_join(
+                [g.get("circuito") for g in grupos],
+                fallback="-",
+                max_items=4,
+            )
+        return safe(pdf_data.get("circuito")).strip() or "-"
+
+    def count_total_luminarias(pdf_data: dict):
+        total = 0
+        for grupo in get_luminaria_grupos(pdf_data):
+            total += len(grupo.get("items") or [])
+        return total
+
+    def count_total_tableros(pdf_data: dict):
+        return len(get_luminaria_grupos(pdf_data))
+
     def card(elements, pad=11):
         t = Table([[elements]], colWidths=[doc.width])
         t.setStyle(
@@ -369,11 +454,8 @@ def generar_pdf(data):
         )
         return t
 
-    # =========================
-    # Bloque de texto (prose)
-    # =========================
-    def bloque_texto(titulo, valor, empty="-"):
-        contenido = safe(valor).strip() or empty
+    def prose_box(text, empty="-"):
+        contenido = safe(text).strip() or empty
         inner = Table([[P(contenido, BODY)]], colWidths=[doc.width - 18])
         inner.setStyle(
             TableStyle(
@@ -387,11 +469,17 @@ def generar_pdf(data):
                 ]
             )
         )
-        return KeepTogether([Paragraph(titulo.upper(), H2), inner, Spacer(1, 7)])
+        return inner
 
-    # =========================
-    # Firmas (sin DNI/DOC)
-    # =========================
+    def bloque_texto(titulo, valor, empty="-"):
+        return KeepTogether(
+            [
+                Paragraph(titulo.upper(), H2),
+                prose_box(valor, empty=empty),
+                Spacer(1, 7),
+            ]
+        )
+
     def linea_firma(titulo, aclaracion=""):
         line = Table([[P(" ", SMALL)]], colWidths=[doc.width * 0.46])
         line.setStyle(
@@ -404,7 +492,7 @@ def generar_pdf(data):
         )
 
         right = P(
-            f"Aclaración: <b>{safe(aclaracion).strip() or '____________________'}</b>",
+            f"Aclaración: <b>{escape(safe(aclaracion).strip() or '____________________')}</b>",
             SMALL,
         )
 
@@ -426,163 +514,364 @@ def generar_pdf(data):
         return block
 
     story = []
+    alcance_up = safe(data.get("alcance")).strip().upper()
+    es_luminaria = alcance_up == "LUMINARIA"
 
     # =========================
-    # RESUMEN (card)
+    # AVISO TABLERO NO CATALOGADO
     # =========================
-    km_ini = safe(data.get("km_inicial")).strip()
-    km_fin = safe(data.get("km_final")).strip()
-    vehiculo = safe(data.get("vehiculo")).strip()
-
-    km_text = f"{km_ini or '-'} → {km_fin or '-'}" if (km_ini or km_fin) else "-"
-
-    km_total = data.get("km_total")
-    km_total_text = f"{km_total} km" if km_total not in (None, "", 0) else "-"
-
-    resumen_rows = [
-        [
-            P("FECHA", LABEL),
-            P(fmt_fecha(data.get("fecha")), VALUE),
-            P("UBICACIÓN", LABEL),
-            P(safe(data.get("ubicacion")), VALUE),
-        ],
-        [
-            P("TABLERO", LABEL),
-            P(safe(data.get("tablero")), VALUE),
-            P("CIRCUITO", LABEL),
-            P(safe(data.get("circuito")), VALUE),
-        ],
-        [
-            P("VEHÍCULO", LABEL),
-            P(vehiculo or "-", VALUE),
-            P("KM (INI→FIN)", LABEL),
-            P(km_text, VALUE),
-        ],
-        [P("KM TOTAL", LABEL), P(km_total_text, VALUE), P("", LABEL), P("", VALUE)],
-    ]
-
-    resumen = Table(
-        resumen_rows,
-        colWidths=[
-            2.7 * cm,
-            (doc.width / 2) - 2.7 * cm,
-            3.0 * cm,
-            (doc.width / 2) - 3.0 * cm,
-        ],
-        hAlign="LEFT",
-    )
-    resumen.setStyle(
-        TableStyle(
-            [
-                ("VALIGN", (0, 0), (-1, -1), "TOP"),
-                ("BOTTOMPADDING", (0, 0), (-1, -1), 7),
-                ("TOPPADDING", (0, 0), (-1, -1), 3),
-            ]
-        )
-    )
-
-    story.append(card([resumen], pad=12))
-    story.append(Spacer(1, 11))
-
-    if tablero_nombre and (not tablero_catalogado):
+    if tablero_nombre and not tablero_catalogado:
         story.append(
             card(
                 [
                     P(
-                        "⚠️ Tablero NO catalogado, No se encuentra en el catálogo oficial. No quedara en el historial de tableros, reportar a supervisión. ⚠️",
+                        "⚠️ Tablero NO catalogado. No se encuentra en el catálogo oficial y no quedará reflejado en el historial de tableros. Reportar a supervisión.",
                         MUTED,
                     )
                 ],
                 pad=10,
             )
         )
-    story.append(Spacer(1, 9))
+        story.append(Spacer(1, 9))
 
     # =========================
-    # CLASIFICACIÓN
+    # MODO LUMINARIA
     # =========================
-    alcance = safe(data.get("alcance")).strip() or "-"
-    resultado = safe(data.get("resultado")).strip() or "-"
-    estado_tablero = safe(data.get("estado_tablero")).strip()
-    luminaria_estado = safe(data.get("luminaria_estado")).strip()
-
-    clasif_rows = [
-        [
-            P("ALCANCE", LABEL),
-            P(alcance, VALUE),
-            P("RESULTADO", LABEL),
-            P(resultado, VALUE),
-        ],
-    ]
-
-    if alcance.upper() in ("TABLERO", "CIRCUITO"):
-        clasif_rows.append(
-            [
-                P("ESTADO TABLERO", LABEL),
-                P(estado_tablero or "-", VALUE),
-                P("", LABEL),
-                P("", VALUE),
-            ]
+    if es_luminaria:
+        total_tableros = count_total_tableros(data)
+        total_luminarias = count_total_luminarias(data)
+        ramales = clean_join(
+            [g.get("ramal") for g in get_luminaria_grupos(data)],
+            fallback=safe(data.get("ramal")).strip() or "-",
+            max_items=5,
         )
-    elif alcance.upper() == "LUMINARIA":
-        clasif_rows.append(
+        vehiculo = safe(data.get("vehiculo")).strip()
+        km_ini = safe(data.get("km_inicial")).strip()
+        km_fin = safe(data.get("km_final")).strip()
+        km_text = f"{km_ini or '-'} → {km_fin or '-'}" if (km_ini or km_fin) else "-"
+        km_total = data.get("km_total")
+        km_total_text = f"{km_total} km" if km_total not in (None, "", 0) else "-"
+
+        resumen_lum = Table(
             [
-                P("ESTADO LUMINARIA", LABEL),
-                P(luminaria_estado or "-", VALUE),
-                P("", LABEL),
-                P("", VALUE),
-            ]
+                [
+                    P("FECHA", LABEL),
+                    P(fmt_fecha(data.get("fecha")), VALUE),
+                    P("UBICACIÓN", LABEL),
+                    P(safe(data.get("ubicacion")), VALUE),
+                ],
+                [
+                    P("TABLEROS", LABEL),
+                    P(str(total_tableros), VALUE),
+                    P("LUMINARIAS", LABEL),
+                    P(str(total_luminarias), VALUE),
+                ],
+                [
+                    P("RAMALES", LABEL),
+                    P(ramales, VALUE),
+                    P("VEHÍCULO", LABEL),
+                    P(vehiculo or "-", VALUE),
+                ],
+                [
+                    P("KM (INI→FIN)", LABEL),
+                    P(km_text, VALUE),
+                    P("KM TOTAL", LABEL),
+                    P(km_total_text, VALUE),
+                ],
+            ],
+            colWidths=[
+                2.8 * cm,
+                (doc.width / 2) - 2.8 * cm,
+                2.8 * cm,
+                (doc.width / 2) - 2.8 * cm,
+            ],
+            hAlign="LEFT",
+        )
+        resumen_lum.setStyle(
+            TableStyle(
+                [
+                    ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                    ("BOTTOMPADDING", (0, 0), (-1, -1), 7),
+                    ("TOPPADDING", (0, 0), (-1, -1), 3),
+                ]
+            )
         )
 
-    clasif = Table(
-        clasif_rows,
-        colWidths=[
-            3.0 * cm,
-            (doc.width / 2) - 3.0 * cm,
-            3.0 * cm,
-            (doc.width / 2) - 3.0 * cm,
-        ],
-        hAlign="LEFT",
-    )
-    clasif.setStyle(
-        TableStyle(
-            [
-                ("VALIGN", (0, 0), (-1, -1), "TOP"),
-                ("BOTTOMPADDING", (0, 0), (-1, -1), 7),
-                ("TOPPADDING", (0, 0), (-1, -1), 3),
-            ]
-        )
-    )
+        story.append(Paragraph("RESUMEN DE INTERVENCIÓN EN LUMINARIAS", H2))
+        story.append(card([resumen_lum], pad=12))
+        story.append(Spacer(1, 10))
 
-    story.append(Paragraph("CLASIFICACIÓN", H2))
-    story.append(card([clasif], pad=12))
-    story.append(Spacer(1, 11))
+        tarea_pedida_general = safe(data.get("tarea_pedida")).strip()
+        tarea_realizada_general = safe(data.get("tarea_realizada")).strip()
+        tarea_pendiente_general = safe(data.get("tarea_pendiente")).strip()
 
-    # =========================
-    # TAREAS
-    # =========================
-    story.append(bloque_texto("Tarea pedida", data.get("tarea_pedida")))
-    story.append(bloque_texto("Tarea realizada", data.get("tarea_realizada")))
-    story.append(bloque_texto("Tarea pendiente", data.get("tarea_pendiente")))
+        if tarea_pedida_general or tarea_realizada_general or tarea_pendiente_general:
+            story.append(Paragraph("RESUMEN GENERAL DE TAREAS", H2))
+            if tarea_pedida_general:
+                story.append(bloque_texto("Tarea pedida", tarea_pedida_general))
+            if tarea_realizada_general:
+                story.append(bloque_texto("Tarea realizada", tarea_realizada_general))
+            if tarea_pendiente_general:
+                story.append(bloque_texto("Tarea pendiente", tarea_pendiente_general))
 
-    if safe(data.get("alcance")).strip().upper() == "LUMINARIA":
         cods = get_codigos_luminarias(data)
         cods_txt = ", ".join(cods) if cods else "-"
         story.append(bloque_texto("Códigos de luminarias", cods_txt, empty="-"))
 
-        ramal = safe(data.get("ramal")).strip()
-        km_lum = data.get("km_luminaria")
-        if ramal or km_lum not in (None, "", 0):
-            info = (
-                f"<b>Ramal:</b> {ramal or '-'} &nbsp;&nbsp; "
-                f"<b>KM:</b> {km_lum if km_lum not in (None,'') else '-'}"
-            )
-            story.append(card([P(info, BODY)], pad=10))
-            story.append(Spacer(1, 7))
+        grupos = get_luminaria_grupos(data)
+        if grupos:
+            story.append(Paragraph("DETALLE POR TABLERO TRABAJADO", H2))
 
-        lum_texto = safe(data.get("luminaria_equipos")).strip()
-        if lum_texto:
-            story.append(bloque_texto("Luminarias / equipos", lum_texto))
+            for idx, grupo in enumerate(grupos, start=1):
+                tablero_g = grupo.get("tablero") or "-"
+                zona_g = grupo.get("zona") or "-"
+                circuito_g = grupo.get("circuito") or "-"
+                ramal_g = grupo.get("ramal") or "-"
+                resultado_g = grupo.get("resultado") or "-"
+                estado_g = grupo.get("luminaria_estado") or "-"
+
+                items = grupo.get("items") or []
+                codigos_g = []
+                for item in items:
+                    c = str(item.get("codigo_luminaria") or "").strip().upper()
+                    if c:
+                        codigos_g.append(c)
+                codigos_g_txt = ", ".join(codigos_g) if codigos_g else "-"
+
+                resumen_grupo = Table(
+                    [
+                        [
+                            P("TABLERO", LABEL),
+                            P(tablero_g, VALUE),
+                            P("ZONA", LABEL),
+                            P(zona_g, VALUE),
+                        ],
+                        [
+                            P("CIRCUITO", LABEL),
+                            P(circuito_g, VALUE),
+                            P("RAMAL", LABEL),
+                            P(ramal_g, VALUE),
+                        ],
+                        [
+                            P("RESULTADO", LABEL),
+                            P(resultado_g, VALUE),
+                            P("ESTADO", LABEL),
+                            P(estado_g, VALUE),
+                        ],
+                    ],
+                    colWidths=[
+                        2.8 * cm,
+                        (doc.width / 2) - 2.8 * cm,
+                        2.8 * cm,
+                        (doc.width / 2) - 2.8 * cm,
+                    ],
+                )
+                resumen_grupo.setStyle(
+                    TableStyle(
+                        [
+                            ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                            ("BOTTOMPADDING", (0, 0), (-1, -1), 7),
+                            ("TOPPADDING", (0, 0), (-1, -1), 3),
+                        ]
+                    )
+                )
+
+                bloque = [
+                    Paragraph(f"TABLERO {idx}", H3),
+                    card([resumen_grupo], pad=10),
+                    Spacer(1, 6),
+                    bloque_texto("Tarea pedida.", grupo.get("tarea_pedida"), empty="-"),
+                    bloque_texto(
+                        "Tarea realizada.",
+                        grupo.get("tarea_realizada"),
+                        empty="-",
+                    ),
+                    bloque_texto(
+                        "Tarea pendiente.",
+                        grupo.get("tarea_pendiente"),
+                        empty="-",
+                    ),
+                    bloque_texto(
+                        "Observaciones.", grupo.get("observaciones"), empty="-"
+                    ),
+                ]
+
+                if items:
+                    rows = [
+                        [P("CÓDIGO", LABEL)],
+                    ]
+                    for item in items:
+                        km_item = item.get("km_luminaria", None)
+                        rows.append(
+                            [
+                                P(safe(item.get("codigo_luminaria")).upper(), VALUE),
+                                P(
+                                    "-" if km_item in (None, "") else safe(km_item),
+                                    VALUE,
+                                ),
+                            ]
+                        )
+
+                    items_table = Table(
+                        rows,
+                        colWidths=[doc.width - 5.2 * cm, 5.2 * cm],
+                        hAlign="LEFT",
+                    )
+                    items_table.setStyle(
+                        TableStyle(
+                            [
+                                ("BACKGROUND", (0, 0), (-1, 0), theme["panel2"]),
+                                ("TEXTCOLOR", (0, 0), (-1, 0), theme["muted"]),
+                                ("BOX", (0, 0), (-1, -1), 1, theme["border"]),
+                                ("INNERGRID", (0, 0), (-1, -1), 0.6, theme["border"]),
+                                (
+                                    "ROWBACKGROUNDS",
+                                    (0, 1),
+                                    (-1, -1),
+                                    [theme["panel"], theme["row_alt"]],
+                                ),
+                                ("ALIGN", (1, 1), (-1, -1), "CENTER"),
+                                ("LEFTPADDING", (0, 0), (-1, -1), 10),
+                                ("RIGHTPADDING", (0, 0), (-1, -1), 10),
+                                ("TOPPADDING", (0, 0), (-1, -1), 8),
+                                ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
+                                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                            ]
+                        )
+                    )
+                    bloque.extend(
+                        [
+                            Paragraph("LUMINARIAS DEL GRUPO", H3),
+                            items_table,
+                            Spacer(1, 8),
+                        ]
+                    )
+
+                story.append(KeepTogether(bloque))
+                story.append(Spacer(1, 8))
+
+    # =========================
+    # MODO ORIGINAL (NO LUMINARIA)
+    # =========================
+    else:
+        km_ini = safe(data.get("km_inicial")).strip()
+        km_fin = safe(data.get("km_final")).strip()
+        vehiculo = safe(data.get("vehiculo")).strip()
+
+        km_text = f"{km_ini or '-'} → {km_fin or '-'}" if (km_ini or km_fin) else "-"
+        km_total = data.get("km_total")
+        km_total_text = f"{km_total} km" if km_total not in (None, "", 0) else "-"
+
+        resumen_rows = [
+            [
+                P("FECHA", LABEL),
+                P(fmt_fecha(data.get("fecha")), VALUE),
+                P("UBICACIÓN", LABEL),
+                P(safe(data.get("ubicacion")), VALUE),
+            ],
+            [
+                P("TABLERO", LABEL),
+                P(safe(data.get("tablero")), VALUE),
+                P("CIRCUITO", LABEL),
+                P(safe(data.get("circuito")), VALUE),
+            ],
+            [
+                P("VEHÍCULO", LABEL),
+                P(vehiculo or "-", VALUE),
+                P("KM (INI→FIN)", LABEL),
+                P(km_text, VALUE),
+            ],
+            [
+                P("KM TOTAL", LABEL),
+                P(km_total_text, VALUE),
+                P("", LABEL),
+                P("", VALUE),
+            ],
+        ]
+
+        resumen = Table(
+            resumen_rows,
+            colWidths=[
+                2.7 * cm,
+                (doc.width / 2) - 2.7 * cm,
+                3.0 * cm,
+                (doc.width / 2) - 3.0 * cm,
+            ],
+            hAlign="LEFT",
+        )
+        resumen.setStyle(
+            TableStyle(
+                [
+                    ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                    ("BOTTOMPADDING", (0, 0), (-1, -1), 7),
+                    ("TOPPADDING", (0, 0), (-1, -1), 3),
+                ]
+            )
+        )
+
+        story.append(card([resumen], pad=12))
+        story.append(Spacer(1, 11))
+
+        alcance = safe(data.get("alcance")).strip() or "-"
+        resultado = safe(data.get("resultado")).strip() or "-"
+        estado_tablero = safe(data.get("estado_tablero")).strip()
+        luminaria_estado = safe(data.get("luminaria_estado")).strip()
+
+        clasif_rows = [
+            [
+                P("ALCANCE", LABEL),
+                P(alcance, VALUE),
+                P("RESULTADO", LABEL),
+                P(resultado, VALUE),
+            ],
+        ]
+
+        if alcance.upper() in ("TABLERO", "CIRCUITO"):
+            clasif_rows.append(
+                [
+                    P("ESTADO TABLERO", LABEL),
+                    P(estado_tablero or "-", VALUE),
+                    P("", LABEL),
+                    P("", VALUE),
+                ]
+            )
+        elif alcance.upper() == "LUMINARIA":
+            clasif_rows.append(
+                [
+                    P("ESTADO LUMINARIA", LABEL),
+                    P(luminaria_estado or "-", VALUE),
+                    P("", LABEL),
+                    P("", VALUE),
+                ]
+            )
+
+        clasif = Table(
+            clasif_rows,
+            colWidths=[
+                3.0 * cm,
+                (doc.width / 2) - 3.0 * cm,
+                3.0 * cm,
+                (doc.width / 2) - 3.0 * cm,
+            ],
+            hAlign="LEFT",
+        )
+        clasif.setStyle(
+            TableStyle(
+                [
+                    ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                    ("BOTTOMPADDING", (0, 0), (-1, -1), 7),
+                    ("TOPPADDING", (0, 0), (-1, -1), 3),
+                ]
+            )
+        )
+
+        story.append(Paragraph("CLASIFICACIÓN", H2))
+        story.append(card([clasif], pad=12))
+        story.append(Spacer(1, 11))
+
+        story.append(bloque_texto("Tarea pedida", data.get("tarea_pedida")))
+        story.append(bloque_texto("Tarea realizada", data.get("tarea_realizada")))
+        story.append(bloque_texto("Tarea pendiente", data.get("tarea_pendiente")))
 
     story.append(Spacer(1, 6))
 
@@ -666,31 +955,41 @@ def generar_pdf(data):
         story.append(Spacer(1, 11))
 
     # =========================
-    # OBSERVACIONES
+    # OBSERVACIONES (solo no luminaria)
     # =========================
-    story.append(
-        bloque_texto(
-            "Observaciones", data.get("observaciones"), empty="(Sin observaciones)"
+    if not es_luminaria:
+        story.append(
+            bloque_texto(
+                "Observaciones",
+                data.get("observaciones"),
+                empty="(Sin observaciones)",
+            )
         )
-    )
 
     # =========================
-    # FIRMAS + FIRMA DIGITAL (path o base64)
+    # FIRMAS
     # =========================
     story.append(Paragraph("FIRMAS", H2))
 
-    # 1) Firma técnico: preferimos base64 (firma_tecnico_img), luego path
     firma_img_flow = None
     firma_b64 = (data.get("firma_tecnico_img") or "").strip()
     if firma_b64:
         firma_img_flow = _img_flowable_dataurl(
-            firma_b64, w_cm=7.0, h_cm=2.4, h_align="LEFT", max_side=900, quality=90
+            firma_b64,
+            w_cm=7.0,
+            h_cm=2.4,
+            h_align="LEFT",
+            max_side=900,
+            quality=90,
         )
     if not firma_img_flow:
         firma_rel = (data.get("firma_tecnico_path") or "").strip()
         firma_abs = _abs_media(firma_rel) if firma_rel else ""
         firma_img_flow = _img_flowable_path(
-            firma_abs, w_cm=7.0, h_cm=2.4, h_align="LEFT"
+            firma_abs,
+            w_cm=7.0,
+            h_cm=2.4,
+            h_align="LEFT",
         )
 
     bloque_tec = [
@@ -707,9 +1006,7 @@ def generar_pdf(data):
     story.append(Spacer(1, 12))
 
     # =========================
-    # EVIDENCIAS (FOTOS) — 2x2 (hasta 4)
-    # - Preferimos fotos_b64 (frontend actual)
-    # - Fallback: fotos_paths / fotos (paths en media)
+    # EVIDENCIAS (FOTOS)
     # =========================
     fotos_b64 = data.get("fotos_b64") or []
     if isinstance(fotos_b64, (tuple, set)):
@@ -740,7 +1037,12 @@ def generar_pdf(data):
         for idx, (kind, val) in enumerate(fotos_sources):
             if kind == "b64":
                 im = _img_flowable_dataurl(
-                    val, w_cm=8.2, h_cm=6.0, h_align="CENTER", max_side=1800, quality=82
+                    val,
+                    w_cm=8.2,
+                    h_cm=6.0,
+                    h_align="CENTER",
+                    max_side=1800,
+                    quality=82,
                 )
                 if not im:
                     cells.append(
@@ -786,7 +1088,7 @@ def generar_pdf(data):
         story.append(Spacer(1, 12))
 
     # =========================
-    # DATOS DE AUDITORÍA
+    # AUDITORÍA
     # =========================
     story.append(Paragraph("DATOS DE AUDITORÍA", H2))
     id_ot = safe(data.get("id_ot") or data.get("id") or "").strip() or "-"
@@ -821,7 +1123,8 @@ def generar_pdf(data):
     story.append(Spacer(1, 6))
     story.append(
         Paragraph(
-            "Sistema de Mantenimiento Eléctrico — Desarrollado por conurbaDEV", MUTED
+            "Sistema de Mantenimiento Eléctrico — Desarrollado por conurbaDEV",
+            MUTED,
         )
     )
 
@@ -889,7 +1192,6 @@ def generar_pdf(data):
             footer_left += " · Aviso: tablero fuera de catálogo"
 
         canv.drawString(1.6 * cm, 1.2 * cm, footer_left)
-
         canv.drawRightString(w - 1.6 * cm, 1.2 * cm, f"Página {_doc.page}")
 
         canv.restoreState()

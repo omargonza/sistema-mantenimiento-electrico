@@ -14,6 +14,7 @@ const RAMAL_RANGES = {
   ACC_TIGRE: { min: 21, max: 27, label: "Acc Tigre" },
   GRAL_PAZ: { min: 0, max: 25, label: "Gral Paz" },
 };
+
 const RAMALES = Object.keys(RAMAL_RANGES);
 
 async function fetchLuminarias({ ramal, from, to }) {
@@ -29,7 +30,7 @@ async function fetchLuminarias({ ramal, from, to }) {
 }
 
 /* =======================================================
-   Helpers: estados / etiquetas
+   Helpers
 ======================================================= */
 function upper(s) {
   return String(s || "")
@@ -37,8 +38,13 @@ function upper(s) {
     .toUpperCase();
 }
 
+function normText(s) {
+  return String(s || "")
+    .trim()
+    .toUpperCase();
+}
+
 function pickState(row) {
-  // Prioridad: luminaria_estado (si existe), sino inferir por resultado
   const le = upper(row?.luminaria_estado);
   if (le === "REPARADO") return "OK";
   if (le === "APAGADO") return "APAGADO";
@@ -79,11 +85,38 @@ function kmBucket(km, step = 1) {
   return `${b.toFixed(0)}-${(b + step).toFixed(0)}`;
 }
 
+function kmBucket5(km) {
+  return kmBucket(km, 5);
+}
+
+function getYear(fecha) {
+  const s = fmtDateISO(fecha);
+  return s ? s.slice(0, 4) : "";
+}
+
+function getMonth(fecha) {
+  const s = fmtDateISO(fecha);
+  return s ? s.slice(5, 7) : "";
+}
+
+function getYearMonth(fecha) {
+  const s = fmtDateISO(fecha);
+  return s ? s.slice(0, 7) : "";
+}
+
+function uniqueSortedOptions(list, accessor) {
+  const set = new Set();
+  for (const item of list || []) {
+    const v = String(accessor(item) || "").trim();
+    if (v) set.add(v);
+  }
+  return Array.from(set).sort((a, b) => a.localeCompare(b, "es"));
+}
+
 /* =======================================================
-   Mini charts (sin libs)
+   Mini charts
 ======================================================= */
 function MiniBars({ title, subtitle, items, maxBars = 12 }) {
-  // items: [{ label, value, tone }]
   const sliced = items.slice(0, maxBars);
   const maxV = Math.max(1, ...sliced.map((x) => x.value));
 
@@ -117,7 +150,6 @@ function MiniBars({ title, subtitle, items, maxBars = 12 }) {
 }
 
 function Sparkline({ points }) {
-  // points: [{x,label,value}] - dibujado con divs para no meter canvas/svg complejo
   const maxV = Math.max(1, ...points.map((p) => p.value));
   return (
     <div className="lumdash-spark">
@@ -137,9 +169,6 @@ function Sparkline({ points }) {
   );
 }
 
-/* =======================================================
-   Tabla: Sort button
-======================================================= */
 function SortBtn({ active, dir, label, onClick }) {
   return (
     <button
@@ -156,6 +185,61 @@ function SortBtn({ active, dir, label, onClick }) {
   );
 }
 
+function QuickList({ title, subtitle, items }) {
+  return (
+    <div className="lumdash-card">
+      <div className="lumdash-cardhead">
+        <div className="lumdash-cardtitle">{title}</div>
+        {subtitle ? <div className="lumdash-muted">{subtitle}</div> : null}
+      </div>
+
+      <div style={{ display: "grid", gap: 8 }}>
+        {items.length ? (
+          items.map((it) => (
+            <div
+              key={it.key}
+              style={{
+                padding: "10px 12px",
+                borderRadius: 12,
+                border: "1px solid rgba(148,163,184,.18)",
+                background: "rgba(2,6,23,.24)",
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  gap: 8,
+                  alignItems: "center",
+                }}
+              >
+                <div style={{ fontWeight: 700 }}>{it.codigo || "—"}</div>
+                <span className={`pill pill-${it.state}`}>
+                  {stateLabel(it.state)}
+                </span>
+              </div>
+              <div className="lumdash-muted" style={{ marginTop: 4 }}>
+                {it.fecha || "—"} · {it.ramal || "—"} · KM {it.km}
+              </div>
+              <div style={{ marginTop: 4 }}>
+                {it.tablero || "—"}
+                {it.circuito ? ` · ${it.circuito}` : ""}
+              </div>
+              {it.ubicacion ? (
+                <div className="lumdash-muted" style={{ marginTop: 4 }}>
+                  {it.ubicacion}
+                </div>
+              ) : null}
+            </div>
+          ))
+        ) : (
+          <div className="lumdash-muted">Sin datos.</div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function HistorialLuminarias() {
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
@@ -168,13 +252,16 @@ export default function HistorialLuminarias() {
   const from = params.get("from") || "";
   const to = params.get("to") || "";
 
-  // UI local (no URL)
+  // UI local
   const [q, setQ] = useState("");
-  const [stateFilter, setStateFilter] = useState("ALL"); // ALL|OK|PENDIENTE|APAGADO|OTRO
+  const [stateFilter, setStateFilter] = useState("ALL");
   const [onlyLatestPerCode, setOnlyLatestPerCode] = useState(true);
+  const [tableroFilter, setTableroFilter] = useState("");
+  const [circuitoFilter, setCircuitoFilter] = useState("");
+  const [zonaFilter, setZonaFilter] = useState("");
 
-  const [sortKey, setSortKey] = useState("fecha"); // fecha|km|codigo|estado
-  const [sortDir, setSortDir] = useState("desc"); // asc|desc
+  const [sortKey, setSortKey] = useState("fecha");
+  const [sortDir, setSortDir] = useState("desc");
 
   function updateParam(key, value) {
     const next = new URLSearchParams(params);
@@ -208,7 +295,6 @@ export default function HistorialLuminarias() {
     };
   }, [ramal, from, to]);
 
-  // Normalización + enriquecimiento
   const enriched = useMemo(() => {
     return (rows || []).map((r) => {
       const state = pickState(r);
@@ -216,21 +302,36 @@ export default function HistorialLuminarias() {
       const codigo = String(r.codigo || "")
         .trim()
         .toUpperCase();
+      const fecha = fmtDateISO(r.fecha);
+      const tablero = String(r.tablero || "").trim();
+      const zona = String(r.zona || "").trim();
+      const circuito = String(r.circuito || "").trim();
+      const ramalRaw = String(r.ramal || "").trim();
+      const ramalLabel = RAMAL_RANGES[ramalRaw]?.label || ramalRaw || "—";
+
       return {
         ...r,
         _state: state,
         _km: km,
         _codigo: codigo,
-        _fecha: fmtDateISO(r.fecha),
+        _fecha: fecha,
+        _tablero: tablero,
+        _zona: zona,
+        _circuito: circuito,
+        _ramalRaw: ramalRaw,
+        _ramalLabel: ramalLabel,
+        _year: getYear(fecha),
+        _month: getMonth(fecha),
+        _yearMonth: getYearMonth(fecha),
+        _kmBucket1: kmBucket(km, 1),
+        _kmBucket5: kmBucket5(km),
       };
     });
   }, [rows]);
 
-  // “Último estado por luminaria” (para métricas más limpias)
   const latestByCode = useMemo(() => {
     if (!onlyLatestPerCode) return enriched;
 
-    // tomamos la más nueva por código (fecha + ot_id)
     const map = new Map();
     for (const r of enriched) {
       if (!r._codigo) continue;
@@ -239,7 +340,7 @@ export default function HistorialLuminarias() {
         map.set(r._codigo, r);
         continue;
       }
-      // compara por fecha ISO y luego ot_id
+
       const a = String(r._fecha || "");
       const b = String(prev._fecha || "");
       if (a > b) map.set(r._codigo, r);
@@ -248,18 +349,33 @@ export default function HistorialLuminarias() {
       }
     }
 
-    // si no tiene código, lo dejamos igual (son raros, pero no los oculto)
     const noCode = enriched.filter((r) => !r._codigo);
     return [...Array.from(map.values()), ...noCode];
   }, [enriched, onlyLatestPerCode]);
 
-  // Filtro búsqueda + estado
+  const tableroOptions = useMemo(
+    () => uniqueSortedOptions(enriched, (r) => r._tablero),
+    [enriched],
+  );
+
+  const circuitoOptions = useMemo(
+    () => uniqueSortedOptions(enriched, (r) => r._circuito),
+    [enriched],
+  );
+
+  const zonaOptions = useMemo(
+    () => uniqueSortedOptions(enriched, (r) => r._zona),
+    [enriched],
+  );
+
   const filtered = useMemo(() => {
-    const qq = String(q || "")
-      .trim()
-      .toUpperCase();
+    const qq = normText(q);
+
     return (latestByCode || []).filter((r) => {
       if (stateFilter !== "ALL" && r._state !== stateFilter) return false;
+      if (tableroFilter && r._tablero !== tableroFilter) return false;
+      if (circuitoFilter && r._circuito !== circuitoFilter) return false;
+      if (zonaFilter && r._zona !== zonaFilter) return false;
 
       if (qq) {
         const hay =
@@ -269,14 +385,27 @@ export default function HistorialLuminarias() {
             .includes(qq) ||
           String(r.ubicacion || "")
             .toUpperCase()
+            .includes(qq) ||
+          String(r._tablero || "")
+            .toUpperCase()
+            .includes(qq) ||
+          String(r._zona || "")
+            .toUpperCase()
+            .includes(qq) ||
+          String(r._circuito || "")
+            .toUpperCase()
+            .includes(qq) ||
+          String(r._ramalLabel || "")
+            .toUpperCase()
             .includes(qq);
+
         if (!hay) return false;
       }
+
       return true;
     });
-  }, [latestByCode, q, stateFilter]);
+  }, [latestByCode, q, stateFilter, tableroFilter, circuitoFilter, zonaFilter]);
 
-  // Sort
   const sorted = useMemo(() => {
     const arr = [...filtered];
     const dir = sortDir === "asc" ? 1 : -1;
@@ -286,6 +415,9 @@ export default function HistorialLuminarias() {
       if (sortKey === "km") return r._km ?? -1;
       if (sortKey === "codigo") return r._codigo || "";
       if (sortKey === "estado") return r._state || "";
+      if (sortKey === "tablero") return r._tablero || "";
+      if (sortKey === "circuito") return r._circuito || "";
+      if (sortKey === "ramal") return r._ramalLabel || "";
       return "";
     };
 
@@ -296,19 +428,29 @@ export default function HistorialLuminarias() {
       if (av > bv) return 1 * dir;
       return 0;
     });
+
     return arr;
   }, [filtered, sortKey, sortDir]);
 
-  // KPIs
   const kpis = useMemo(() => {
     const total = sorted.length;
 
-    let ok = 0,
-      pend = 0,
-      apag = 0,
-      otro = 0;
+    let ok = 0;
+    let pend = 0;
+    let apag = 0;
+    let otro = 0;
+
+    const uniqueCodes = new Set();
+    const uniqueTableros = new Set();
+    const uniqueCircuitos = new Set();
+    const uniqueRamales = new Set();
 
     for (const r of sorted) {
+      if (r._codigo) uniqueCodes.add(r._codigo);
+      if (r._tablero) uniqueTableros.add(r._tablero);
+      if (r._circuito) uniqueCircuitos.add(r._circuito);
+      if (r._ramalRaw) uniqueRamales.add(r._ramalRaw);
+
       if (r._state === "OK") ok++;
       else if (r._state === "PENDIENTE") pend++;
       else if (r._state === "APAGADO") apag++;
@@ -323,13 +465,16 @@ export default function HistorialLuminarias() {
       pend,
       apag,
       otro,
+      uniqueCodes: uniqueCodes.size,
+      uniqueTableros: uniqueTableros.size,
+      uniqueCircuitos: uniqueCircuitos.size,
+      uniqueRamales: uniqueRamales.size,
       okPct: pct(ok),
       pendPct: pct(pend),
       apagPct: pct(apag),
     };
   }, [sorted]);
 
-  // Series por día (últimos 14 puntos)
   const byDay = useMemo(() => {
     const map = new Map();
     for (const r of sorted) {
@@ -337,34 +482,31 @@ export default function HistorialLuminarias() {
       map.set(d, (map.get(d) || 0) + 1);
     }
 
-    const days = Array.from(map.entries())
+    return Array.from(map.entries())
       .sort((a, b) => (a[0] < b[0] ? -1 : 1))
-      .slice(-14);
-
-    return days.map(([d, n]) => ({
-      x: d,
-      label: d,
-      value: n,
-    }));
+      .slice(-14)
+      .map(([d, n]) => ({
+        x: d,
+        label: d,
+        value: n,
+      }));
   }, [sorted]);
 
-  // Top por ramal
   const byRamal = useMemo(() => {
     const m = new Map();
     for (const r of sorted) {
-      const rr = r.ramal || "UNKNOWN";
+      const rr = r._ramalLabel || "Sin ramal";
       m.set(rr, (m.get(rr) || 0) + 1);
     }
     return Array.from(m.entries())
-      .map(([key, value]) => ({
-        label: RAMAL_RANGES[key]?.label || key,
+      .map(([label, value]) => ({
+        label,
         value,
         tone: "neutral",
       }))
       .sort((a, b) => b.value - a.value);
   }, [sorted]);
 
-  // Distribución por estado
   const byState = useMemo(() => {
     return [
       { label: "OK", value: kpis.ok, tone: "ok" },
@@ -374,7 +516,6 @@ export default function HistorialLuminarias() {
     ].filter((x) => x.value > 0);
   }, [kpis]);
 
-  // Hotspots por KM (bucket 1km) -> top 12
   const byKmBucket = useMemo(() => {
     const m = new Map();
     for (const r of sorted) {
@@ -388,6 +529,66 @@ export default function HistorialLuminarias() {
       .slice(0, 12);
   }, [sorted]);
 
+  const byTablero = useMemo(() => {
+    const m = new Map();
+    for (const r of sorted) {
+      const key = r._tablero || "Sin tablero";
+      m.set(key, (m.get(key) || 0) + 1);
+    }
+    return Array.from(m.entries())
+      .map(([label, value]) => ({ label, value, tone: "neutral" }))
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 12);
+  }, [sorted]);
+
+  const byCircuito = useMemo(() => {
+    const m = new Map();
+    for (const r of sorted) {
+      const key = r._circuito || "Sin circuito";
+      m.set(key, (m.get(key) || 0) + 1);
+    }
+    return Array.from(m.entries())
+      .map(([label, value]) => ({ label, value, tone: "neutral" }))
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 12);
+  }, [sorted]);
+
+  const byZona = useMemo(() => {
+    const m = new Map();
+    for (const r of sorted) {
+      const key = r._zona || "Sin zona";
+      m.set(key, (m.get(key) || 0) + 1);
+    }
+    return Array.from(m.entries())
+      .map(([label, value]) => ({ label, value, tone: "neutral" }))
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 12);
+  }, [sorted]);
+
+  const recentAlerts = useMemo(() => {
+    return [...sorted]
+      .filter((r) => r._state === "PENDIENTE" || r._state === "APAGADO")
+      .sort((a, b) => {
+        const af = a._fecha || "";
+        const bf = b._fecha || "";
+        if (af > bf) return -1;
+        if (af < bf) return 1;
+        return Number(b.ot_id || 0) - Number(a.ot_id || 0);
+      })
+      .slice(0, 8)
+      .map((r) => ({
+        key: `${r.id}-${r._codigo}-${r.ot_id}`,
+        codigo: r._codigo,
+        state: r._state,
+        fecha: r._fecha,
+        ramal: r._ramalLabel,
+        km: r._km !== null ? r._km.toFixed(2) : "—",
+        tablero: r._tablero,
+        circuito: r._circuito,
+        ubicacion: r.ubicacion || "",
+      }));
+  }, [sorted]);
+
   function toggleSort(key) {
     if (sortKey !== key) {
       setSortKey(key);
@@ -398,19 +599,35 @@ export default function HistorialLuminarias() {
   }
 
   function exportCSV() {
-    // Dataset listo para metrics/ML (simple, consistente)
     const headers = [
       "id",
       "ot_id",
       "id_ot",
       "fecha",
+      "anio",
+      "mes",
+      "anio_mes",
       "ramal",
+      "ramal_label",
+      "zona",
+      "tablero",
+      "circuito",
       "km",
+      "km_bucket_1",
+      "km_bucket_5",
       "codigo",
       "estado",
+      "estado_label",
       "resultado",
       "luminaria_estado",
       "ubicacion",
+      "latest_mode",
+      "state_filter",
+      "ramal_filter",
+      "tablero_filter",
+      "circuito_filter",
+      "zona_filter",
+      "query_filter",
     ];
 
     const lines = [headers.join(",")];
@@ -421,15 +638,32 @@ export default function HistorialLuminarias() {
         r.ot_id,
         r.id_ot,
         r._fecha,
-        r.ramal,
+        r._year,
+        r._month,
+        r._yearMonth,
+        r._ramalRaw,
+        r._ramalLabel,
+        r._zona,
+        r._tablero,
+        r._circuito,
         r._km ?? "",
-        (r._codigo || "").replace(/,/g, " "),
+        r._kmBucket1 || "",
+        r._kmBucket5 || "",
+        r._codigo,
         r._state,
+        stateLabel(r._state),
         upper(r.resultado),
         upper(r.luminaria_estado),
         String(r.ubicacion || "")
           .replace(/\s+/g, " ")
-          .replace(/,/g, " "),
+          .trim(),
+        onlyLatestPerCode ? "1" : "0",
+        stateFilter,
+        ramal,
+        tableroFilter,
+        circuitoFilter,
+        zonaFilter,
+        q,
       ];
 
       lines.push(
@@ -445,7 +679,7 @@ export default function HistorialLuminarias() {
     a.href = url;
 
     const nameParts = [
-      "luminarias",
+      "luminarias_powerbi",
       ramal || "todos",
       from || "all",
       to || "all",
@@ -459,7 +693,6 @@ export default function HistorialLuminarias() {
 
   return (
     <div className="page lumdash">
-      {/* Header */}
       <div className="lumdash-top">
         <button
           type="button"
@@ -490,22 +723,32 @@ export default function HistorialLuminarias() {
         <div>
           <div className="lumdash-title">Historial de Luminarias</div>
           <div className="lumdash-sub">
-            KPIs · hotspots · exportable dataset | Indicadores clave · puntos
-            críticos · datos exportables
+            KPIs · ramales · tableros · circuitos · hotspots KM · exportable
+            para Power BI
           </div>
         </div>
 
-        <button
-          type="button"
-          className="lumdash-btn"
-          onClick={exportCSV}
-          title="Export CSV"
-        >
-          Export CSV
-        </button>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <button
+            type="button"
+            className="lumdash-btn"
+            onClick={() => navigate("/dashboard-luminarias")}
+            title="Ver dashboard"
+          >
+            Dashboard
+          </button>
+
+          <button
+            type="button"
+            className="lumdash-btn"
+            onClick={exportCSV}
+            title="Export CSV"
+          >
+            Export CSV
+          </button>
+        </div>
       </div>
 
-      {/* Filtros */}
       <div className="lumdash-card lumdash-filters">
         <div className="lumdash-grid3">
           <select
@@ -535,7 +778,7 @@ export default function HistorialLuminarias() {
         <div className="lumdash-grid3" style={{ marginTop: 10 }}>
           <input
             type="text"
-            placeholder="Buscar por código (PC4026), OT, ubicación…"
+            placeholder="Buscar por código, OT, tablero, circuito, zona, ubicación…"
             value={q}
             onChange={(e) => setQ(e.target.value)}
           />
@@ -561,10 +804,48 @@ export default function HistorialLuminarias() {
           </button>
         </div>
 
+        <div className="lumdash-grid3" style={{ marginTop: 10 }}>
+          <select
+            value={tableroFilter}
+            onChange={(e) => setTableroFilter(e.target.value)}
+          >
+            <option value="">Todos los tableros</option>
+            {tableroOptions.map((x) => (
+              <option key={x} value={x}>
+                {x}
+              </option>
+            ))}
+          </select>
+
+          <select
+            value={circuitoFilter}
+            onChange={(e) => setCircuitoFilter(e.target.value)}
+          >
+            <option value="">Todos los circuitos</option>
+            {circuitoOptions.map((x) => (
+              <option key={x} value={x}>
+                {x}
+              </option>
+            ))}
+          </select>
+
+          <select
+            value={zonaFilter}
+            onChange={(e) => setZonaFilter(e.target.value)}
+          >
+            <option value="">Todas las zonas</option>
+            {zonaOptions.map((x) => (
+              <option key={x} value={x}>
+                {x}
+              </option>
+            ))}
+          </select>
+        </div>
+
         <div className="lumdash-muted" style={{ marginTop: 10 }}>
-          Tip: dejá <b>Último estado ON</b> para métricas limpias (una fila por
-          luminaria). Ponelo OFF si querés ver todas las intervenciones
-          históricas.
+          Para Power BI: dejá <b>Último estado OFF</b> si querés exportar todas
+          las intervenciones históricas. Si lo dejás ON, exportás solo el estado
+          más reciente por luminaria.
         </div>
       </div>
 
@@ -573,12 +854,29 @@ export default function HistorialLuminarias() {
 
       {!loading && !error && (
         <>
-          {/* KPIs */}
           <div className="lumdash-kpis">
             <div className="lumdash-kpi">
-              <div className="lumdash-kpiLabel">Total</div>
+              <div className="lumdash-kpiLabel">Filas</div>
               <div className="lumdash-kpiVal">{kpis.total}</div>
-              <div className="lumdash-kpiSub">Filtrado actual</div>
+              <div className="lumdash-kpiSub">Dataset actual</div>
+            </div>
+
+            <div className="lumdash-kpi">
+              <div className="lumdash-kpiLabel">Luminarias únicas</div>
+              <div className="lumdash-kpiVal">{kpis.uniqueCodes}</div>
+              <div className="lumdash-kpiSub">Por código</div>
+            </div>
+
+            <div className="lumdash-kpi">
+              <div className="lumdash-kpiLabel">Tableros</div>
+              <div className="lumdash-kpiVal">{kpis.uniqueTableros}</div>
+              <div className="lumdash-kpiSub">En filtro actual</div>
+            </div>
+
+            <div className="lumdash-kpi">
+              <div className="lumdash-kpiLabel">Circuitos</div>
+              <div className="lumdash-kpiVal">{kpis.uniqueCircuitos}</div>
+              <div className="lumdash-kpiSub">En filtro actual</div>
             </div>
 
             <div className="lumdash-kpi tone-ok">
@@ -600,7 +898,6 @@ export default function HistorialLuminarias() {
             </div>
           </div>
 
-          {/* “Charts” */}
           <div className="lumdash-grid2">
             <div className="lumdash-card">
               <div className="lumdash-cardhead">
@@ -614,7 +911,7 @@ export default function HistorialLuminarias() {
 
             <MiniBars
               title="Estados"
-              subtitle="Distribución (según filtros)"
+              subtitle="Distribución actual"
               items={byState}
               maxBars={6}
             />
@@ -627,19 +924,47 @@ export default function HistorialLuminarias() {
             />
 
             <MiniBars
-              title="Hotspots KM · Puntos críticos por KM"
-              subtitle="Tramos de 1 km (top 10)"
+              title="Hotspots por KM"
+              subtitle="Tramos de 1 km"
               items={byKmBucket}
               maxBars={10}
             />
+
+            <MiniBars
+              title="Top tableros"
+              subtitle="Mayor cantidad de registros"
+              items={byTablero}
+              maxBars={10}
+            />
+
+            <MiniBars
+              title="Top circuitos"
+              subtitle="Mayor cantidad de registros"
+              items={byCircuito}
+              maxBars={10}
+            />
+
+            <MiniBars
+              title="Top zonas"
+              subtitle="Mayor cantidad de registros"
+              items={byZona}
+              maxBars={10}
+            />
+
+            <QuickList
+              title="Últimos pendientes / apagados"
+              subtitle="Foco operativo"
+              items={recentAlerts}
+            />
           </div>
 
-          {/* Tabla */}
           <div className="lumdash-card" style={{ marginTop: 14 }}>
             <div className="lumdash-tableHead">
               <div>
-                <div className="lumdash-cardtitle">Detalle</div>
-                <div className="lumdash-muted">{sorted.length} filas</div>
+                <div className="lumdash-cardtitle">Detalle analítico</div>
+                <div className="lumdash-muted">
+                  {sorted.length} filas · listo para exportar
+                </div>
               </div>
 
               <div className="lumdash-sortRow">
@@ -648,6 +973,24 @@ export default function HistorialLuminarias() {
                   dir={sortDir}
                   label="Fecha"
                   onClick={() => toggleSort("fecha")}
+                />
+                <SortBtn
+                  active={sortKey === "ramal"}
+                  dir={sortDir}
+                  label="Ramal"
+                  onClick={() => toggleSort("ramal")}
+                />
+                <SortBtn
+                  active={sortKey === "tablero"}
+                  dir={sortDir}
+                  label="Tablero"
+                  onClick={() => toggleSort("tablero")}
+                />
+                <SortBtn
+                  active={sortKey === "circuito"}
+                  dir={sortDir}
+                  label="Circuito"
+                  onClick={() => toggleSort("circuito")}
                 />
                 <SortBtn
                   active={sortKey === "km"}
@@ -679,6 +1022,9 @@ export default function HistorialLuminarias() {
                   <tr>
                     <th>Fecha</th>
                     <th>Ramal</th>
+                    <th>Zona</th>
+                    <th>Tablero</th>
+                    <th>Circuito</th>
                     <th>KM</th>
                     <th>Código</th>
                     <th>Estado</th>
@@ -691,7 +1037,10 @@ export default function HistorialLuminarias() {
                   {sorted.map((r) => (
                     <tr key={String(r.id)} className={`row-${r._state}`}>
                       <td className="mono">{r._fecha || "—"}</td>
-                      <td>{RAMAL_RANGES[r.ramal]?.label || r.ramal || "—"}</td>
+                      <td>{r._ramalLabel || "—"}</td>
+                      <td>{r._zona || "—"}</td>
+                      <td>{r._tablero || "—"}</td>
+                      <td>{r._circuito || "—"}</td>
                       <td className="mono">
                         {r._km !== null ? r._km.toFixed(2) : "—"}
                       </td>
@@ -714,7 +1063,7 @@ export default function HistorialLuminarias() {
                   {!sorted.length && (
                     <tr>
                       <td
-                        colSpan={7}
+                        colSpan={10}
                         className="lumdash-muted"
                         style={{ padding: 14 }}
                       >
