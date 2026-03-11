@@ -1,13 +1,31 @@
-// src/pages/MisPdfs.jsx
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 
 import "../styles/dashboard.css";
+import "../styles/misPdfs.css";
 import { queryOts, getPdfBlob, setFlags, deleteOt } from "../storage/ot_db";
 
+/* =========================
+   Helpers
+   ========================= */
+
 function formatMB(bytes) {
-  const mb = (bytes || 0) / (1024 * 1024);
+  const value = Number(bytes) || 0;
+  const mb = value / (1024 * 1024);
   return `${mb.toFixed(mb >= 10 ? 0 : 1)} MB`;
+}
+
+function safeFilename(value) {
+  return String(value || "")
+    .replace(/[\\/:*?"<>|]+/g, "_")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function buildPdfFilename(ot) {
+  const fecha = safeFilename(ot?.fecha || "OT");
+  const tablero = safeFilename(ot?.tablero || "Tablero");
+  return `${fecha} - ${tablero}.pdf`;
 }
 
 function downloadBlob(blob, filename = "OT.pdf") {
@@ -15,186 +33,456 @@ function downloadBlob(blob, filename = "OT.pdf") {
   const a = document.createElement("a");
   a.href = url;
   a.download = filename;
+  a.rel = "noopener noreferrer";
   document.body.appendChild(a);
   a.click();
   a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 30_000);
+
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }
 
 async function sharePdfBlob({ blob, filename, title, text }) {
   const file = new File([blob], filename, { type: "application/pdf" });
 
-  if (
-    navigator.share &&
-    (!navigator.canShare || navigator.canShare({ files: [file] }))
-  ) {
+  const canUseNativeShare =
+    typeof navigator !== "undefined" && typeof navigator.share === "function";
+
+  let canShareFiles = true;
+
+  if (canUseNativeShare && typeof navigator.canShare === "function") {
+    try {
+      canShareFiles = navigator.canShare({ files: [file] });
+    } catch {
+      canShareFiles = false;
+    }
+  }
+
+  if (canUseNativeShare && canShareFiles) {
     await navigator.share({ title, text, files: [file] });
-    return true;
+    return { method: "share" };
   }
 
   downloadBlob(blob, filename);
-  return false;
+  return { method: "download" };
 }
 
+/* Cambio importante:
+   corregido el resaltado para múltiples términos sin usar re.test() con /g,
+   porque eso puede dar falsos negativos por el lastIndex interno del regex. */
 function highlightText(text, query) {
-  const s = String(text || "");
-  const q = String(query || "").trim();
-  if (!q) return s;
+  const source = String(text || "");
+  const terms = String(query || "")
+    .trim()
+    .split(/\s+/)
+    .map((t) => t.trim())
+    .filter(Boolean);
 
-  const escaped = q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const re = new RegExp(escaped, "ig");
+  if (!terms.length) return source;
 
-  const parts = s.split(re);
-  const matches = s.match(re);
-  if (!matches) return s;
+  const uniqueTerms = [...new Set(terms)]
+    .map((t) => t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+    .sort((a, b) => b.length - a.length);
 
-  const out = [];
-  for (let i = 0; i < parts.length; i++) {
-    out.push(parts[i]);
-    if (matches[i])
-      out.push(
-        <mark key={`${i}-${matches[i]}`} className="hl">
-          {matches[i]}
-        </mark>,
-      );
+  if (!uniqueTerms.length) return source;
+
+  const re = new RegExp(`(${uniqueTerms.join("|")})`, "ig");
+  const parts = source.split(re);
+
+  return parts.map((part, index) => {
+    const isMatch = uniqueTerms.some(
+      (term) => part.toLowerCase() === term.toLowerCase(),
+    );
+
+    return isMatch ? (
+      <mark key={`${part}-${index}`} className="hl">
+        {part}
+      </mark>
+    ) : (
+      <span key={`${part}-${index}`}>{part}</span>
+    );
+  });
+}
+
+function getErrorMessage(error, fallback = "Ocurrió un error inesperado.") {
+  if (!error) return fallback;
+  if (typeof error === "string") return error;
+  if (error?.message) return error.message;
+  return fallback;
+}
+
+function buildParams({ q, desde, hasta, soloFavoritos }) {
+  const next = new URLSearchParams();
+
+  if (String(q || "").trim()) next.set("q", String(q).trim());
+  if (desde) next.set("desde", desde);
+  if (hasta) next.set("hasta", hasta);
+  if (soloFavoritos) next.set("fav", "1");
+
+  return next;
+}
+
+function normalizeTecnico(ot) {
+  if (Array.isArray(ot?.tecnicos)) {
+    return ot.tecnicos.filter(Boolean).join(", ") || "-";
   }
-  return out;
+  return ot?.tecnico || "-";
+}
+
+function normalizeVehiculo(ot) {
+  return ot?.vehiculo || ot?.movil || "-";
 }
 
 export default function MisPdfs() {
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
 
-  const [q, setQ] = useState(params.get("q") || "");
-  const [desde, setDesde] = useState(params.get("desde") || "");
-  const [hasta, setHasta] = useState(params.get("hasta") || "");
-  const [soloFavoritos, setSoloFavoritos] = useState(params.get("fav") === "1");
+  const [q, setQ] = useState(() => params.get("q") || "");
+  const [desde, setDesde] = useState(() => params.get("desde") || "");
+  const [hasta, setHasta] = useState(() => params.get("hasta") || "");
+  const [soloFavoritos, setSoloFavoritos] = useState(
+    () => params.get("fav") === "1",
+  );
 
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [busyKey, setBusyKey] = useState("");
+  const [error, setError] = useState("");
+  const [notice, setNotice] = useState(null);
+  const [pendingDelete, setPendingDelete] = useState(null);
 
-  // sync URL (para que puedas volver y quede filtrado)
+  const requestSeqRef = useRef(0);
+
+  const [debouncedQ, setDebouncedQ] = useState(q);
+
   useEffect(() => {
-    const next = new URLSearchParams(params);
+    const t = setTimeout(() => {
+      setDebouncedQ(q);
+    }, 300);
 
-    const put = (k, v) => {
-      if (!v) next.delete(k);
-      else next.set(k, v);
-    };
+    return () => clearTimeout(t);
+  }, [q]);
 
-    put("q", q.trim());
-    put("desde", desde);
-    put("hasta", hasta);
-    put("fav", soloFavoritos ? "1" : "");
+  const hasInvalidRange = Boolean(desde && hasta && desde > hasta);
+  const paramsSignature = params.toString();
 
-    setParams(next, { replace: true });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [q, desde, hasta, soloFavoritos]);
+  /* Sync URL -> state */
+  useEffect(() => {
+    const urlQ = params.get("q") || "";
+    const urlDesde = params.get("desde") || "";
+    const urlHasta = params.get("hasta") || "";
+    const urlFav = params.get("fav") === "1";
 
-  const refresh = async () => {
-    setLoading(true);
-    try {
-      const data = await queryOts({
-        q,
-        desde,
-        hasta,
-        favorito: soloFavoritos ? true : null,
-      });
-      setItems(Array.isArray(data) ? data : []);
-    } finally {
-      setLoading(false);
+    if (urlQ !== q) setQ(urlQ);
+    if (urlDesde !== desde) setDesde(urlDesde);
+    if (urlHasta !== hasta) setHasta(urlHasta);
+    if (urlFav !== soloFavoritos) setSoloFavoritos(urlFav);
+  }, [paramsSignature]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /* Sync state -> URL */
+  useEffect(() => {
+    const next = buildParams({ q, desde, hasta, soloFavoritos });
+    const nextSignature = next.toString();
+
+    if (nextSignature !== paramsSignature) {
+      setParams(next, { replace: true });
     }
-  };
+  }, [q, desde, hasta, soloFavoritos, paramsSignature, setParams]);
+
+  const showNotice = useCallback((type, text) => {
+    setNotice({ type, text });
+  }, []);
+
+  useEffect(() => {
+    if (!notice) return;
+    const t = setTimeout(() => setNotice(null), 4000);
+    return () => clearTimeout(t);
+  }, [notice]);
+
+  const refresh = useCallback(
+    async ({ silent = false } = {}) => {
+      const requestId = ++requestSeqRef.current;
+
+      if (hasInvalidRange) {
+        setError(
+          "El rango de fechas es inválido: 'desde' no puede ser mayor que 'hasta'.",
+        );
+        setItems([]);
+        setLoading(false);
+        return;
+      }
+
+      if (!silent) setLoading(true);
+      setError("");
+
+      try {
+        const data = await queryOts({
+          q: debouncedQ,
+          desde,
+          hasta,
+          favorito: soloFavoritos ? true : null,
+        });
+
+        if (requestId !== requestSeqRef.current) return;
+        setItems(Array.isArray(data) ? data : []);
+      } catch (err) {
+        if (requestId !== requestSeqRef.current) return;
+        setItems([]);
+        setError(
+          getErrorMessage(
+            err,
+            "No se pudieron cargar los PDFs guardados localmente.",
+          ),
+        );
+      } finally {
+        if (requestId === requestSeqRef.current) {
+          setLoading(false);
+        }
+      }
+    },
+    [debouncedQ, desde, hasta, soloFavoritos, hasInvalidRange],
+  );
 
   useEffect(() => {
     refresh();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [q, desde, hasta, soloFavoritos]);
+  }, [refresh]);
 
   const bytesTotal = useMemo(
-    () => items.reduce((acc, it) => acc + (it.pdfBytes || 0), 0),
+    () => items.reduce((acc, it) => acc + (Number(it?.pdfBytes) || 0), 0),
+    [items],
+  );
+
+  const favoritosCount = useMemo(
+    () => items.filter((it) => Boolean(it?.favorito)).length,
+    [items],
+  );
+
+  const enviadosCount = useMemo(
+    () => items.filter((it) => Boolean(it?.enviado)).length,
     [items],
   );
 
   const openPdf = async (ot) => {
-    const blob = await getPdfBlob(ot.pdfId || ot.id);
-    if (!blob) return;
+    const actionKey = `open-${ot.id}`;
+    setBusyKey(actionKey);
+
+    // Abrir ventana inmediatamente para evitar popup blocker
+    const win = window.open("", "_blank");
 
     try {
-      await setFlags(ot.id, { reimpreso: (ot.reimpreso || 0) + 1 });
-      refresh();
-    } catch {}
+      const blob = await getPdfBlob(ot.pdfId || ot.id);
 
-    const url = URL.createObjectURL(blob);
-    window.open(url, "_blank", "noopener,noreferrer");
-    setTimeout(() => URL.revokeObjectURL(url), 60_000);
+      if (!blob) {
+        win?.close();
+        showNotice(
+          "error",
+          "No se encontró el PDF en el almacenamiento local de este dispositivo.",
+        );
+        return;
+      }
+
+      const pdfBlob =
+        blob.type === "application/pdf"
+          ? blob
+          : new Blob([blob], { type: "application/pdf" });
+
+      const pdfUrl = URL.createObjectURL(pdfBlob);
+
+      if (!win) {
+        URL.revokeObjectURL(pdfUrl);
+        showNotice(
+          "warning",
+          "El navegador bloqueó la apertura del PDF. Permití popups para esta app.",
+        );
+        return;
+      }
+
+      win.location.href = pdfUrl;
+
+      // limpiar URL temporal más tarde
+      setTimeout(() => {
+        URL.revokeObjectURL(pdfUrl);
+      }, 120_000);
+
+      try {
+        await setFlags(ot.id, { reimpreso: (Number(ot.reimpreso) || 0) + 1 });
+        await refresh({ silent: true });
+      } catch {
+        // no romper UX por flag auxiliar
+      }
+    } catch (err) {
+      win?.close();
+      showNotice("error", getErrorMessage(err, "No se pudo abrir el PDF."));
+    } finally {
+      setBusyKey("");
+    }
   };
 
   const sharePdf = async (ot) => {
-    const blob = await getPdfBlob(ot.pdfId || ot.id);
-    if (!blob) return;
-
-    const filename = `${ot.fecha || "OT"} - ${ot.tablero || "Tablero"}.pdf`;
-    const title = "Orden de Trabajo";
-    const text = `${ot.fecha || ""} — ${ot.tablero || ""}\n${
-      ot.ubicacion || ""
-    }`.trim();
+    const actionKey = `share-${ot.id}`;
+    setBusyKey(actionKey);
 
     try {
-      await sharePdfBlob({ blob, filename, title, text });
-      await setFlags(ot.id, { enviado: true });
-      refresh();
+      const blob = await getPdfBlob(ot.pdfId || ot.id);
+
+      if (!blob) {
+        showNotice(
+          "error",
+          "No se encontró el PDF en el almacenamiento local de este dispositivo.",
+        );
+        return;
+      }
+
+      const filename = buildPdfFilename(ot);
+      const title = "Orden de Trabajo";
+      const text = `${ot.fecha || ""} — ${ot.tablero || ""}\n${
+        ot.ubicacion || ""
+      }`.trim();
+
+      const result = await sharePdfBlob({ blob, filename, title, text });
+
+      /* Cambio crítico:
+         solo marcar enviado cuando realmente se compartió */
+      if (result.method === "share") {
+        await setFlags(ot.id, { enviado: true });
+        await refresh({ silent: true });
+        showNotice("success", "PDF compartido correctamente.");
+      } else {
+        showNotice(
+          "info",
+          "Tu navegador no soporta compartir archivos. El PDF se descargó.",
+        );
+      }
     } catch (err) {
-      console.warn("Share cancelado o no disponible:", err);
+      showNotice("error", getErrorMessage(err, "No se pudo compartir el PDF."));
+    } finally {
+      setBusyKey("");
     }
   };
 
   const toggleFav = async (ot) => {
-    await setFlags(ot.id, { favorito: !ot.favorito });
-    refresh();
+    const actionKey = `fav-${ot.id}`;
+    setBusyKey(actionKey);
+
+    try {
+      await setFlags(ot.id, { favorito: !ot.favorito });
+      await refresh({ silent: true });
+
+      showNotice(
+        "success",
+        ot.favorito
+          ? "El PDF se quitó de favoritos."
+          : "El PDF se agregó a favoritos.",
+      );
+    } catch (err) {
+      showNotice(
+        "error",
+        getErrorMessage(err, "No se pudo actualizar el favorito."),
+      );
+    } finally {
+      setBusyKey("");
+    }
   };
 
-  const remove = async (ot) => {
-    if (!confirm("¿Eliminar este PDF del respaldo local?")) return;
-    await deleteOt(ot.id);
-    refresh();
+  const askRemove = (ot) => {
+    setPendingDelete(ot);
+  };
+
+  const confirmRemove = async () => {
+    if (!pendingDelete) return;
+
+    const ot = pendingDelete;
+    const actionKey = `delete-${ot.id}`;
+    setBusyKey(actionKey);
+
+    try {
+      await deleteOt(ot.id);
+      setPendingDelete(null);
+      await refresh({ silent: true });
+      showNotice("success", "El PDF se eliminó del respaldo local.");
+    } catch (err) {
+      showNotice("error", getErrorMessage(err, "No se pudo eliminar el PDF."));
+    } finally {
+      setBusyKey("");
+    }
+  };
+
+  const clearFilters = () => {
+    setQ("");
+    setDesde("");
+    setHasta("");
+    setSoloFavoritos(false);
   };
 
   return (
-    <div className="page">
-      <div
-        style={{ display: "flex", justifyContent: "space-between", gap: 10 }}
-      >
-        <h2 className="titulo" style={{ margin: 0 }}>
-          Mis PDFs
-        </h2>
-        <button type="button" className="btn-outline" onClick={refresh}>
-          🔄 Actualizar
-        </button>
-      </div>
+    <div className="page mispdfs-page">
+      <section className="card mispdfs-hero">
+        <div className="mispdfs-hero__top">
+          <div className="mispdfs-hero__title-wrap">
+            <h2 className="titulo">Mis PDFs</h2>
+            <div className="muted mispdfs-hero__subtitle">
+              Biblioteca local de órdenes de trabajo descargadas en este
+              dispositivo.
+            </div>
+          </div>
 
-      <div className="muted" style={{ marginTop: 6, fontSize: 12 }}>
-        {items.length} PDFs · {formatMB(bytesTotal)} aprox (guardados en este
-        dispositivo)
-      </div>
+          <div className="mispdfs-hero__actions">
+            <button
+              type="button"
+              className="btn-outline"
+              onClick={() => refresh()}
+              disabled={loading}
+              aria-label="Actualizar listado de PDFs"
+            >
+              {loading ? "Actualizando..." : "🔄 Actualizar"}
+            </button>
 
-      {/* Filtros */}
-      <div className="card" style={{ marginTop: 12, padding: 12 }}>
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "1fr 1fr",
-            gap: 10,
-          }}
-        >
+            <button
+              type="button"
+              className="btn-outline"
+              onClick={() => navigate("/")}
+            >
+              ← Inicio
+            </button>
+          </div>
+        </div>
+
+        <div className="mispdfs-stats">
+          <div className="card mispdfs-stat">
+            <div className="muted mispdfs-stat__label">PDFs visibles</div>
+            <div className="mispdfs-stat__value">{items.length}</div>
+          </div>
+
+          <div className="card mispdfs-stat">
+            <div className="muted mispdfs-stat__label">Tamaño visible</div>
+            <div className="mispdfs-stat__value">{formatMB(bytesTotal)}</div>
+          </div>
+
+          <div className="card mispdfs-stat">
+            <div className="muted mispdfs-stat__label">Favoritos</div>
+            <div className="mispdfs-stat__value">{favoritosCount}</div>
+          </div>
+
+          <div className="card mispdfs-stat">
+            <div className="muted mispdfs-stat__label">
+              Marcados como enviados
+            </div>
+            <div className="mispdfs-stat__value">{enviadosCount}</div>
+          </div>
+        </div>
+      </section>
+
+      <section className="card mispdfs-filters">
+        <div className="mispdfs-filters__grid">
           <input
             type="text"
-            placeholder="Buscar tablero / ubicación / zona…"
+            placeholder="Buscar por tablero, ubicación, zona, técnico o móvil..."
             value={q}
             onChange={(e) => setQ(e.target.value)}
+            aria-label="Buscar PDFs"
           />
-          <label className="toggle" style={{ justifyContent: "space-between" }}>
-            <span>⭐ Favoritos</span>
+
+          <label className="toggle mispdfs-filters__toggle">
+            <span>⭐ Solo favoritos</span>
             <input
               type="checkbox"
               checked={soloFavoritos}
@@ -206,119 +494,229 @@ export default function MisPdfs() {
             type="date"
             value={desde}
             onChange={(e) => setDesde(e.target.value)}
+            aria-label="Fecha desde"
           />
+
           <input
             type="date"
             value={hasta}
             onChange={(e) => setHasta(e.target.value)}
+            aria-label="Fecha hasta"
           />
         </div>
 
-        <div
-          style={{ display: "flex", gap: 10, marginTop: 10, flexWrap: "wrap" }}
-        >
+        {hasInvalidRange && (
+          <div className="mispdfs-banner mispdfs-banner--warning">
+            Revisá el rango: la fecha <strong>desde</strong> no puede ser mayor
+            que la fecha <strong>hasta</strong>.
+          </div>
+        )}
+
+        <div className="mispdfs-filters__footer">
           <button
             type="button"
             className="btn-outline"
-            onClick={() => {
-              setQ("");
-              setDesde("");
-              setHasta("");
-              setSoloFavoritos(false);
-            }}
+            onClick={clearFilters}
+            disabled={!q && !desde && !hasta && !soloFavoritos}
           >
-            Limpiar
+            Limpiar filtros
           </button>
 
-          <button
-            type="button"
-            className="btn-outline"
-            onClick={() => navigate("/")}
-          >
-            ← Inicio
-          </button>
+          <span className="muted mispdfs-filters__hint">
+            La búsqueda tiene un pequeño delay para evitar recargas
+            innecesarias.
+          </span>
         </div>
-      </div>
+      </section>
 
-      {/* Lista */}
-      <div className="tabla-ot" style={{ marginTop: 12 }}>
-        {loading && <p className="sin-datos">Cargando…</p>}
+      {error && (
+        <div role="alert" className="mispdfs-banner mispdfs-banner--error">
+          <strong>Error:</strong> {error}
+        </div>
+      )}
 
-        {!loading && items.length === 0 && (
-          <p className="sin-datos">
+      {notice && (
+        <div
+          role="status"
+          aria-live="polite"
+          className={`mispdfs-banner ${
+            notice.type === "success"
+              ? "mispdfs-banner--success"
+              : notice.type === "error"
+                ? "mispdfs-banner--error"
+                : notice.type === "warning"
+                  ? "mispdfs-banner--warning"
+                  : "mispdfs-banner--info"
+          }`}
+        >
+          {notice.text}
+        </div>
+      )}
+
+      <div className="tabla-ot mispdfs-list">
+        {loading && (
+          <p className="sin-datos">Cargando PDFs guardados localmente...</p>
+        )}
+
+        {!loading && !error && items.length === 0 && (
+          <p className="sin-datos mispdfs-empty">
             No hay PDFs guardados localmente con esos filtros.
           </p>
         )}
 
         {!loading &&
-          items.map((ot) => (
-            <div
-              key={ot.id}
-              className={`fila-ot ${ot.enviado ? "is-sent" : ""} ${
-                ot.favorito ? "is-fav" : ""
-              }`}
-            >
-              <div
-                className="ot-linea"
-                onClick={() => navigate(`/detalle/${ot.id}`)}
+          !error &&
+          items.map((ot) => {
+            const tecnicoLabel = normalizeTecnico(ot);
+            const vehiculoLabel = normalizeVehiculo(ot);
+
+            const isOpenBusy = busyKey === `open-${ot.id}`;
+            const isShareBusy = busyKey === `share-${ot.id}`;
+            const isFavBusy = busyKey === `fav-${ot.id}`;
+            const isDeleteBusy = busyKey === `delete-${ot.id}`;
+            const isRowBusy =
+              isOpenBusy || isShareBusy || isFavBusy || isDeleteBusy;
+
+            return (
+              <article
+                key={ot.id}
+                className={`fila-ot ${
+                  ot.enviado ? "is-sent" : ""
+                } ${ot.favorito ? "is-fav" : ""} ${isRowBusy ? "is-busy" : ""}`}
               >
-                <div className="ot-tablero">{highlightText(ot.tablero, q)}</div>
+                <button
+                  type="button"
+                  className="ot-linea"
+                  onClick={() => navigate(`/detalle/${ot.id}`)}
+                  aria-label={`Ver detalle del PDF ${ot.tablero || ot.id}`}
+                >
+                  <div className="ot-tablero">
+                    {highlightText(ot.tablero, q)}
+                  </div>
 
-                <div className="ot-meta">
-                  <span className="ot-fecha">{ot.fecha}</span>
-                  {ot.zona ? (
-                    <span className="zbadge">{highlightText(ot.zona, q)}</span>
-                  ) : null}
-                  {ot.favorito && <span className="chip">⭐</span>}
-                  {ot.enviado && <span className="chip ok">ENVIADO</span>}
+                  <div className="ot-meta">
+                    <span className="ot-fecha">{ot.fecha || "Sin fecha"}</span>
+
+                    {ot.zona ? (
+                      <span className="zbadge">
+                        {highlightText(ot.zona, q)}
+                      </span>
+                    ) : null}
+
+                    {ot.favorito && <span className="chip">⭐ Favorito</span>}
+                    {ot.enviado && <span className="chip ok">ENVIADO</span>}
+                  </div>
+                </button>
+
+                <div className="ot-sub">
+                  {highlightText(ot.ubicacion || "Sin ubicación", q)}
                 </div>
-              </div>
 
-              <div className="ot-sub">{highlightText(ot.ubicacion, q)}</div>
+                <div className="ot-info">
+                  <span className="pill">{highlightText(tecnicoLabel, q)}</span>
+                  <span className="pill">
+                    {highlightText(vehiculoLabel, q)}
+                  </span>
+                  <span className="pill">{formatMB(ot.pdfBytes || 0)}</span>
+                </div>
 
-              <div className="ot-info">
-                <span className="pill">
-                  {highlightText(ot.tecnico || "-", q)}
-                </span>
-                <span className="pill">
-                  {highlightText(ot.vehiculo || "-", q)}
-                </span>
-                <span className="pill">{formatMB(ot.pdfBytes || 0)}</span>
-              </div>
+                <div className="ot-actions">
+                  <button
+                    type="button"
+                    className="btn-mini"
+                    onClick={() => openPdf(ot)}
+                    disabled={isRowBusy}
+                  >
+                    {isOpenBusy ? "Abriendo..." : "Abrir PDF"}
+                  </button>
 
-              <div className="ot-actions">
-                <button
-                  type="button"
-                  className="btn-mini"
-                  onClick={() => openPdf(ot)}
-                >
-                  Abrir PDF
-                </button>
-                <button
-                  type="button"
-                  className="btn-mini primary"
-                  onClick={() => sharePdf(ot)}
-                >
-                  Compartir
-                </button>
-                <button
-                  type="button"
-                  className="btn-mini"
-                  onClick={() => toggleFav(ot)}
-                >
-                  {ot.favorito ? "Quitar ⭐" : "Favorito ⭐"}
-                </button>
-                <button
-                  type="button"
-                  className="btn-mini danger"
-                  onClick={() => remove(ot)}
-                >
-                  Eliminar
-                </button>
+                  <button
+                    type="button"
+                    className="btn-mini primary"
+                    onClick={() => sharePdf(ot)}
+                    disabled={isRowBusy}
+                  >
+                    {isShareBusy ? "Procesando..." : "Compartir"}
+                  </button>
+
+                  <button
+                    type="button"
+                    className="btn-mini"
+                    onClick={() => toggleFav(ot)}
+                    disabled={isRowBusy}
+                  >
+                    {isFavBusy
+                      ? "Guardando..."
+                      : ot.favorito
+                        ? "Quitar ⭐"
+                        : "Favorito ⭐"}
+                  </button>
+
+                  <button
+                    type="button"
+                    className="btn-mini danger"
+                    onClick={() => askRemove(ot)}
+                    disabled={isRowBusy}
+                  >
+                    {isDeleteBusy ? "Eliminando..." : "Eliminar"}
+                  </button>
+                </div>
+              </article>
+            );
+          })}
+      </div>
+
+      {pendingDelete && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="delete-pdf-title"
+          className="mispdfs-modal"
+          onClick={() => setPendingDelete(null)}
+        >
+          <div
+            className="card mispdfs-modal__card"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 id="delete-pdf-title">Eliminar PDF local</h3>
+
+            <p>Vas a eliminar del almacenamiento local este PDF:</p>
+
+            <div className="mispdfs-modal__box">
+              <strong>{pendingDelete.tablero || "Sin tablero"}</strong>
+              <div className="muted mispdfs-modal__meta">
+                {pendingDelete.fecha || "Sin fecha"} ·{" "}
+                {pendingDelete.ubicacion || "Sin ubicación"}
               </div>
             </div>
-          ))}
-      </div>
+
+            <p className="muted mispdfs-modal__hint">
+              Esta acción solo afecta el respaldo guardado en este dispositivo.
+            </p>
+
+            <div className="mispdfs-modal__actions">
+              <button
+                type="button"
+                className="btn-outline"
+                onClick={() => setPendingDelete(null)}
+              >
+                Cancelar
+              </button>
+
+              <button
+                type="button"
+                className="btn-mini danger"
+                onClick={confirmRemove}
+                disabled={busyKey === `delete-${pendingDelete.id}`}
+              >
+                {busyKey === `delete-${pendingDelete.id}`
+                  ? "Eliminando..."
+                  : "Sí, eliminar"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

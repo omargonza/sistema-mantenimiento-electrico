@@ -195,57 +195,6 @@ const VEHICULOS = [
 const MAX_FOTOS = 4;
 
 /* =======================================================
-   FORMULARIO INICIAL
-======================================================= */
-const initialForm = {
-  fecha: new Date().toISOString().slice(0, 10),
-  ubicacion: "",
-  tablero: "",
-  zona: "",
-  circuito: "",
-  vehiculo: "",
-  kmIni: "",
-  kmFin: "",
-  tecnicos: [{ legajo: "", nombre: "" }],
-  materiales: [{ material: "", cant: "", unidad: "" }],
-  tareaPedida: "",
-  tareaRealizada: "",
-  tareaPendiente: "",
-  luminaria: "",
-  observaciones: "",
-  firmaTecnico: "",
-  firmaSupervisor: "",
-  firmaTecnicoB64: "",
-  fotos: [],
-  printMode: false,
-  alcance: "LUMINARIA",
-  resultado: "COMPLETO",
-  estado_tablero: "",
-  luminaria_estado: "",
-  ramal: "",
-  km_luminaria: "",
-  codigo_luminaria: "",
-  luminariasPorTablero: [
-    {
-      uid: crypto.randomUUID(),
-      tablero_id: null,
-      tablero: "",
-      tablero_confirmado: false,
-      zona: "",
-      circuito: "",
-      ramal: "",
-      resultado: "COMPLETO",
-      luminaria_estado: "",
-      tarea_pedida: "",
-      tarea_realizada: "",
-      tarea_pendiente: "",
-      observaciones: "",
-      items: [],
-    },
-  ],
-};
-
-/* =======================================================
    HELPERS
 ======================================================= */
 function canonTableroUI(s) {
@@ -329,6 +278,77 @@ function uniqCodes(list) {
 }
 
 /* =======================================================
+   FORMULARIO INICIAL
+   Cambio: factory en vez de objeto estático
+======================================================= */
+function createInitialForm() {
+  return {
+    fecha: new Date().toISOString().slice(0, 10),
+    ubicacion: "",
+    tablero: "",
+    zona: "",
+    circuito: "",
+    vehiculo: "",
+    kmIni: "",
+    kmFin: "",
+    tecnicos: [{ legajo: "", nombre: "" }],
+    materiales: [{ material: "", cant: "", unidad: "" }],
+    tareaPedida: "",
+    tareaRealizada: "",
+    tareaPendiente: "",
+    luminaria: "",
+    observaciones: "",
+    firmaTecnico: "",
+    firmaSupervisor: "",
+    firmaTecnicoB64: "",
+    fotos: [],
+    printMode: false,
+    alcance: "LUMINARIA",
+    resultado: "COMPLETO",
+    estado_tablero: "",
+    luminaria_estado: "",
+    ramal: "",
+    km_luminaria: "",
+    codigo_luminaria: "",
+    luminariasPorTablero: [emptyLuminariaGrupo()],
+  };
+}
+
+function cloneFormForSubmit(source) {
+  return {
+    ...source,
+    tecnicos: (source.tecnicos || []).map((t) => ({ ...t })),
+    materiales: (source.materiales || []).map((m) => ({ ...m })),
+    fotos: (source.fotos || []).map((f) => ({ ...f })),
+    luminariasPorTablero: (source.luminariasPorTablero || []).map((g) => ({
+      ...g,
+      items: (g.items || []).map((it) => ({ ...it })),
+    })),
+  };
+}
+
+function safeFilenamePart(value) {
+  return String(value || "")
+    .replace(/[\\/:*?"<>|]+/g, "_")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function buildPdfFilename(payload) {
+  const fecha = safeFilenamePart(payload?.fecha || "");
+  const tablero = safeFilenamePart(payload?.tablero || "LUMINARIAS");
+  return `OT_${fecha}_${tablero}.pdf`;
+}
+
+function revokeFotoUrls(list) {
+  try {
+    (list || []).forEach((it) => {
+      if (it?.url) URL.revokeObjectURL(it.url);
+    });
+  } catch {}
+}
+
+/* =======================================================
    NORMALIZACIÓN PAYLOAD
 ======================================================= */
 function normalizarPayloadOT(form) {
@@ -380,12 +400,15 @@ function normalizarPayloadOT(form) {
               codigo_luminaria: String(it.codigo_luminaria || "")
                 .trim()
                 .toUpperCase(),
-              km_luminaria:
-                it.km_luminaria === "" ||
-                it.km_luminaria === null ||
-                it.km_luminaria === undefined
-                  ? null
-                  : Number(it.km_luminaria),
+              sentido: ["ASC", "DESC"].includes(
+                String(it.sentido || "")
+                  .trim()
+                  .toUpperCase(),
+              )
+                ? String(it.sentido || "")
+                    .trim()
+                    .toUpperCase()
+                : "",
             }))
             .filter((it) => it.codigo_luminaria),
         }))
@@ -515,6 +538,9 @@ export default function NuevaOT() {
   const navigate = useNavigate();
   const { guardarPendiente } = useOfflineQueue();
 
+  const initialFormRef = useRef(createInitialForm());
+  const initialForm = initialFormRef.current;
+
   const [form, setForm] = useState(initialForm);
 
   const formCacheSafe = useMemo(
@@ -545,6 +571,8 @@ export default function NuevaOT() {
   }, []);
 
   const [loading, setLoading] = useState(false);
+  const generatingRef = useRef(false);
+
   const [toast, setToast] = useState({
     open: false,
     type: "info",
@@ -978,7 +1006,7 @@ export default function NuevaOT() {
               ...g,
               items: uniqCodes(list).map((codigo) => ({
                 codigo_luminaria: codigo,
-                km_luminaria: null,
+                sentido: "",
               })),
             }
           : g,
@@ -987,6 +1015,10 @@ export default function NuevaOT() {
   }
 
   async function generarPDF() {
+    // CAMBIO CLAVE:
+    // lock duro contra doble tap / doble ejecución
+    if (generatingRef.current || loading) return;
+
     const error = validarCampos();
 
     if (error) {
@@ -1019,53 +1051,64 @@ export default function NuevaOT() {
       return;
     }
 
-    const payload = normalizarPayloadOT(form);
-    payload.tablero_catalogado =
-      alcance === "LUMINARIA" ? true : Boolean(tableroCatalogado);
-
-    const fotosB64 = await Promise.all(
-      (form.fotos || []).map(async (it, idx) => {
-        const b = it?.blob ?? it;
-        if (!b) return null;
-
-        let jpeg = await photoToJpegBlob(b, {
-          maxSide: 1600,
-          quality: 0.82,
-        });
-
-        if (!jpeg) return null;
-
-        let dataUrl = await blobToDataURL(jpeg);
-
-        if (dataUrl && dataUrl.length > 1_800_000) {
-          const jpeg2 = await photoToJpegBlob(b, {
-            maxSide: 1280,
-            quality: 0.72,
-          });
-          dataUrl = jpeg2 ? await blobToDataURL(jpeg2) : dataUrl;
-        }
-
-        console.log(
-          `[foto ${idx}] in=${b.type || "?"} ${(b.size ? b.size / 1024 / 1024 : 0).toFixed(1)}MB -> b64=${dataUrl?.length}`,
-        );
-
-        return dataUrl || null;
-      }),
-    );
-
-    payload.fotos_b64 = fotosB64.filter(Boolean).slice(0, MAX_FOTOS);
-
-    const tableroCacheValue =
-      alcance === "LUMINARIA"
-        ? form.luminariasPorTablero?.[0]?.tablero || ""
-        : form.tablero;
-
-    saveCache("cache_tableros", tableroCacheValue);
-    saveCache("cache_vehiculos", form.vehiculo);
-
+    // CAMBIO CLAVE:
+    // activar loading ANTES de los awaits pesados
+    generatingRef.current = true;
     setLoading(true);
 
+    // CAMBIO:
+    // snapshot estable para que la OT no cambie si el usuario toca campos
+    const formSnapshot = cloneFormForSubmit(form);
+
+    const requestId =
+      crypto?.randomUUID?.() ||
+      `${Date.now()}_${Math.random().toString(16).slice(2)}`;
+
+    const payload = normalizarPayloadOT(formSnapshot);
+    payload.client_request_id = requestId;
+    payload.tablero_catalogado =
+      alcance === "LUMINARIA" ? true : Boolean(tableroCatalogado);
     try {
+      const fotosB64 = await Promise.all(
+        (formSnapshot.fotos || []).map(async (it, idx) => {
+          const b = it?.blob ?? it;
+          if (!b) return null;
+
+          let jpeg = await photoToJpegBlob(b, {
+            maxSide: 1600,
+            quality: 0.82,
+          });
+
+          if (!jpeg) return null;
+
+          let dataUrl = await blobToDataURL(jpeg);
+
+          if (dataUrl && dataUrl.length > 1_800_000) {
+            const jpeg2 = await photoToJpegBlob(b, {
+              maxSide: 1280,
+              quality: 0.72,
+            });
+            dataUrl = jpeg2 ? await blobToDataURL(jpeg2) : dataUrl;
+          }
+
+          console.log(
+            `[foto ${idx}] in=${b.type || "?"} ${(b.size ? b.size / 1024 / 1024 : 0).toFixed(1)}MB -> b64=${dataUrl?.length}`,
+          );
+
+          return dataUrl || null;
+        }),
+      );
+
+      payload.fotos_b64 = fotosB64.filter(Boolean).slice(0, MAX_FOTOS);
+
+      const tableroCacheValue =
+        alcance === "LUMINARIA"
+          ? formSnapshot.luminariasPorTablero?.[0]?.tablero || ""
+          : formSnapshot.tablero;
+
+      saveCache("cache_tableros", tableroCacheValue);
+      saveCache("cache_vehiculos", formSnapshot.vehiculo);
+
       try {
         vibrar?.(30);
       } catch {}
@@ -1085,7 +1128,9 @@ export default function NuevaOT() {
         );
 
         try {
-          const blobs = (form.fotos || []).map((x) => x.blob).filter(Boolean);
+          const blobs = (formSnapshot.fotos || [])
+            .map((x) => x.blob)
+            .filter(Boolean);
 
           if (blobs.length) {
             await saveOtPhotos(record.id, blobs);
@@ -1105,16 +1150,15 @@ export default function NuevaOT() {
       const url = URL.createObjectURL(blob);
       const anchor = document.createElement("a");
       anchor.href = url;
-      anchor.download = `OT_${payload.fecha}_${payload.tablero || "LUMINARIAS"}.pdf`;
+      anchor.download = buildPdfFilename(payload);
+      anchor.rel = "noopener noreferrer";
+      document.body.appendChild(anchor);
       anchor.click();
+      anchor.remove();
 
       setTimeout(() => URL.revokeObjectURL(url), 30000);
 
-      try {
-        (form.fotos || []).forEach((it) => {
-          if (it?.url) URL.revokeObjectURL(it.url);
-        });
-      } catch {}
+      revokeFotoUrls(formSnapshot.fotos);
 
       clearForm();
       showToast("ok", "Orden generada correctamente. PDF descargado.");
@@ -1122,21 +1166,30 @@ export default function NuevaOT() {
     } catch (e) {
       console.warn("Fallo envío → guardando OT localmente", e);
 
-      const payloadLiviano = { ...payload };
-      delete payloadLiviano.firma_tecnico_img;
-      delete payloadLiviano.fotos_b64;
+      try {
+        const payloadLiviano = { ...payload };
+        delete payloadLiviano.firma_tecnico_img;
+        delete payloadLiviano.fotos_b64;
 
-      payloadLiviano.evidencias_pendientes = true;
-      payloadLiviano._pending_at = new Date().toISOString();
+        payloadLiviano.evidencias_pendientes = true;
+        payloadLiviano._pending_at = new Date().toISOString();
 
-      await guardarPendiente({ data: payloadLiviano });
+        await guardarPendiente({ data: payloadLiviano });
 
-      showToast(
-        "warn",
-        "Sin conexión o servidor no disponible. La OT se guardó para enviar más tarde (sin firma/fotos).",
-      );
-      navigatePostOT(navigate, payloadLiviano);
+        showToast(
+          "warn",
+          "Sin conexión o servidor no disponible. La OT se guardó para enviar más tarde (sin firma/fotos).",
+        );
+        navigatePostOT(navigate, payloadLiviano);
+      } catch (queueErr) {
+        console.error("No se pudo guardar la OT pendiente:", queueErr);
+        showToast(
+          "warn",
+          "No se pudo generar el PDF ni guardar la OT pendiente localmente.",
+        );
+      }
     } finally {
+      generatingRef.current = false;
       setLoading(false);
     }
   }
@@ -1517,7 +1570,7 @@ export default function NuevaOT() {
                   }
                 : {
                     ramal: "",
-                    km_luminaria: "",
+                    sentido: "",
                     codigo_luminaria: "",
                     luminaria_estado: "",
                     luminaria: "",
@@ -1878,7 +1931,12 @@ export default function NuevaOT() {
         <option value="1">Impresión B/N</option>
       </select>
 
-      <button className="btn-enviar" onClick={generarPDF} disabled={loading}>
+      <button
+        type="button"
+        className="btn-enviar"
+        onClick={generarPDF}
+        disabled={loading}
+      >
         {loading ? "Generando…" : "📄 Generar PDF"}
       </button>
 

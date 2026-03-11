@@ -1,5 +1,4 @@
 // src/api.js
-import { saveOtPdf } from "./storage/ot_db";
 
 // ==========================================================
 //  CONFIGURACIÓN DE API (DEV/PROD) — ROBUSTA Y AUTOMÁTICA
@@ -55,7 +54,7 @@ async function fetchRetry(url, options, retries = 3) {
 }
 
 // ==========================================================
-//  ENVÍO DE ORDEN — GENERA PDF + GUARDA RESPALDO LOCAL (IndexedDB)
+//  ENVÍO DE ORDEN — SOLO BACKEND, SIN GUARDAR LOCAL
 // ==========================================================
 export async function enviarOT(payload, silent = false) {
   if (!silent) console.log(">>> API BASE:", API);
@@ -71,10 +70,12 @@ export async function enviarOT(payload, silent = false) {
   try {
     approxBytes = JSON.stringify(payload).length;
   } catch {}
+
   const MAX_BYTES = 4_000_000;
+
   if (approxBytes > MAX_BYTES) {
     const e = new Error(
-      "Payload demasiado grande (fotos/firma). Reducí cantidad o compresión."
+      "Payload demasiado grande (fotos/firma). Reducí cantidad o compresión.",
     );
     e.status = 413;
     e.body = `approxBytes=${approxBytes}`;
@@ -99,22 +100,12 @@ export async function enviarOT(payload, silent = false) {
 
   const pdfBlob = await res.blob();
 
-  // ✅ Guardar respaldo local (NO rompe si falla)
-  try {
-    await saveOtPdf(
-      {
-        fecha: payload?.fecha,
-        tablero: payload?.tablero,
-        ubicacion: payload?.ubicacion,
-        zona: payload?.zona,
-        tecnico: payload?.tecnico,
-        vehiculo: payload?.vehiculo,
-        tags: payload?.tags,
-      },
-      pdfBlob
-    );
-  } catch (err) {
-    if (!silent) console.warn("⚠️ No se pudo guardar en IndexedDB:", err);
+  if (!silent) {
+    console.log("[API] PDF recibido", {
+      size: pdfBlob?.size,
+      type: pdfBlob?.type,
+      requestId: payload?.client_request_id || null,
+    });
   }
 
   return pdfBlob;
@@ -149,14 +140,14 @@ export async function syncPendientes(lista, silent = true) {
 }
 
 // ==========================================================
-//  TABLEROS AUTOCOMPLETE (si querés tenerlo acá mismo)
+//  TABLEROS AUTOCOMPLETE
 // ==========================================================
 export async function buscarTableros(q, { signal, limit = 20 } = {}) {
   const params = new URLSearchParams();
   params.set("q", (q ?? "").trim());
   params.set(
     "limit",
-    String(Number.isFinite(Number(limit)) ? parseInt(limit, 10) : 20)
+    String(Number.isFinite(Number(limit)) ? parseInt(limit, 10) : 20),
   );
 
   const url = `${API}/api/tableros/?${params.toString()}`;

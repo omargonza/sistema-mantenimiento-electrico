@@ -1,10 +1,15 @@
 // src/storage/ot_db.js
 const DB_NAME = "ot_local_db";
-const DB_VERSION = 2;
+const DB_VERSION = 4;
 
 const STORE_OTS = "ots"; // metadata
 const STORE_PDFS = "pdfs"; // blobs (pdf final)
 const STORE_PHOTOS = "photos"; // blobs fotos por OT (opcional)
+
+// Ventana de deduplicación:
+// si entra la misma OT en este rango, se actualiza el mismo registro
+// en vez de crear otro nuevo.
+const DEDUPE_WINDOW_MS = 2 * 60 * 1000; // 2 minutos
 
 function openDb() {
   return new Promise((resolve, reject) => {
@@ -20,6 +25,8 @@ function openDb() {
         ots.createIndex("fecha", "fecha");
         ots.createIndex("tableroLower", "tableroLower");
         ots.createIndex("favorito", "favorito");
+        ots.createIndex("dedupeKey", "dedupeKey");
+        ots.createIndex("clientRequestId", "clientRequestId");
       } else {
         const ots = req.transaction.objectStore(STORE_OTS);
         const ensureIndex = (name, keyPath) => {
@@ -29,6 +36,8 @@ function openDb() {
         ensureIndex("fecha", "fecha");
         ensureIndex("tableroLower", "tableroLower");
         ensureIndex("favorito", "favorito");
+        ensureIndex("dedupeKey", "dedupeKey");
+        ensureIndex("clientRequestId", "clientRequestId");
       }
 
       // ========= PDFs =========
@@ -37,7 +46,6 @@ function openDb() {
       }
 
       // ========= PHOTOS =========
-      // keyPath compuesto => una foto por índice dentro de la OT
       if (!db.objectStoreNames.contains(STORE_PHOTOS)) {
         const photos = db.createObjectStore(STORE_PHOTOS, {
           keyPath: ["otId", "idx"],
@@ -74,10 +82,149 @@ function makeId() {
   return `${t}_${Math.random().toString(16).slice(2)}`;
 }
 
+function normText(v) {
+  return String(v || "")
+    .trim()
+    .replace(/\s+/g, " ")
+    .toUpperCase();
+}
+
+function stableJson(value) {
+  return JSON.stringify(value);
+}
+
+// Hash simple y estable para deduplicación local.
+// No busca seguridad criptográfica, busca consistencia.
+function hashString(input) {
+  let h = 2166136261;
+
+  for (let i = 0; i < input.length; i++) {
+    h ^= input.charCodeAt(i);
+    h += (h << 1) + (h << 4) + (h << 7) + (h << 8) + (h << 24);
+  }
+
+  return (h >>> 0).toString(16);
+}
+
+function buildDedupePayload(meta) {
+  const tecnicos = Array.isArray(meta?.tecnicos)
+    ? meta.tecnicos.map((t) => ({
+        legajo: normText(t?.legajo),
+        nombre: normText(t?.nombre),
+      }))
+    : [];
+
+  const materiales = Array.isArray(meta?.materiales)
+    ? meta.materiales.map((m) => ({
+        material: normText(m?.material),
+        cant: String(m?.cant ?? "").trim(),
+        unidad: normText(m?.unidad),
+      }))
+    : [];
+
+  const luminariasPorTablero = Array.isArray(meta?.luminarias_por_tablero)
+    ? meta.luminarias_por_tablero.map((g) => ({
+        tablero: normText(g?.tablero),
+        zona: normText(g?.zona),
+        circuito: normText(g?.circuito),
+        ramal: normText(g?.ramal),
+        resultado: normText(g?.resultado),
+        luminaria_estado: normText(g?.luminaria_estado),
+        tarea_pedida: normText(g?.tarea_pedida),
+        tarea_realizada: normText(g?.tarea_realizada),
+        tarea_pendiente: normText(g?.tarea_pendiente),
+        observaciones: normText(g?.observaciones),
+        items: Array.isArray(g?.items)
+          ? g.items.map((it) => ({
+              codigo_luminaria: normText(it?.codigo_luminaria),
+              sentido: normText(it?.sentido),
+            }))
+          : [],
+      }))
+    : [];
+
+  return {
+    fecha: String(meta?.fecha || "").trim(),
+    ubicacion: normText(meta?.ubicacion),
+    tablero: normText(meta?.tablero),
+    zona: normText(meta?.zona),
+    circuito: normText(meta?.circuito),
+    vehiculo: normText(meta?.vehiculo),
+
+    km_inicial: meta?.km_inicial ?? null,
+    km_final: meta?.km_final ?? null,
+    km_total: meta?.km_total ?? null,
+
+    tarea_pedida: normText(meta?.tarea_pedida),
+    tarea_realizada: normText(meta?.tarea_realizada),
+    tarea_pendiente: normText(meta?.tarea_pendiente),
+
+    observaciones: normText(meta?.observaciones),
+    firma_tecnico: normText(meta?.firma_tecnico),
+    firma_supervisor: normText(meta?.firma_supervisor),
+
+    alcance: normText(meta?.alcance),
+    resultado: normText(meta?.resultado),
+    estado_tablero: normText(meta?.estado_tablero),
+    luminaria_estado: normText(meta?.luminaria_estado),
+
+    print_mode: Boolean(meta?.print_mode),
+
+    tecnicos,
+    materiales,
+    luminarias_por_tablero: luminariasPorTablero,
+  };
+}
+
+// CAMBIO CLAVE:
+// dedupeKey SIEMPRE representa fingerprint funcional.
+// clientRequestId va por otro carril, como índice separado.
+function buildDedupeKey(meta) {
+  const fp = buildDedupePayload(meta);
+  return `fp:${hashString(stableJson(fp))}`;
+}
+
+function sortNewestFirst(rows = []) {
+  return [...rows].sort(
+    (a, b) =>
+      (b.updatedAt || b.createdAt || 0) - (a.updatedAt || a.createdAt || 0),
+  );
+}
+
+async function findExistingByDedupeKey(store, dedupeKey) {
+  if (!store.indexNames.contains("dedupeKey")) return null;
+
+  const idx = store.index("dedupeKey");
+
+  const rows = await new Promise((resolve, reject) => {
+    const req = idx.getAll(dedupeKey);
+    req.onsuccess = () => resolve(req.result || []);
+    req.onerror = () => reject(req.error);
+  });
+
+  if (!rows.length) return null;
+  return sortNewestFirst(rows)[0] || null;
+}
+
+async function findExistingByClientRequestId(store, clientRequestId) {
+  const value = String(clientRequestId || "").trim();
+  if (!value) return null;
+  if (!store.indexNames.contains("clientRequestId")) return null;
+
+  const idx = store.index("clientRequestId");
+
+  const rows = await new Promise((resolve, reject) => {
+    const req = idx.getAll(value);
+    req.onsuccess = () => resolve(req.result || []);
+    req.onerror = () => reject(req.error);
+  });
+
+  if (!rows.length) return null;
+  return sortNewestFirst(rows)[0] || null;
+}
+
 /* =======================================================
    PHOTOS (blobs) — opcional
-   - Se guardan por otId + idx
-   - No afecta el PDF (el PDF ya puede incluirlas)
 ======================================================= */
 export async function saveOtPhotos(otId, blobs = []) {
   const db = await openDb();
@@ -175,19 +322,22 @@ export async function purgeOldMedia({ olderThanDays = 45 } = {}) {
 
 /* =======================================================
    OTs + PDF (flujo principal)
+   ENTERPRISE:
+   - clientRequestId como idempotencia fuerte
+   - dedupeKey como fingerprint funcional
+   - upsert inteligente
 ======================================================= */
 export async function saveOtPdf(meta, pdfBlob) {
   const db = await openDb();
+  const now = Date.now();
 
-  const id = makeId();
-  const pdfId = id;
-  const createdAt = Date.now();
+  const clientRequestId = String(meta?.client_request_id || "").trim();
+  const dedupeKey = buildDedupeKey(meta);
 
   const tecnicos = Array.isArray(meta?.tecnicos) ? meta.tecnicos : [];
   const materiales = Array.isArray(meta?.materiales) ? meta.materiales : [];
 
   const detalle = {
-    // Identidad operativa
     fecha: meta?.fecha || new Date().toISOString().slice(0, 10),
     ubicacion: meta?.ubicacion || "",
     zona: meta?.zona || "",
@@ -195,18 +345,15 @@ export async function saveOtPdf(meta, pdfBlob) {
     circuito: meta?.circuito || "",
     vehiculo: meta?.vehiculo || "",
 
-    // Recorrido
     km_inicial: meta?.km_inicial ?? null,
     km_final: meta?.km_final ?? null,
     km_total: meta?.km_total ?? null,
 
-    // Operación
     luminaria_equipos: meta?.luminaria_equipos || "",
     tarea_pedida: meta?.tarea_pedida || "",
     tarea_realizada: meta?.tarea_realizada || "",
     tarea_pendiente: meta?.tarea_pendiente || "",
 
-    // RRHH / materiales
     tecnicos: tecnicos.map((t) => ({
       legajo: t?.legajo ?? "",
       nombre: t?.nombre ?? "",
@@ -217,31 +364,78 @@ export async function saveOtPdf(meta, pdfBlob) {
       unidad: m?.unidad ?? "",
     })),
 
-    // Auditoría (texto)
     observaciones: meta?.observaciones || "",
     firma_tecnico: meta?.firma_tecnico || "",
     firma_supervisor: meta?.firma_supervisor || "",
 
-    // Señales de evidencia (sin base64)
     tiene_firma: Boolean(meta?.firma_tecnico_img),
     fotos_count: Array.isArray(meta?.fotos_b64) ? meta.fotos_b64.length : 0,
 
-    // Semáforo / clasificación
     alcance: meta?.alcance || "",
     resultado: meta?.resultado || "",
     estado_tablero: meta?.estado_tablero || "",
     luminaria_estado: meta?.luminaria_estado || "",
 
-    // Impresión
     print_mode: Boolean(meta?.print_mode),
   };
+
+  const tx = db.transaction([STORE_OTS, STORE_PDFS], "readwrite");
+  const otsStore = tx.objectStore(STORE_OTS);
+  const pdfStore = tx.objectStore(STORE_PDFS);
+
+  // Primero buscamos por idempotencia fuerte (request de cliente)
+  const existingByRequest = await findExistingByClientRequestId(
+    otsStore,
+    clientRequestId,
+  );
+
+  // Si no aparece por requestId, buscamos por fingerprint
+  const existingByFingerprint = await findExistingByDedupeKey(
+    otsStore,
+    dedupeKey,
+  );
+
+  const existing = existingByRequest || existingByFingerprint || null;
+
+  const isSameClientRequest = Boolean(
+    existing &&
+    clientRequestId &&
+    String(existing.clientRequestId || "") === clientRequestId,
+  );
+
+  const isSameRecentFingerprint = Boolean(
+    existing &&
+    String(existing.dedupeKey || "") === dedupeKey &&
+    now - Number(existing.updatedAt || existing.createdAt || 0) <=
+      DEDUPE_WINDOW_MS,
+  );
+
+  // Política:
+  // 1) mismo clientRequestId => misma operación sí o sí
+  // 2) si no hay requestId, o no hubo match por requestId, y la huella coincide
+  //    dentro de la ventana => upsert
+  const shouldUpsert = Boolean(
+    existing &&
+    (isSameClientRequest ||
+      (!clientRequestId && isSameRecentFingerprint) ||
+      (clientRequestId && !existingByRequest && isSameRecentFingerprint)),
+  );
+
+  const id = shouldUpsert ? String(existing.id) : makeId();
+  const pdfId = shouldUpsert ? String(existing.pdfId || existing.id) : id;
+  const createdAt = shouldUpsert ? Number(existing.createdAt || now) : now;
 
   const record = {
     id,
     pdfId,
     createdAt,
+    updatedAt: now,
 
-    // Campos “rápidos”
+    // trazabilidad
+    clientRequestId: clientRequestId || "",
+    dedupeKey,
+
+    // campos rápidos
     fecha: detalle.fecha,
     tablero: detalle.tablero,
     tableroLower: String(detalle.tablero || "").toLowerCase(),
@@ -250,21 +444,34 @@ export async function saveOtPdf(meta, pdfBlob) {
     tecnico: detalle.tecnicos?.[0]?.nombre || meta?.tecnico || "",
     vehiculo: detalle.vehiculo,
 
-    // flags locales
-    favorito: false,
-    enviado: false,
-    reimpreso: 0,
+    // flags locales: si ya existía, se preservan
+    favorito: shouldUpsert ? Boolean(existing.favorito) : false,
+    enviado: shouldUpsert ? Boolean(existing.enviado) : false,
+    reimpreso: shouldUpsert ? Number(existing.reimpreso || 0) : 0,
 
-    tags: Array.isArray(meta?.tags) ? meta.tags : [],
+    // tags
+    tags: Array.isArray(meta?.tags)
+      ? meta.tags
+      : shouldUpsert
+        ? Array.isArray(existing.tags)
+          ? existing.tags
+          : []
+        : [],
+
     pdfBytes: pdfBlob?.size || 0,
 
-    // Operativo completo
+    // payload operativo
     detalle,
   };
 
-  const tx = db.transaction([STORE_OTS, STORE_PDFS], "readwrite");
-  tx.objectStore(STORE_OTS).put(record);
-  tx.objectStore(STORE_PDFS).put({ pdfId, blob: pdfBlob });
+  otsStore.put(record);
+  pdfStore.put({
+    pdfId,
+    blob: pdfBlob,
+    updatedAt: now,
+    size: pdfBlob?.size || 0,
+    type: pdfBlob?.type || "application/pdf",
+  });
 
   await txDone(tx);
   db.close();
@@ -286,7 +493,10 @@ export async function listOts() {
   await txDone(tx);
   db.close();
 
-  all.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+  all.sort(
+    (a, b) =>
+      (b.updatedAt || b.createdAt || 0) - (a.updatedAt || a.createdAt || 0),
+  );
   return all;
 }
 
@@ -358,7 +568,7 @@ export async function getPdfBlob(pdfId) {
   const store = tx.objectStore(STORE_PDFS);
 
   const row = await new Promise((resolve, reject) => {
-    const req = store.get(pdfId);
+    const req = store.get(String(pdfId));
     req.onsuccess = () => resolve(req.result || null);
     req.onerror = () => reject(req.error);
   });
@@ -385,7 +595,7 @@ export async function setFlags(otId, patch) {
     throw new Error("OT no encontrada");
   }
 
-  const next = { ...current, ...patch };
+  const next = { ...current, ...patch, updatedAt: Date.now() };
   store.put(next);
 
   await txDone(tx);
@@ -396,7 +606,6 @@ export async function setFlags(otId, patch) {
 export async function deleteOt(otId) {
   const db = await openDb();
 
-  // leo pdfId
   const tx0 = db.transaction(STORE_OTS, "readonly");
   const ot = await new Promise((resolve, reject) => {
     const req = tx0.objectStore(STORE_OTS).get(String(otId));
@@ -405,13 +614,11 @@ export async function deleteOt(otId) {
   });
   await txDone(tx0);
 
-  // borro OT + pdf + fotos
   const tx = db.transaction([STORE_OTS, STORE_PDFS, STORE_PHOTOS], "readwrite");
 
   tx.objectStore(STORE_OTS).delete(String(otId));
-  if (ot?.pdfId) tx.objectStore(STORE_PDFS).delete(ot.pdfId);
+  if (ot?.pdfId) tx.objectStore(STORE_PDFS).delete(String(ot.pdfId));
 
-  // fotos asociadas
   const photosStore = tx.objectStore(STORE_PHOTOS);
   const idx = photosStore.index("otId");
   const rows = await new Promise((resolve, reject) => {
@@ -445,7 +652,7 @@ export async function getOtWithPdf(otId) {
   }
 
   const row = await new Promise((resolve, reject) => {
-    const req = pdfs.get(ot.pdfId || ot.id);
+    const req = pdfs.get(String(ot.pdfId || ot.id));
     req.onsuccess = () => resolve(req.result || null);
     req.onerror = () => reject(req.error);
   });
@@ -457,7 +664,7 @@ export async function getOtWithPdf(otId) {
 }
 
 /* =======================================================
-   Migración: agrega campos operativos faltantes + tableroLower
+   Migración: agrega campos operativos faltantes + tableroLower + dedupeKey + clientRequestId
 ======================================================= */
 export async function migrateOtsOperationalFields() {
   const db = await openDb();
@@ -521,7 +728,21 @@ export async function migrateOtsOperationalFields() {
       typeof ot?.tableroLower !== "string" ||
       ot.tableroLower !== String(ot?.tablero || "").toLowerCase();
 
-    if (hasAll && !needsTableroLower) continue;
+    const needsDedupeKey =
+      typeof ot?.dedupeKey !== "string" ||
+      !ot.dedupeKey.trim() ||
+      String(ot.dedupeKey).startsWith("req:");
+
+    const needsClientRequestId = typeof ot?.clientRequestId !== "string";
+
+    if (
+      hasAll &&
+      !needsTableroLower &&
+      !needsDedupeKey &&
+      !needsClientRequestId
+    ) {
+      continue;
+    }
 
     const next = { ...ot };
     const nextDet = { ...det };
@@ -556,6 +777,35 @@ export async function migrateOtsOperationalFields() {
 
     next.detalle = nextDet;
     next.tableroLower = String(next?.tablero || "").toLowerCase();
+    next.updatedAt = next.updatedAt || next.createdAt || Date.now();
+    next.clientRequestId = String(next.clientRequestId || "").trim();
+
+    if (needsDedupeKey) {
+      next.dedupeKey = buildDedupeKey({
+        fecha: nextDet.fecha || next.fecha,
+        ubicacion: nextDet.ubicacion || next.ubicacion,
+        tablero: nextDet.tablero || next.tablero,
+        zona: nextDet.zona || next.zona,
+        circuito: nextDet.circuito || next.circuito,
+        vehiculo: nextDet.vehiculo || next.vehiculo,
+        km_inicial: nextDet.km_inicial,
+        km_final: nextDet.km_final,
+        km_total: nextDet.km_total,
+        tarea_pedida: nextDet.tarea_pedida,
+        tarea_realizada: nextDet.tarea_realizada,
+        tarea_pendiente: nextDet.tarea_pendiente,
+        observaciones: nextDet.observaciones,
+        firma_tecnico: nextDet.firma_tecnico,
+        firma_supervisor: nextDet.firma_supervisor,
+        alcance: nextDet.alcance,
+        resultado: nextDet.resultado,
+        estado_tablero: nextDet.estado_tablero,
+        luminaria_estado: nextDet.luminaria_estado,
+        print_mode: nextDet.print_mode,
+        tecnicos: nextDet.tecnicos,
+        materiales: nextDet.materiales,
+      });
+    }
 
     store.put(next);
     updated += 1;
