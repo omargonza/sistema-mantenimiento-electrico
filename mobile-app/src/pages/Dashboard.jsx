@@ -9,9 +9,9 @@ import { queryOts, migrateOtsOperationalFields } from "../storage/ot_db";
  * Feature flags (para apagar áreas que hoy confunden en campo)
  * - Activás cuando decidas usarlas.
  */
-const SHOW_SEMAFORO_TABLEROS = false;
-const SHOW_SEMAFORO_CONTROLS = false; // filtro + migración (panel semáforo)
-const SHOW_MIGRATION_BUTTON = false; // por defecto apagado (botón "Migrar")
+const SHOW_SEMAFORO_TABLEROS = true; // por defecto encendido (panel semáforo)
+const SHOW_SEMAFORO_CONTROLS = true; // filtro + migración (panel semáforo)
+const SHOW_MIGRATION_BUTTON = true; // por defecto apagado (botón "Migrar")
 
 function isoToday() {
   return new Date().toISOString().slice(0, 10);
