@@ -200,6 +200,71 @@ class OrdenTrabajoSerializer(serializers.ModelSerializer):
                 )
         return value
 
+    def validate_tecnicos(self, value):
+        if value in (None, "", []):
+            return []
+
+        if not isinstance(value, list):
+            raise serializers.ValidationError("tecnicos debe ser una lista de objetos.")
+
+        out = []
+        for i, t in enumerate(value, start=1):
+            if not isinstance(t, dict):
+                raise serializers.ValidationError(f"Técnico {i}: formato inválido.")
+
+            legajo = str(t.get("legajo") or "").strip()
+            nombre = str(t.get("nombre") or "").strip()
+
+            if not legajo:
+                raise serializers.ValidationError(
+                    f"Técnico {i}: 'legajo' es obligatorio."
+                )
+
+            if not nombre:
+                raise serializers.ValidationError(
+                    f"Técnico {i}: 'nombre' es obligatorio."
+                )
+
+            out.append(
+                {
+                    "legajo": legajo,
+                    "nombre": nombre,
+                }
+            )
+
+        return out
+
+    def validate_materiales(self, value):
+        if value in (None, "", []):
+            return []
+
+        if not isinstance(value, list):
+            raise serializers.ValidationError(
+                "materiales debe ser una lista de objetos."
+            )
+
+        out = []
+        for i, m in enumerate(value, start=1):
+            if not isinstance(m, dict):
+                raise serializers.ValidationError(f"Material {i}: formato inválido.")
+
+            material = str(m.get("material") or "").strip()
+            cantidad = str(m.get("cantidad") or "").strip()
+
+            if not material:
+                raise serializers.ValidationError(
+                    f"Material {i}: 'material' es obligatorio."
+                )
+
+            out.append(
+                {
+                    "material": material,
+                    "cantidad": cantidad,
+                }
+            )
+
+        return out
+
     def validate(self, attrs):
         """
         Reglas:

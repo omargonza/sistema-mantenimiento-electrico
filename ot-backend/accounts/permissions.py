@@ -1,17 +1,21 @@
 from rest_framework.permissions import BasePermission
 
+from .models import UserProfile
+
 
 class IsAdminRole(BasePermission):
     message = "No autorizado. Solo administradores."
 
     def has_permission(self, request, view):
         user = request.user
-        return bool(
-            user
-            and user.is_authenticated
-            and hasattr(user, "profile")
-            and user.profile.role == "admin"
-        )
+
+        if not user or not user.is_authenticated:
+            return False
+
+        return UserProfile.objects.filter(
+            user=user,
+            role=UserProfile.Role.ADMIN,
+        ).exists()
 
 
 class IsAdminOrTechnicianRole(BasePermission):
@@ -19,9 +23,14 @@ class IsAdminOrTechnicianRole(BasePermission):
 
     def has_permission(self, request, view):
         user = request.user
-        return bool(
-            user
-            and user.is_authenticated
-            and hasattr(user, "profile")
-            and user.profile.role in {"admin", "technician"}
-        )
+
+        if not user or not user.is_authenticated:
+            return False
+
+        return UserProfile.objects.filter(
+            user=user,
+            role__in=[
+                UserProfile.Role.ADMIN,
+                UserProfile.Role.TECHNICIAN,
+            ],
+        ).exists()
