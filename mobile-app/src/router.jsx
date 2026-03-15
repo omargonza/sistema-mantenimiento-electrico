@@ -1,5 +1,14 @@
 // src/Router.jsx
-import { Navigate, Route, Routes, useLocation } from "react-router-dom";
+import { useState } from "react";
+import {
+  Navigate,
+  Route,
+  Routes,
+  useLocation,
+  useNavigate,
+} from "react-router-dom";
+import { LogOut } from "lucide-react";
+
 import Dashboard from "./pages/Dashboard";
 import NuevaOT from "./pages/NuevaOT";
 import DetalleOT from "./pages/DetalleOT";
@@ -11,7 +20,7 @@ import MisPdfs from "./pages/MisPdfs";
 import Login from "./pages/Login";
 import ProtectedRoute from "./components/ProtectedRoute";
 import AuditoriaOT from "./pages/AuditoriaOT";
-import { getAccessToken, getCurrentUser } from "./api";
+import { getAccessToken, getCurrentUser, logout } from "./api";
 
 function isValidToken(token) {
   if (!token || typeof token !== "string") return false;
@@ -44,15 +53,64 @@ function isAuthenticated() {
   return isValidToken(token) && isValidUser(user);
 }
 
+function getDisplayName(user) {
+  if (!user) return "Operador";
+  return (
+    user.nombre || user.legajo || user.email || user.username || "Operador"
+  );
+}
+
 function AppLayout({ children }) {
   const location = useLocation();
+  const navigate = useNavigate();
+  const [closingSession, setClosingSession] = useState(false);
+
   const isLogged = isAuthenticated();
+  const user = getCurrentUser();
 
   const hideBottomBar = location.pathname === "/login" || !isLogged;
+  const showSessionBar = location.pathname !== "/login" && isLogged;
+
+  const handleLogout = async () => {
+    if (closingSession) return;
+
+    setClosingSession(true);
+    try {
+      await logout();
+    } catch (err) {
+      console.error("Error al cerrar sesión:", err);
+    } finally {
+      setClosingSession(false);
+      navigate("/login", { replace: true });
+    }
+  };
 
   return (
     <div className="app-wrapper">
+      {showSessionBar ? (
+        <div className="app-session-strip">
+          <div className="app-session-strip__user">
+            <span className="app-session-strip__label">Sesión activa</span>
+            <strong className="app-session-strip__name">
+              {getDisplayName(user)}
+            </strong>
+          </div>
+
+          <button
+            type="button"
+            className="btn-outline app-session-strip__logout"
+            onClick={handleLogout}
+            disabled={closingSession}
+            title="Cerrar sesión"
+          >
+            <LogOut size={16} strokeWidth={2.2} />
+            <span>{closingSession ? "Saliendo..." : "Cerrar sesión"}</span>
+          </button>
+        </div>
+      ) : null}
+
       {children}
+
       {!hideBottomBar ? <BottomBar /> : null}
     </div>
   );

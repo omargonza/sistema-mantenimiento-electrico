@@ -966,6 +966,77 @@ label.campo > input.input:focus {
   white-space: nowrap;
 }
 
+.app-session-strip {
+  position: sticky;
+  top: 0;
+  z-index: 1300;
+
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+
+  padding: 10px 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+
+  background: linear-gradient(
+    180deg,
+    rgba(29, 32, 38, 0.96),
+    rgba(17, 19, 24, 0.96)
+  );
+  backdrop-filter: blur(6px);
+}
+
+.app-session-strip__user {
+  min-width: 0;
+  display: grid;
+  line-height: 1.1;
+}
+
+.app-session-strip__label {
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(243, 244, 246, 0.56);
+}
+
+.app-session-strip__name {
+  color: #fafafa;
+  font-size: 0.84rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.app-session-strip__logout {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.app-session-strip__logout:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+@media (max-width: 640px) {
+  .app-session-strip {
+    padding: 9px 10px;
+  }
+
+  .app-session-strip__logout span {
+    display: none;
+  }
+
+  .app-session-strip__logout {
+    width: 40px;
+    min-width: 40px;
+    padding: 0;
+  }
+}
 @media (max-width: 420px) {
   .back-fab {
     padding: 0 10px;
