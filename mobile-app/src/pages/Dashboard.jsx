@@ -563,7 +563,9 @@ export default function Dashboard() {
                 <div className="tablero-head">
                   <div className="tablero-head__left">
                     <span className="dot" />
-                    <span className="nm">{t.name}</span>
+                    <span className="nm" title={t.name}>
+                      {t.name}
+                    </span>
                   </div>
 
                   <span
