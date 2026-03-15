@@ -1,71 +1,115 @@
-import { API } from "../api";
+import { API, authFetch } from "../api";
 
 const TTL = 7 * 24 * 60 * 60 * 1000; // 7 días
 
 function stableParams(params = {}) {
   const clean = {};
+
   Object.entries(params || {}).forEach(([k, v]) => {
-    if (v === undefined || v === null || v === "") return;
-    clean[k] = v;
+    if (v === undefined || v === null) return;
+    if (typeof v === "string" && v.trim() === "") return;
+    clean[k] = typeof v === "string" ? v.trim() : v;
   });
+
   const keys = Object.keys(clean).sort();
   const out = {};
-  keys.forEach((k) => (out[k] = clean[k]));
+  keys.forEach((k) => {
+    out[k] = clean[k];
+  });
+
   return out;
+}
+
+function toBase64Unicode(str) {
+  return btoa(unescape(encodeURIComponent(str)));
 }
 
 function key(tablero, params = {}) {
   const p = stableParams(params);
   const suffix = Object.keys(p).length ? JSON.stringify(p) : "";
-  const t = (tablero || "").trim();
+  const t = String(tablero || "").trim();
   const base = t ? `historial_${t}` : "historial__ALL";
-  return `${base}${
-    suffix ? "_" + btoa(unescape(encodeURIComponent(suffix))) : ""
-  }`;
+
+  return `${base}${suffix ? "_" + toBase64Unicode(suffix) : ""}`;
 }
 
 function buildUrl(tablero, params = {}) {
   const p = stableParams(params);
   const qsObj = { ...p };
-  const t = (tablero || "").trim();
+
+  const t = String(tablero || "").trim();
   if (t) qsObj.tablero = t;
+
   const qs = new URLSearchParams(qsObj).toString();
   return `${API}/api/historial/?${qs}`;
 }
 
-export async function obtenerHistorial(tablero, params = {}) {
-  const k = key(tablero, params);
-
+function readCache(cacheKey) {
   try {
-    const raw = localStorage.getItem(k);
-    if (raw) {
-      const { ts, data } = JSON.parse(raw);
-      if (Date.now() - ts < TTL) {
-        refresh(tablero, params).catch(() => {});
-        return data;
-      }
-    }
-  } catch {}
-
-  return await refresh(tablero, params);
+    const raw = localStorage.getItem(cacheKey);
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
 }
 
-async function refresh(tablero, params = {}) {
-  const url = buildUrl(tablero, params);
-
-  const res = await fetch(url, { headers: { Accept: "application/json" } });
-  if (!res.ok) {
-    throw new Error("Historial no disponible");
-  }
-
-  const data = await res.json();
-
+function writeCache(cacheKey, data) {
   try {
     localStorage.setItem(
-      key(tablero, params),
-      JSON.stringify({ ts: Date.now(), data })
+      cacheKey,
+      JSON.stringify({
+        ts: Date.now(),
+        data,
+      }),
     );
-  } catch {}
+  } catch {
+    // no romper si localStorage falla
+  }
+}
 
+export async function obtenerHistorial(tablero, params = {}, options = {}) {
+  const cacheStorageKey = key(tablero, params);
+  const cached = readCache(cacheStorageKey);
+
+  if (cached && Date.now() - cached.ts < TTL) {
+    refreshHistorial(tablero, params, options).catch(() => {});
+    return cached.data;
+  }
+
+  try {
+    return await refreshHistorial(tablero, params, options);
+  } catch {
+    return (
+      cached?.data || { results: [], count: 0, next: null, previous: null }
+    );
+  }
+}
+
+async function refreshHistorial(tablero, params = {}, { signal } = {}) {
+  const url = buildUrl(tablero, params);
+
+  const res = await authFetch(
+    url,
+    {
+      method: "GET",
+      headers: { Accept: "application/json" },
+      signal,
+    },
+    10000,
+  );
+
+  if (!res.ok) {
+    throw new Error(`Historial no disponible (${res.status})`);
+  }
+
+  const data = await res.json().catch(() => ({
+    results: [],
+    count: 0,
+    next: null,
+    previous: null,
+  }));
+
+  writeCache(key(tablero, params), data);
   return data;
 }

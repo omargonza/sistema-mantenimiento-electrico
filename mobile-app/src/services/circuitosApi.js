@@ -1,50 +1,90 @@
-import { API } from "../api";
+import { API, authFetch } from "../api";
 
 const KEY = "circuitos_freq_v1";
 const TTL = 24 * 60 * 60 * 1000; // 24h
 
 function cacheKey(tablero, limit) {
-  const t = (tablero || "").trim().toLowerCase();
+  const t = String(tablero || "")
+    .trim()
+    .toLowerCase();
   return `${KEY}__${t}__${limit}`;
 }
 
-export async function obtenerCircuitosFrecuentes(tablero, { limit = 8 } = {}) {
-  const t = (tablero || "").trim();
-  if (!t) return { tablero: "", items: [] };
-
-  const k = cacheKey(t, limit);
-
-  // cache
+function readCache(key) {
   try {
-    const raw = localStorage.getItem(k);
-    if (raw) {
-      const { ts, data } = JSON.parse(raw);
-      if (Date.now() - ts < TTL) {
-        // refresh silencioso
-        refresh(t, limit).catch(() => {});
-        return data;
-      }
-    }
-  } catch {}
+    const raw = localStorage.getItem(key);
+    if (!raw) return null;
 
-  return await refresh(t, limit);
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object") return null;
+
+    return parsed;
+  } catch {
+    return null;
+  }
 }
 
-async function refresh(tablero, limit) {
-  const qs = new URLSearchParams({ tablero, limit: String(limit) }).toString();
-  const url = `${API}/api/tableros/circuitos/?${qs}`;
-
-  const res = await fetch(url, { headers: { Accept: "application/json" } });
-  if (!res.ok) return { tablero, items: [] };
-
-  const data = await res.json();
-
+function writeCache(key, data) {
   try {
     localStorage.setItem(
-      cacheKey(tablero, limit),
-      JSON.stringify({ ts: Date.now(), data })
+      key,
+      JSON.stringify({
+        ts: Date.now(),
+        data,
+      }),
     );
-  } catch {}
+  } catch {
+    // sin romper UX si localStorage falla
+  }
+}
+
+export async function obtenerCircuitosFrecuentes(
+  tablero,
+  { limit = 8, signal } = {},
+) {
+  const t = String(tablero || "").trim();
+  if (!t) return { tablero: "", items: [] };
+
+  const safeLimit = Number.isFinite(Number(limit)) ? parseInt(limit, 10) : 8;
+  const k = cacheKey(t, safeLimit);
+
+  const cached = readCache(k);
+  if (cached && Date.now() - cached.ts < TTL) {
+    refreshCircuitos(t, safeLimit, { signal }).catch(() => {});
+    return cached.data;
+  }
+
+  try {
+    return await refreshCircuitos(t, safeLimit, { signal });
+  } catch {
+    return cached?.data || { tablero: t, items: [] };
+  }
+}
+
+async function refreshCircuitos(tablero, limit, { signal } = {}) {
+  const qs = new URLSearchParams({
+    tablero: String(tablero).trim(),
+    limit: String(limit),
+  }).toString();
+
+  const url = `${API}/api/tableros/circuitos/?${qs}`;
+
+  const res = await authFetch(
+    url,
+    {
+      method: "GET",
+      headers: { Accept: "application/json" },
+      signal,
+    },
+    10000,
+  );
+
+  if (!res.ok) {
+    throw new Error(`Circuitos no disponibles (${res.status})`);
+  }
+
+  const data = await res.json().catch(() => ({ tablero, items: [] }));
+  writeCache(cacheKey(tablero, limit), data);
 
   return data;
 }

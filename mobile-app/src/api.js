@@ -1,7 +1,7 @@
 // src/api.js
 
 // ==========================================================
-//  CONFIGURACIÓN DE API (DEV/PROD) — ROBUSTA Y AUTOMÁTICA
+// CONFIGURACIÓN API
 // ==========================================================
 const mode = import.meta.env.MODE;
 const envUrl = import.meta.env.VITE_API_URL;
@@ -12,54 +12,90 @@ const fallback =
     : "http://127.0.0.1:8000";
 
 export const API = (envUrl || fallback).trim().replace(/\/$/, "");
+const IS_DEV = import.meta.env.DEV;
 
-console.log("[API CONFIG] MODE:", mode);
-console.log("[API CONFIG] VITE_API_URL:", envUrl);
-console.log("[API CONFIG] API FINAL:", API);
+// Logs solo en desarrollo y sin datos sensibles
+function devLog(...args) {
+  if (IS_DEV) console.log(...args);
+}
 
-// ==========================================================
-//  TIMEOUT CON ABORT REAL
-// ==========================================================
-async function fetchWithTimeout(url, options = {}, timeout = 10000) {
-  const controller = new AbortController();
-  const t = setTimeout(() => controller.abort(), timeout);
-
-  try {
-    const res = await fetch(url, {
-      ...options,
-      signal: options.signal ?? controller.signal,
-    });
-    return res;
-  } finally {
-    clearTimeout(t);
-  }
+function devWarn(...args) {
+  if (IS_DEV) console.warn(...args);
 }
 
 // ==========================================================
-//  REINTENTOS AUTOMÁTICOS POR ERROR DE RED
-// ==========================================================
-async function fetchRetry(url, options, retries = 3) {
-  try {
-    return await fetchWithTimeout(url, options);
-  } catch (err) {
-    if (err?.name === "AbortError") throw err;
-    if (retries <= 0) throw err;
-
-    const delay = 500 * Math.pow(2, 3 - retries);
-    console.warn(`Retry en ${delay}ms…`);
-    await new Promise((res) => setTimeout(res, delay));
-
-    return fetchRetry(url, options, retries - 1);
-  }
-}
-
-// ==========================================================
-//  SESIÓN / AUTH JWT
+// STORAGE KEYS
 // ==========================================================
 const ACCESS_KEY = "ot_access_token";
 const REFRESH_KEY = "ot_refresh_token";
 const USER_KEY = "ot_user";
 
+// ==========================================================
+// HELPERS SEGUROS
+// ==========================================================
+function safeParseJSON(text, fallbackValue = {}) {
+  try {
+    return text ? JSON.parse(text) : fallbackValue;
+  } catch {
+    return fallbackValue;
+  }
+}
+
+async function safeReadJson(res, fallbackValue = {}) {
+  const text = await res.text().catch(() => "");
+  return safeParseJSON(text, fallbackValue);
+}
+
+function buildError(message, status = 0, body = null) {
+  const error = new Error(message);
+  error.status = status;
+  error.body = body;
+  return error;
+}
+
+function hasNetworkConnection() {
+  return typeof navigator === "undefined" ? true : navigator.onLine;
+}
+
+// ==========================================================
+// TIMEOUT REAL CON ABORTCONTROLLER
+// ==========================================================
+async function fetchWithTimeout(url, options = {}, timeout = 10000) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeout);
+
+  try {
+    const response = await fetch(url, {
+      ...options,
+      signal: options.signal ?? controller.signal,
+    });
+    return response;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+// ==========================================================
+// REINTENTOS AUTOMÁTICOS SOLO POR ERROR DE RED
+// ==========================================================
+async function fetchRetry(url, options = {}, retries = 2, timeout = 10000) {
+  try {
+    return await fetchWithTimeout(url, options, timeout);
+  } catch (err) {
+    if (err?.name === "AbortError") throw err;
+    if (retries <= 0) throw err;
+
+    const delay = 400 * Math.pow(2, 2 - retries);
+    devWarn(`[API] Retry en ${delay}ms`);
+    await new Promise((resolve) => setTimeout(resolve, delay));
+
+    return fetchRetry(url, options, retries - 1, timeout);
+  }
+}
+
+// ==========================================================
+// SESIÓN / AUTH JWT
+// ==========================================================
 export function getAccessToken() {
   return localStorage.getItem(ACCESS_KEY) || "";
 }
@@ -77,9 +113,17 @@ export function getCurrentUser() {
 }
 
 export function saveSession({ access, refresh, user }) {
-  if (access) localStorage.setItem(ACCESS_KEY, access);
-  if (refresh) localStorage.setItem(REFRESH_KEY, refresh);
-  if (user) localStorage.setItem(USER_KEY, JSON.stringify(user));
+  if (typeof access === "string" && access.trim()) {
+    localStorage.setItem(ACCESS_KEY, access.trim());
+  }
+
+  if (typeof refresh === "string" && refresh.trim()) {
+    localStorage.setItem(REFRESH_KEY, refresh.trim());
+  }
+
+  if (user && typeof user === "object") {
+    localStorage.setItem(USER_KEY, JSON.stringify(user));
+  }
 }
 
 export function clearSession() {
@@ -90,6 +134,7 @@ export function clearSession() {
 
 export function authHeaders(extra = {}) {
   const token = getAccessToken();
+
   return {
     ...extra,
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
@@ -97,119 +142,81 @@ export function authHeaders(extra = {}) {
 }
 
 // ==========================================================
-//  LOGIN / ME / LOGOUT / REFRESH
+// REFRESH SINGLE-FLIGHT
+// Evita múltiples refresh simultáneos si varias requests
+// devuelven 401 al mismo tiempo.
 // ==========================================================
-export async function login(legajo, password) {
-  const res = await fetch(`${API}/api/auth/login/`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      username: String(legajo).trim(), // backend: username = legajo
-      password,
-    }),
-  });
-
-  const data = await res.json().catch(() => ({}));
-
-  if (!res.ok) {
-    const detail =
-      data?.detail ||
-      data?.non_field_errors?.[0] ||
-      data?.username?.[0] ||
-      `Error login (${res.status})`;
-
-    const e = new Error(detail);
-    e.status = res.status;
-    e.body = data;
-    throw e;
-  }
-
-  saveSession(data);
-  return data;
-}
-
-export async function getMe() {
-  const res = await authFetch(`${API}/api/auth/me/`, {
-    method: "GET",
-  });
-
-  const data = await res.json().catch(() => ({}));
-
-  if (!res.ok) {
-    const e = new Error(data?.detail || `Error me (${res.status})`);
-    e.status = res.status;
-    e.body = data;
-    throw e;
-  }
-
-  return data;
-}
-
-export async function logout() {
-  const refresh = getRefreshToken();
-
-  try {
-    if (refresh) {
-      await fetch(`${API}/api/auth/logout/`, {
-        method: "POST",
-        headers: authHeaders({ "Content-Type": "application/json" }),
-        body: JSON.stringify({ refresh }),
-      });
-    }
-  } finally {
-    clearSession();
-  }
-}
+let refreshPromise = null;
 
 export async function refreshAccessToken() {
-  const refresh = getRefreshToken();
-
-  if (!refresh) {
-    clearSession();
-    const e = new Error("No hay refresh token");
-    e.status = 401;
-    throw e;
+  if (refreshPromise) {
+    return refreshPromise;
   }
 
-  const res = await fetch(`${API}/api/auth/refresh/`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ refresh }),
-  });
+  refreshPromise = (async () => {
+    const refresh = getRefreshToken();
 
-  const data = await res.json().catch(() => ({}));
+    if (!refresh) {
+      clearSession();
+      throw buildError("No hay refresh token", 401);
+    }
 
-  if (!res.ok || !data?.access) {
-    clearSession();
-    const e = new Error(data?.detail || `Error refresh (${res.status})`);
-    e.status = res.status || 401;
-    e.body = data;
-    throw e;
+    const res = await fetchWithTimeout(
+      `${API}/api/auth/refresh/`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ refresh }),
+      },
+      10000,
+    );
+
+    const data = await safeReadJson(res, {});
+
+    if (!res.ok || !data?.access) {
+      clearSession();
+      throw buildError(
+        data?.detail || `Error refresh (${res.status})`,
+        res.status || 401,
+        data,
+      );
+    }
+
+    localStorage.setItem(ACCESS_KEY, data.access);
+
+    if (data.refresh && typeof data.refresh === "string") {
+      localStorage.setItem(REFRESH_KEY, data.refresh);
+    }
+
+    return data.access;
+  })();
+
+  try {
+    return await refreshPromise;
+  } finally {
+    refreshPromise = null;
   }
-
-  localStorage.setItem(ACCESS_KEY, data.access);
-
-  // si el backend rota refresh tokens, lo actualizamos también
-  if (data.refresh) {
-    localStorage.setItem(REFRESH_KEY, data.refresh);
-  }
-
-  return data.access;
 }
 
 // ==========================================================
-//  FETCH AUTENTICADO + REFRESH AUTOMÁTICO SI 401
+// FETCH AUTENTICADO
+// - agrega Bearer token
+// - intenta refresh 1 vez ante 401
+// - limpia sesión si no puede renovar
 // ==========================================================
-async function authFetch(url, options = {}, timeout = 10000) {
-  const initialOptions = {
+export async function authFetch(url, options = {}, timeout = 10000) {
+  const requestOptions = {
     ...options,
     headers: authHeaders(options.headers || {}),
   };
 
-  let res = await fetchRetry(url, initialOptions);
+  let res = await fetchRetry(url, requestOptions, 2, timeout);
 
-  // Si el access token venció, intenta refresh una sola vez
-  if (res.status === 401) {
+  if (res.status !== 401) {
+    return res;
+  }
+
+  try {
     const newAccess = await refreshAccessToken();
 
     const retryOptions = {
@@ -220,70 +227,137 @@ async function authFetch(url, options = {}, timeout = 10000) {
       },
     };
 
-    res = await fetchWithTimeout(url, retryOptions, timeout);
+    return await fetchWithTimeout(url, retryOptions, timeout);
+  } catch (err) {
+    clearSession();
+    throw err;
   }
-
-  return res;
 }
 
 // ==========================================================
-//  ENVÍO DE ORDEN — SOLO BACKEND, SIN GUARDAR LOCAL
+// AUTH
+// ==========================================================
+export async function login(legajo, password) {
+  const res = await fetchWithTimeout(
+    `${API}/api/auth/login/`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        username: String(legajo ?? "").trim(),
+        password: String(password ?? ""),
+      }),
+    },
+    10000,
+  );
+
+  const data = await safeReadJson(res, {});
+
+  if (!res.ok) {
+    throw buildError(
+      data?.detail ||
+        data?.non_field_errors?.[0] ||
+        data?.username?.[0] ||
+        `Error login (${res.status})`,
+      res.status,
+      data,
+    );
+  }
+
+  saveSession(data);
+  devLog("[AUTH] Login correcto", {
+    hasAccess: !!data?.access,
+    hasRefresh: !!data?.refresh,
+    hasUser: !!data?.user,
+  });
+
+  return data;
+}
+
+export async function getMe() {
+  const res = await authFetch(`${API}/api/auth/me/`, {
+    method: "GET",
+  });
+
+  const data = await safeReadJson(res, {});
+
+  if (!res.ok) {
+    throw buildError(
+      data?.detail || `Error me (${res.status})`,
+      res.status,
+      data,
+    );
+  }
+
+  return data;
+}
+
+export async function logout() {
+  const refresh = getRefreshToken();
+
+  try {
+    if (refresh) {
+      await fetchWithTimeout(
+        `${API}/api/auth/logout/`,
+        {
+          method: "POST",
+          headers: authHeaders({ "Content-Type": "application/json" }),
+          body: JSON.stringify({ refresh }),
+        },
+        10000,
+      );
+    }
+  } finally {
+    clearSession();
+  }
+}
+
+// ==========================================================
+// ORDENES
 // ==========================================================
 export async function enviarOT(payload, silent = false) {
-  if (!silent) console.log(">>> API BASE:", API);
-
-  if (!navigator.onLine) {
-    if (!silent) console.warn("Sin conexión → No puedo enviar OT");
-    const e = new Error("offline");
-    e.status = 0;
-    throw e;
+  if (!hasNetworkConnection()) {
+    throw buildError("offline", 0);
   }
 
   let approxBytes = 0;
   try {
     approxBytes = JSON.stringify(payload).length;
-  } catch {}
+  } catch {
+    approxBytes = 0;
+  }
 
   const MAX_BYTES = 4_000_000;
 
   if (approxBytes > MAX_BYTES) {
-    const e = new Error(
+    throw buildError(
       "Payload demasiado grande (fotos/firma). Reducí cantidad o compresión.",
-    );
-    e.status = 413;
-    e.body = `approxBytes=${approxBytes}`;
-    if (!silent) console.error("❌", e.message, e.body);
-    throw e;
-  }
-
-  const res = await authFetch(`${API}/api/ordenes/pdf/`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
-
-  if (!silent) {
-    console.log(
-      "AUTH enviarOT",
-      authHeaders({ "Content-Type": "application/json" }),
+      413,
+      { approxBytes },
     );
   }
+
+  const res = await authFetch(
+    `${API}/api/ordenes/pdf/`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    },
+    30000,
+  );
 
   if (!res.ok) {
     const bodyText = await res.text().catch(() => "");
-    const e = new Error(`Backend respondió ${res.status}`);
-    e.status = res.status;
-    e.body = bodyText;
-    if (!silent) console.error("❌", e.message, bodyText);
-    throw e;
+    throw buildError(`Backend respondió ${res.status}`, res.status, bodyText);
   }
 
   const pdfBlob = await res.blob();
 
   if (!silent) {
-    console.log("[API] PDF recibido", {
-      size: pdfBlob?.size,
-      type: pdfBlob?.type,
+    devLog("[API] PDF recibido", {
+      size: pdfBlob?.size || 0,
+      type: pdfBlob?.type || "application/octet-stream",
       requestId: payload?.client_request_id || null,
     });
   }
@@ -291,70 +365,78 @@ export async function enviarOT(payload, silent = false) {
   return pdfBlob;
 }
 
-// ==========================================================
-//  SINCRONIZACIÓN DE ORDENES PENDIENTES
-// ==========================================================
 export async function syncPendientes(lista, silent = true) {
-  if (!navigator.onLine) {
-    if (!silent) console.warn("Sin conexión → No puedo sincronizar");
-    const e = new Error("offline");
-    e.status = 0;
-    throw e;
+  if (!hasNetworkConnection()) {
+    throw buildError("offline", 0);
   }
 
-  const res = await authFetch(`${API}/api/ordenes/sync/`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ ordenes: lista }),
-  });
+  const res = await authFetch(
+    `${API}/api/ordenes/sync/`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ordenes: lista }),
+    },
+    30000,
+  );
+
+  const data = await safeReadJson(res, {});
 
   if (!res.ok) {
-    const msg = `Error sincronizando (HTTP ${res.status})`;
-    if (!silent) console.error(msg);
-    const e = new Error(msg);
-    e.status = res.status;
-    throw e;
+    throw buildError(
+      data?.detail || `Error sincronizando (HTTP ${res.status})`,
+      res.status,
+      data,
+    );
   }
 
-  return await res.json();
+  if (!silent) {
+    devLog("[SYNC] Órdenes sincronizadas");
+  }
+
+  return data;
 }
 
 // ==========================================================
-//  TABLEROS AUTOCOMPLETE
+// TABLEROS
 // ==========================================================
 export async function buscarTableros(q, { signal, limit = 20 } = {}) {
   const params = new URLSearchParams();
-  params.set("q", (q ?? "").trim());
+  params.set("q", String(q ?? "").trim());
   params.set(
     "limit",
     String(Number.isFinite(Number(limit)) ? parseInt(limit, 10) : 20),
   );
 
   const url = `${API}/api/tableros/?${params.toString()}`;
-  const res = await authFetch(url, { signal });
+  const res = await authFetch(url, { signal, method: "GET" });
 
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  const data = await res.json();
+  const data = await safeReadJson(res, []);
+
+  if (!res.ok) {
+    throw buildError(`HTTP ${res.status}`, res.status, data);
+  }
+
   return Array.isArray(data) ? data : [];
 }
 
-// ==========================================================
-//  TABLERO EXISTS (PRO) — valida catálogo
-// ==========================================================
 export async function tableroExists(nombre, { signal } = {}) {
-  const n = (nombre ?? "").trim();
-  if (!n) return { exists: false, nombre: "" };
+  const n = String(nombre ?? "").trim();
+  if (!n) {
+    return { exists: false, nombre: "" };
+  }
 
   const params = new URLSearchParams({ nombre: n });
   const url = `${API}/api/tableros/exists/?${params.toString()}`;
 
-  const res = await authFetch(url, { signal });
+  const res = await authFetch(url, { signal, method: "GET" });
+  const data = await safeReadJson(res, {});
 
-  console.log("AUTH tableroExists", authHeaders());
+  if (!res.ok) {
+    throw buildError(`HTTP ${res.status}`, res.status, data);
+  }
 
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-
-  return await res.json(); // {exists, nombre, zona?}
+  return data;
 }
 
 export async function getOrdenesAudit() {
@@ -362,15 +444,14 @@ export async function getOrdenesAudit() {
     method: "GET",
   });
 
-  const data = await res.json().catch(() => []);
+  const data = await safeReadJson(res, []);
 
   if (!res.ok) {
-    const e = new Error(
+    throw buildError(
       data?.detail || `Error cargando órdenes (${res.status})`,
+      res.status,
+      data,
     );
-    e.status = res.status;
-    e.body = data;
-    throw e;
   }
 
   return Array.isArray(data) ? data : [];

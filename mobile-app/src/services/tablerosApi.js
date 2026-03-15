@@ -1,4 +1,4 @@
-import { API } from "../api";
+import { API, authFetch } from "../api";
 
 const KEY = "tableros_cache_v1";
 const TTL = 24 * 60 * 60 * 1000; // 24h
@@ -7,44 +7,67 @@ function now() {
   return Date.now();
 }
 
-export async function obtenerTablerosCached() {
-  // 1) Intentar cache
+function readCache() {
   try {
     const raw = localStorage.getItem(KEY);
-    if (raw) {
-      const { ts, data } = JSON.parse(raw);
-      if (now() - ts < TTL && Array.isArray(data)) {
-        // refresco en background (no bloquea)
-        refreshTableros();
-        return data;
-      }
-    }
-  } catch {}
+    if (!raw) return null;
 
-  // 2) Si no hay cache válida, ir a red
-  return await refreshTableros();
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object") return null;
+
+    return parsed;
+  } catch {
+    return null;
+  }
 }
 
-async function refreshTableros() {
+function writeCache(data) {
   try {
-    const res = await fetch(`${API}/api/tableros/`);
-    if (!res.ok) throw new Error("Error cargando tableros");
-    const data = await res.json();
-
-    try {
-      localStorage.setItem(KEY, JSON.stringify({ ts: now(), data }));
-    } catch {}
-
-    return data;
-  } catch (e) {
-    // si no hay red, devolver lo último que haya aunque esté vencido
-    try {
-      const raw = localStorage.getItem(KEY);
-      if (raw) {
-        const { data } = JSON.parse(raw);
-        return Array.isArray(data) ? data : [];
-      }
-    } catch {}
-    return [];
+    localStorage.setItem(
+      KEY,
+      JSON.stringify({
+        ts: now(),
+        data,
+      }),
+    );
+  } catch {
+    // no romper si localStorage falla
   }
+}
+
+export async function obtenerTablerosCached({ signal } = {}) {
+  const cached = readCache();
+
+  if (cached && now() - cached.ts < TTL && Array.isArray(cached.data)) {
+    refreshTableros({ signal }).catch(() => {});
+    return cached.data;
+  }
+
+  try {
+    return await refreshTableros({ signal });
+  } catch {
+    return Array.isArray(cached?.data) ? cached.data : [];
+  }
+}
+
+async function refreshTableros({ signal } = {}) {
+  const res = await authFetch(
+    `${API}/api/tableros/`,
+    {
+      method: "GET",
+      headers: { Accept: "application/json" },
+      signal,
+    },
+    10000,
+  );
+
+  if (!res.ok) {
+    throw new Error(`Error cargando tableros (${res.status})`);
+  }
+
+  const data = await res.json().catch(() => []);
+  const safeData = Array.isArray(data) ? data : [];
+
+  writeCache(safeData);
+  return safeData;
 }

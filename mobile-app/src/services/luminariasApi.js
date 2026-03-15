@@ -1,4 +1,4 @@
-import { API } from "../api";
+import { API, authFetch } from "../api";
 
 export async function obtenerHistorialLuminarias({
   ramal = "",
@@ -7,15 +7,27 @@ export async function obtenerHistorialLuminarias({
   signal,
 } = {}) {
   const params = new URLSearchParams();
-  if (ramal) params.set("ramal", ramal);
-  if (from) params.set("from", from);
-  if (to) params.set("to", to);
+
+  if (ramal) params.set("ramal", String(ramal).trim());
+  if (from) params.set("from", String(from).trim());
+  if (to) params.set("to", String(to).trim());
 
   const url = `${API}/api/luminarias/historial/?${params.toString()}`;
 
-  const res = await fetch(url, { signal });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const res = await authFetch(
+    url,
+    {
+      method: "GET",
+      headers: { Accept: "application/json" },
+      signal,
+    },
+    10000,
+  );
 
-  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(`HTTP ${res.status}`);
+  }
+
+  const data = await res.json().catch(() => []);
   return Array.isArray(data) ? data : [];
 }
