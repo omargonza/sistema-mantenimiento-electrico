@@ -1,0 +1,186 @@
+/* =========================================================
+   DASHBOARD LUMINARIAS — TABLERO ELÉCTRICO / ANALÍTICO
+========================================================= */
+
+.lumdash-dashboard-page {
+  display: grid;
+  gap: 12px;
+}
+
+.lumdash-dashboard-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: 1fr;
+}
+
+.lumdash-chartCard {
+  display: grid;
+  gap: 12px;
+}
+
+.lumdash-chartHead {
+  display: grid;
+  gap: 4px;
+}
+
+.lumdash-chartTitle {
+  color: #fafafa;
+  font-size: 0.88rem;
+  font-weight: 950;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.lumdash-chartSub {
+  color: var(--muted);
+  font-size: 0.84rem;
+  line-height: 1.45;
+}
+
+.lumdash-chartWrap {
+  width: 100%;
+  height: 280px;
+}
+
+.lumdash-chartWrap--tall {
+  height: 320px;
+}
+
+.lumdash-explain {
+  margin-top: 2px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background:
+    linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.04),
+      rgba(255, 255, 255, 0.01)
+    ),
+    rgba(18, 18, 18, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.lumdash-explain__title {
+  font-weight: 900;
+  color: #fafafa;
+  margin-bottom: 4px;
+  font-size: 0.82rem;
+  letter-spacing: 0.04em;
+}
+
+.lumdash-explain__text {
+  color: var(--muted);
+  font-size: 0.82rem;
+  line-height: 1.5;
+}
+
+.lumdash-kpiExplain {
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 0.76rem;
+  line-height: 1.4;
+}
+
+.lumdash-kpi--default {
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.lumdash-kpi--ok {
+  border-color: rgba(34, 197, 94, 0.18);
+}
+
+.lumdash-kpi--warn {
+  border-color: rgba(212, 169, 77, 0.18);
+}
+
+.lumdash-kpi--danger {
+  border-color: rgba(239, 68, 68, 0.18);
+}
+
+.lumdash-tooltip {
+  background: rgba(10, 10, 10, 0.96);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 14px;
+  padding: 10px 12px;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.32);
+  max-width: 320px;
+}
+
+.lumdash-tooltip__title {
+  font-weight: 900;
+  color: #f8fafc;
+  margin-bottom: 4px;
+}
+
+.lumdash-tooltip__text {
+  color: #cbd5e1;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.lumdash-alert-list {
+  display: grid;
+  gap: 8px;
+}
+
+.lumdash-alert-item {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background:
+    linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.03),
+      rgba(255, 255, 255, 0.01)
+    ),
+    rgba(14, 14, 14, 0.86);
+  border-radius: 14px;
+  padding: 10px 12px;
+}
+
+.lumdash-alert-item__top {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: center;
+}
+
+.lumdash-alert-item__code {
+  font-weight: 900;
+  color: #fafafa;
+}
+
+.lumdash-alert-item__meta {
+  color: var(--muted);
+  margin-top: 4px;
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
+.lumdash-alert-item__line {
+  margin-top: 4px;
+  color: rgba(243, 244, 246, 0.92);
+}
+
+@media (min-width: 980px) {
+  .lumdash-dashboard-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .lumdash-chartWrap {
+    height: 250px;
+  }
+
+  .lumdash-chartWrap--tall {
+    height: 290px;
+  }
+
+  .lumdash-chartTitle {
+    font-size: 0.82rem;
+  }
+
+  .lumdash-chartSub,
+  .lumdash-explain__text {
+    font-size: 0.8rem;
+  }
+}

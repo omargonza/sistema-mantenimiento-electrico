@@ -1,0 +1,237 @@
+/* =========================================================
+   HISTORIAL — TABLERO ELÉCTRICO / MOBILE FIRST
+========================================================= */
+
+.historial-page {
+  display: grid;
+  gap: 12px;
+}
+
+.historial-hero {
+  display: grid;
+  gap: 12px;
+  padding-top: 14px;
+}
+
+.historial-hero__badge {
+  width: fit-content;
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 32px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background:
+    linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.05),
+      rgba(255, 255, 255, 0.01)
+    ),
+    rgba(14, 14, 14, 0.94);
+  color: rgba(243, 244, 246, 0.88);
+  font-size: 0.72rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.historial-hero__badge-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--ok);
+  box-shadow: 0 0 10px rgba(34, 197, 94, 0.35);
+}
+
+.historial-hero__title {
+  margin-top: 0.2rem;
+  margin-bottom: 0.1rem;
+}
+
+.historial-hero__text {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.55;
+  font-size: 0.94rem;
+}
+
+.historial-section,
+.historial-summary {
+  display: grid;
+  gap: 12px;
+}
+
+.historial-section__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.historial-section__title {
+  margin-top: 0;
+  margin-bottom: 0;
+}
+
+.historial-section__copy {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 0.88rem;
+  line-height: 1.5;
+}
+
+.historial-stack {
+  display: grid;
+  gap: 12px;
+}
+
+.historial-filters-grid {
+  display: grid;
+  gap: 12px;
+}
+
+.historial-inline-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: rgba(243, 244, 246, 0.7);
+  font-size: 0.75rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin-bottom: 6px;
+}
+
+.historial-actions-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+.historial-status {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  padding: 10px 12px;
+  border-radius: 12px;
+  font-size: 0.84rem;
+  line-height: 1.45;
+}
+
+.historial-status--loading {
+  color: rgba(243, 244, 246, 0.82);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background:
+    linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.035),
+      rgba(255, 255, 255, 0.01)
+    ),
+    rgba(14, 14, 14, 0.88);
+}
+
+.historial-error {
+  margin-top: 0;
+}
+
+.historial-summary__main {
+  display: grid;
+  gap: 4px;
+}
+
+.historial-summary__main strong {
+  font-size: 1rem;
+  color: #fafafa;
+  letter-spacing: 0.01em;
+}
+
+.historial-summary__pending-note {
+  margin-left: 8px;
+}
+
+.historial-summary__chips {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.historial-summary__tab-chip {
+  min-height: 38px;
+  padding-left: 12px;
+  padding-right: 12px;
+}
+
+.historial-summary__more {
+  font-size: 0.82rem;
+}
+
+.historial-timeline {
+  margin-top: 0;
+}
+
+.historial-group-block {
+  margin-top: 10px;
+}
+
+.historial-group-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.historial-group-header__title {
+  font-weight: 950;
+  color: #fafafa;
+  letter-spacing: 0.02em;
+}
+
+.historial-group-header__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 0.76rem;
+}
+
+.historial-item {
+  padding-top: 12px;
+  padding-bottom: 12px;
+}
+
+.historial-item__meta {
+  margin-top: 2px;
+  font-size: 0.82rem;
+  line-height: 1.4;
+}
+
+.historial-item__desc {
+  margin-top: 8px;
+}
+
+.historial-item__extra {
+  margin-top: 8px;
+  line-height: 1.35;
+  font-size: 0.82rem;
+  display: grid;
+  gap: 4px;
+}
+
+.historial-pagination {
+  display: flex;
+  gap: 10px;
+  margin-top: 14px;
+  flex-wrap: wrap;
+}
+
+.historial-empty {
+  margin-top: 0;
+}
+
+@media (min-width: 680px) {
+  .historial-filters-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

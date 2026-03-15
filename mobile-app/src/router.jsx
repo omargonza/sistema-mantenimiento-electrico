@@ -13,12 +13,41 @@ import ProtectedRoute from "./components/ProtectedRoute";
 import AuditoriaOT from "./pages/AuditoriaOT";
 import { getAccessToken, getCurrentUser } from "./api";
 
-function AppLayout({ children }) {
-  const location = useLocation();
+function isValidToken(token) {
+  if (!token || typeof token !== "string") return false;
+
+  const clean = token.trim();
+  if (!clean || clean === "null" || clean === "undefined") return false;
+
+  return true;
+}
+
+function isValidUser(user) {
+  if (!user) return false;
+
+  if (typeof user === "string") {
+    const clean = user.trim();
+    if (!clean || clean === "null" || clean === "undefined") return false;
+    return true;
+  }
+
+  if (typeof user === "object") {
+    return Object.keys(user).length > 0;
+  }
+
+  return false;
+}
+
+function isAuthenticated() {
   const token = getAccessToken();
   const user = getCurrentUser();
+  return isValidToken(token) && isValidUser(user);
+}
 
-  const isLogged = Boolean(token && user);
+function AppLayout({ children }) {
+  const location = useLocation();
+  const isLogged = isAuthenticated();
+
   const hideBottomBar = location.pathname === "/login" || !isLogged;
 
   return (
@@ -30,18 +59,12 @@ function AppLayout({ children }) {
 }
 
 function RootRedirect() {
-  const token = getAccessToken();
-  const user = getCurrentUser();
-  const isLogged = Boolean(token && user);
-
+  const isLogged = isAuthenticated();
   return <Navigate to={isLogged ? "/dashboard" : "/login"} replace />;
 }
 
 function LoginRoute() {
-  const token = getAccessToken();
-  const user = getCurrentUser();
-  const isLogged = Boolean(token && user);
-
+  const isLogged = isAuthenticated();
   return isLogged ? <Navigate to="/dashboard" replace /> : <Login />;
 }
 

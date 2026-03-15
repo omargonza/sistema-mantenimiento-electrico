@@ -1,32 +1,48 @@
 // src/pages/Dashboard.jsx
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import {
+  Activity,
+  Bolt,
+  CalendarDays,
+  CheckCircle2,
+  FileText,
+  HardDrive,
+  LayoutGrid,
+  Lightbulb,
+  ListFilter,
+  RefreshCw,
+  ShieldAlert,
+  Star,
+} from "lucide-react";
 import "../styles/dashboard.css";
 
 import { queryOts, migrateOtsOperationalFields } from "../storage/ot_db";
 import AdminAuditButton from "../components/AdminAuditButton";
 
 /**
- * Feature flags (para apagar áreas que hoy confunden en campo)
- * - Activás cuando decidas usarlas.
+ * Feature flags
  */
-const SHOW_SEMAFORO_TABLEROS = true; // por defecto encendido (panel semáforo)
-const SHOW_SEMAFORO_CONTROLS = true; // filtro + migración (panel semáforo)
-const SHOW_MIGRATION_BUTTON = true; // por defecto apagado (botón "Migrar")
+const SHOW_SEMAFORO_TABLEROS = true;
+const SHOW_SEMAFORO_CONTROLS = true;
+const SHOW_MIGRATION_BUTTON = true;
 
 function isoToday() {
   return new Date().toISOString().slice(0, 10);
 }
+
 function isoYesterday() {
   const d = new Date();
   d.setDate(d.getDate() - 1);
   return d.toISOString().slice(0, 10);
 }
+
 function lastNDaysIso(n) {
   const d = new Date();
   d.setDate(d.getDate() - n);
   return d.toISOString().slice(0, 10);
 }
+
 function formatMB(bytes) {
   const mb = bytes / (1024 * 1024);
   return `${mb.toFixed(mb >= 10 ? 0 : 1)} MB`;
@@ -44,17 +60,16 @@ function normalizeKey(s) {
 function tableroColor(estado) {
   switch (estado) {
     case "OK":
-      return "hsl(120 70% 45%)";
+      return "var(--ok)";
     case "PARCIAL":
-      return "hsl(35 85% 45%)";
+      return "var(--warning)";
     case "CRITICO":
-      return "hsl(0 70% 45%)";
+      return "var(--danger)";
     default:
-      return "hsl(215 15% 45%)"; // SIN ESTADO
+      return "rgba(156, 163, 175, 0.95)";
   }
 }
 
-// ✅ Lee campos operativos desde detalle (nuevo) con fallback
 function readOpFields(ot) {
   const det = ot?.detalle || {};
   const alcance = String(det?.alcance ?? ot?.alcance ?? "")
@@ -75,17 +90,31 @@ function readOpFields(ot) {
   return { alcance, resultado, estado_tablero, luminaria_estado };
 }
 
+function KpiCard({ icon: Icon, label, value, sub, tone = "neutral" }) {
+  return (
+    <div className={`kpi-card kpi-card--${tone}`}>
+      <div className="kpi-card__top">
+        <div className="kpi-card__icon">
+          <Icon size={18} strokeWidth={2.2} />
+        </div>
+        <div className="kpi-card__label">{label}</div>
+      </div>
+
+      <div className="kpi-card__value">
+        {value}
+        {sub ? <span className="kpi-card__sub">{sub}</span> : null}
+      </div>
+    </div>
+  );
+}
+
 export default function Dashboard() {
   const navigate = useNavigate();
 
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
-
-  // Filtro SOLO para el panel semáforo (queda listo aunque el panel esté apagado)
   const [filtroEstado, setFiltroEstado] = useState("");
-  // "" | "CRITICO" | "PARCIAL" | "OK" | "SIN_ESTADO"
 
-  // Trae items desde IndexedDB (universo)
   const refresh = async () => {
     setLoading(true);
     try {
@@ -106,7 +135,6 @@ export default function Dashboard() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // KPIs “globales” (universo)
   const insights = useMemo(() => {
     const total = items.length;
     const hoy = isoToday();
@@ -148,9 +176,11 @@ export default function Dashboard() {
     const topTableros = [...byTablero.entries()]
       .sort((a, b) => b[1] - a[1])
       .slice(0, 5);
+
     const topTecnicos = [...byTecnico.entries()]
       .sort((a, b) => b[1] - a[1])
       .slice(0, 5);
+
     const topZonas = [...byZona.entries()]
       .sort((a, b) => b[1] - a[1])
       .slice(0, 5);
@@ -174,12 +204,10 @@ export default function Dashboard() {
     };
   }, [items]);
 
-  // ========= Panel tableros (semáforo manual + luminarias aparte) =========
   const tableroPanel = useMemo(() => {
-    // Si está apagado, devolvemos vacío (igual dejamos el código listo)
     if (!SHOW_SEMAFORO_TABLEROS) return [];
 
-    const map = new Map(); // tableroKey -> info
+    const map = new Map();
 
     for (const ot of items) {
       const k = normalizeKey(ot?.tablero);
@@ -188,7 +216,7 @@ export default function Dashboard() {
       if (!map.has(k)) {
         map.set(k, {
           name: (ot.tablero || "").trim() || "Sin tablero",
-          estado: null, // estado explícito manual (TABLERO/CIRCUITO)
+          estado: null,
           lumReparadas: 0,
           lumPendientes: 0,
         });
@@ -199,28 +227,26 @@ export default function Dashboard() {
       const { alcance, resultado, estado_tablero, luminaria_estado } =
         readOpFields(ot);
 
-      // Semáforo: solo TABLERO/CIRCUITO con estado explícito
       if ((alcance === "TABLERO" || alcance === "CIRCUITO") && estado_tablero) {
-        info.estado = estado_tablero; // último manda
+        info.estado = estado_tablero;
       }
 
-      // Luminarias aparte (no afectan semáforo)
       if (alcance === "LUMINARIA") {
         const ok =
           luminaria_estado === "REPARADO" ||
           luminaria_estado === "ENCENDIDO" ||
           resultado === "COMPLETO";
+
         if (ok) info.lumReparadas += 1;
         else info.lumPendientes += 1;
       }
     }
 
     let arr = [...map.values()].map((x) => {
-      const estadoFinal = x.estado; // null => SIN ESTADO
+      const estadoFinal = x.estado;
       return { ...x, estadoFinal, color: tableroColor(estadoFinal) };
     });
 
-    // ✅ aplicar filtro de estado (solo panel)
     if (filtroEstado) {
       arr = arr.filter((t) => {
         if (filtroEstado === "SIN_ESTADO") return !t.estadoFinal;
@@ -228,7 +254,6 @@ export default function Dashboard() {
       });
     }
 
-    // Orden: sin estado primero, luego crítico, luego parcial, luego ok
     const rank = (e) =>
       e === "OK" ? 3 : e === "PARCIAL" ? 2 : e === "CRITICO" ? 1 : 0;
 
@@ -241,11 +266,9 @@ export default function Dashboard() {
     return arr;
   }, [items, filtroEstado]);
 
-  // (Opcional) Migración: dejada lista por si la necesitás
   const runMigration = async () => {
     try {
       const res = await migrateOtsOperationalFields();
-      console.log("Migración OK:", res);
       alert(
         `Migración OK\nEscaneadas: ${res.scanned}\nActualizadas: ${res.updated}`,
       );
@@ -257,147 +280,226 @@ export default function Dashboard() {
   };
 
   return (
-    <div className="page">
-      <h2 className="titulo">Centro de Control</h2>
+    <div className="page dashboard-page">
+      <div className="dashboard-hero card">
+        <div className="dashboard-hero__badge">
+          <span className="dashboard-hero__badge-dot" />
+          Centro de control operativo
+        </div>
 
-      {/* Accesos rápidos */}
-      <div className="card" style={{ marginTop: 10 }}>
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
-            gap: 10,
-          }}
-        >
+        <div className="dashboard-hero__head">
+          <div>
+            <h2 className="titulo dashboard-hero__title">Centro de Control</h2>
+            <p className="dashboard-hero__text">
+              Panel general de órdenes de trabajo, actividad reciente, estado de
+              tableros y accesos operativos del sistema.
+            </p>
+          </div>
+
+          <div className="dashboard-hero__status">
+            <div className="dashboard-status-chip">
+              <Activity size={16} strokeWidth={2.2} />
+              <span>{loading ? "Sincronizando" : "Sistema operativo"}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="card dashboard-actions-card">
+        <div className="dashboard-section-head">
+          <div>
+            <div className="subtitulo" style={{ marginTop: 0 }}>
+              Accesos rápidos
+            </div>
+            <p className="dashboard-section-copy">
+              Operaciones frecuentes para técnicos y supervisión.
+            </p>
+          </div>
+        </div>
+
+        <div className="dashboard-actions-grid">
           <button
             type="button"
-            className="btn-outline"
+            className="dashboard-action-btn"
             onClick={() => navigate("/nueva")}
           >
-            ➕ Nueva OT
+            <span className="dashboard-action-btn__icon">
+              <Bolt size={18} strokeWidth={2.2} />
+            </span>
+            <span className="dashboard-action-btn__text">
+              <strong>Nueva OT</strong>
+              <small>Registrar intervención</small>
+            </span>
           </button>
 
           <button
             type="button"
-            className="btn-outline"
+            className="dashboard-action-btn"
             onClick={() => navigate("/mis-pdfs")}
           >
-            📜 Ver OTs
+            <span className="dashboard-action-btn__icon">
+              <FileText size={18} strokeWidth={2.2} />
+            </span>
+            <span className="dashboard-action-btn__text">
+              <strong>Ver OTs</strong>
+              <small>PDFs y documentos</small>
+            </span>
           </button>
 
           <button
             type="button"
-            className="btn-outline"
+            className="dashboard-action-btn"
             onClick={() => navigate("/historial-luminarias")}
           >
-            💡 Luminarias
+            <span className="dashboard-action-btn__icon">
+              <Lightbulb size={18} strokeWidth={2.2} />
+            </span>
+            <span className="dashboard-action-btn__text">
+              <strong>Luminarias</strong>
+              <small>Historial específico</small>
+            </span>
           </button>
         </div>
 
-        <div
-          style={{
-            display: "flex",
-            gap: 10,
-            justifyContent: "flex-end",
-            marginTop: 10,
-          }}
-        >
+        <div className="dashboard-actions-foot">
           <button type="button" className="btn-outline" onClick={refresh}>
-            🔄 Actualizar
+            <RefreshCw size={16} strokeWidth={2.2} />
+            <span>Actualizar</span>
           </button>
-        </div>
 
-        {loading && (
-          <div className="muted" style={{ marginTop: 10 }}>
-            Cargando…
-          </div>
-        )}
-
-        <div className="muted" style={{ marginTop: 10, fontSize: 12 }}>
-          Dashboard = KPIs + accesos. Los listados completos viven en Historial.
+          {loading ? (
+            <div className="dashboard-loading-note">Cargando información…</div>
+          ) : (
+            <div className="dashboard-loading-note">
+              Dashboard = KPIs + accesos. Los listados completos viven en
+              Historial.
+            </div>
+          )}
         </div>
       </div>
 
-      {/* KPIs */}
-      <div className="kpis" style={{ marginTop: 12 }}>
-        <div className="kpi">
-          <div className="kpi-label">Total OTs</div>
-          <div className="kpi-value">{insights.total}</div>
-        </div>
-        <div className="kpi">
-          <div className="kpi-label">Hoy</div>
-          <div className="kpi-value">{insights.countHoy}</div>
-        </div>
-        <div className="kpi">
-          <div className="kpi-label">Ayer</div>
-          <div className="kpi-value">{insights.countAyer}</div>
-        </div>
-        <div className="kpi">
-          <div className="kpi-label">Últimos 7 días</div>
-          <div className="kpi-value">{insights.count7}</div>
-        </div>
-        <div className="kpi">
-          <div className="kpi-label">Enviados</div>
-          <div className="kpi-value">
-            {insights.enviados}{" "}
-            <span className="kpi-sub">({insights.pctEnviados}%)</span>
-          </div>
-        </div>
-        <div className="kpi">
-          <div className="kpi-label">Favoritos</div>
-          <div className="kpi-value">
-            {insights.fav} <span className="kpi-sub">({insights.pctFav}%)</span>
-          </div>
-        </div>
-        <div className="kpi">
-          <div className="kpi-label">Espacio aprox</div>
-          <div className="kpi-value">{formatMB(insights.bytes)}</div>
-        </div>
+      <div className="dashboard-kpis-grid">
+        <KpiCard
+          icon={LayoutGrid}
+          label="Total OTs"
+          value={insights.total}
+          tone="neutral"
+        />
+        <KpiCard
+          icon={CalendarDays}
+          label="Hoy"
+          value={insights.countHoy}
+          tone="ok"
+        />
+        <KpiCard
+          icon={CalendarDays}
+          label="Ayer"
+          value={insights.countAyer}
+          tone="neutral"
+        />
+        <KpiCard
+          icon={Activity}
+          label="Últimos 7 días"
+          value={insights.count7}
+          tone="neutral"
+        />
+        <KpiCard
+          icon={CheckCircle2}
+          label="Enviados"
+          value={insights.enviados}
+          sub={`(${insights.pctEnviados}%)`}
+          tone="ok"
+        />
+        <KpiCard
+          icon={Star}
+          label="Favoritos"
+          value={insights.fav}
+          sub={`(${insights.pctFav}%)`}
+          tone="warn"
+        />
+        <KpiCard
+          icon={HardDrive}
+          label="Espacio aprox"
+          value={formatMB(insights.bytes)}
+          tone="neutral"
+        />
       </div>
 
-      {/* Top stats (resumen, no listado largo) */}
-      <div className="stats-grid">
+      <div className="dashboard-stats-grid">
         {insights.topZonas.length > 0 && (
-          <div className="statbox">
-            <div className="stat-title">Top zonas</div>
-            {insights.topZonas.map(([name, n]) => (
-              <div className="stat-row" key={name}>
-                <span className="stat-name">{name}</span>
-                <span className="stat-val">{n}</span>
-              </div>
-            ))}
+          <div className="card statbox statbox--panel">
+            <div className="statbox__head">
+              <div className="statbox__title">Top zonas</div>
+            </div>
+
+            <div className="statbox__list">
+              {insights.topZonas.map(([name, n]) => (
+                <div className="stat-row" key={name}>
+                  <span className="stat-name">{name}</span>
+                  <span className="stat-val">{n}</span>
+                </div>
+              ))}
+            </div>
           </div>
         )}
 
         {insights.topTableros.length > 0 && (
-          <div className="statbox">
-            <div className="stat-title">Top tableros</div>
-            {insights.topTableros.map(([name, n]) => (
-              <div className="stat-row" key={name}>
-                <span className="stat-name">{name}</span>
-                <span className="stat-val">{n}</span>
-              </div>
-            ))}
+          <div className="card statbox statbox--panel">
+            <div className="statbox__head">
+              <div className="statbox__title">Top tableros</div>
+            </div>
+
+            <div className="statbox__list">
+              {insights.topTableros.map(([name, n]) => (
+                <div className="stat-row" key={name}>
+                  <span className="stat-name">{name}</span>
+                  <span className="stat-val">{n}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {insights.topTecnicos.length > 0 && (
+          <div className="card statbox statbox--panel">
+            <div className="statbox__head">
+              <div className="statbox__title">Top técnicos</div>
+            </div>
+
+            <div className="statbox__list">
+              {insights.topTecnicos.map(([name, n]) => (
+                <div className="stat-row" key={name}>
+                  <span className="stat-name">{name}</span>
+                  <span className="stat-val">{n}</span>
+                </div>
+              ))}
+            </div>
           </div>
         )}
       </div>
 
-      {/* Controles del Panel (SEMÁFORO) — deshabilitado por ahora */}
       {SHOW_SEMAFORO_CONTROLS && (
-        <div className="card" style={{ marginTop: 12 }}>
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "1fr 1fr",
-              gap: 10,
-              alignItems: "center",
-            }}
-          >
+        <div className="card dashboard-filter-card">
+          <div className="dashboard-section-head">
             <div>
-              <div className="muted" style={{ fontSize: 12, marginBottom: 6 }}>
-                Filtro semáforo
+              <div className="subtitulo" style={{ marginTop: 0 }}>
+                Panel semáforo
               </div>
+              <p className="dashboard-section-copy">
+                Filtrado visual del estado de tableros y circuitos.
+              </p>
+            </div>
+          </div>
+
+          <div className="dashboard-filter-grid">
+            <div className="dashboard-filter-field">
+              <label htmlFor="filtroEstado" className="dashboard-inline-label">
+                <ListFilter size={14} strokeWidth={2.2} />
+                <span>Filtro semáforo</span>
+              </label>
+
               <select
+                id="filtroEstado"
                 value={filtroEstado}
                 onChange={(e) => setFiltroEstado(e.target.value)}
               >
@@ -409,11 +511,10 @@ export default function Dashboard() {
               </select>
             </div>
 
-            <div
-              style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}
-            >
+            <div className="dashboard-filter-actions">
               <button type="button" className="btn-outline" onClick={refresh}>
-                🔄 Actualizar
+                <RefreshCw size={16} strokeWidth={2.2} />
+                <span>Actualizar</span>
               </button>
 
               {SHOW_MIGRATION_BUTTON && (
@@ -421,9 +522,10 @@ export default function Dashboard() {
                   type="button"
                   className="btn-outline"
                   onClick={runMigration}
-                  title="Actualiza campos operativos en OTs viejas (si hace falta)"
+                  title="Actualiza campos operativos en OTs viejas"
                 >
-                  🧩 Migrar
+                  <ShieldAlert size={16} strokeWidth={2.2} />
+                  <span>Migrar</span>
                 </button>
               )}
             </div>
@@ -431,14 +533,18 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* Panel semáforo — deshabilitado por ahora */}
       {SHOW_SEMAFORO_TABLEROS && (
-        <div className="panel-tableros">
-          <div className="panel-title">
-            Estado de tableros
-            <span className="panel-sub">
-              Semáforo (TABLERO/CIRCUITO) + luminarias aparte
-            </span>
+        <div className="panel-tableros card">
+          <div className="dashboard-section-head dashboard-section-head--tight">
+            <div>
+              <div className="subtitulo" style={{ marginTop: 0 }}>
+                Estado de tableros
+              </div>
+              <p className="dashboard-section-copy">
+                Semáforo de TABLERO / CIRCUITO con luminarias informadas por
+                separado.
+              </p>
+            </div>
           </div>
 
           <div className="panel-grid">
@@ -450,11 +556,16 @@ export default function Dashboard() {
                 onClick={() =>
                   navigate(`/historial?tablero=${encodeURIComponent(t.name)}`)
                 }
-                style={{ borderColor: t.color, color: t.color }}
+                style={{
+                  "--tablero-color": t.color,
+                }}
               >
                 <div className="tablero-head">
-                  <span className="dot" style={{ background: t.color }} />
-                  <span className="nm">{t.name}</span>
+                  <div className="tablero-head__left">
+                    <span className="dot" />
+                    <span className="nm">{t.name}</span>
+                  </div>
+
                   <span
                     className={`badge ${
                       t.estadoFinal ? t.estadoFinal.toLowerCase() : "none"
@@ -465,22 +576,28 @@ export default function Dashboard() {
                 </div>
 
                 <div className="tablero-foot">
-                  <span className="mini">Luminarias OK: {t.lumReparadas}</span>
-                  <span className="mini">Pend: {t.lumPendientes}</span>
+                  <span className="mini">
+                    Luminarias OK: <strong>{t.lumReparadas}</strong>
+                  </span>
+                  <span className="mini">
+                    Pend: <strong>{t.lumPendientes}</strong>
+                  </span>
                 </div>
               </button>
             ))}
           </div>
 
           {!loading && tableroPanel.length === 0 && (
-            <div className="muted" style={{ marginTop: 10 }}>
-              No hay tableros para mostrar (¿todavía no cargaste OTs con
-              tablero?).
+            <div className="dashboard-empty-state">
+              No hay tableros para mostrar todavía.
             </div>
           )}
         </div>
       )}
-      <AdminAuditButton />
+
+      <div className="dashboard-admin-row">
+        <AdminAuditButton />
+      </div>
     </div>
   );
 }

@@ -1,358 +1,386 @@
 /* =========================================================
-   OP MODE — UI Operador (táctil, rápido, sin metal pesado)
-   Scope: SOLO dentro de .op-mode
+   NUEVA OT — TABLERO OPERADOR / MOBILE FIRST
 ========================================================= */
 
-.op-mode {
-  /* tokens locales (no rompen el theme global) */
-  --op-bg: #0b1220;
-  --op-surface: rgba(15, 23, 42, 0.92);
-  --op-surface2: rgba(2, 6, 23, 0.55);
-
-  --op-text: #e5e7eb;
-  --op-muted: rgba(203, 213, 225, 0.72);
-
-  --op-border: rgba(148, 163, 184, 0.18);
-  --op-border2: rgba(148, 163, 184, 0.28);
-
-  --op-accent: #22c55e; /* OK */
-  --op-accent2: #38bdf8; /* info */
-  --op-warn: #f59e0b;
-  --op-danger: #ef4444;
-
-  --op-radius: 16px;
-  --op-h: 52px; /* táctil */
-  --op-shadow: 0 10px 22px rgba(2, 6, 23, 0.55);
-  --op-focus: 0 0 0 3px rgba(56, 189, 248, 0.22);
-
-  color: var(--op-text);
-}
-/* Fondo: sobrio, gris plata */
-:root {
-  --op-bg: #0b1220;
+.nuevaot-page {
+  display: grid;
+  gap: 12px;
 }
 
-.op-mode.page {
+.nuevaot-hero {
+  display: grid;
+  gap: 12px;
+  padding-top: 14px;
+}
+
+.nuevaot-hero__badge {
+  width: fit-content;
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 32px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
   background:
-    radial-gradient(
-      900px 520px at 15% 0%,
-      rgba(192, 198, 210, 0.14),
-      /* plata */ transparent 55%
+    linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.05),
+      rgba(255, 255, 255, 0.01)
     ),
-    radial-gradient(
-      900px 520px at 90% 15%,
-      rgba(170, 178, 192, 0.12),
-      /* plata (variante) */ transparent 55%
-    ),
-    var(--op-bg);
-}
-
-/* Cards: industriales */
-.op-mode .card {
-  background: linear-gradient(180deg, var(--op-surface), rgba(2, 6, 23, 0.88));
-  border: 1px solid var(--op-border);
-  border-radius: var(--op-radius);
-  box-shadow: var(--op-shadow);
-}
-
-/* Títulos */
-.op-mode .titulo {
-  color: #f8fafc;
+    rgba(14, 14, 14, 0.94);
+  color: rgba(243, 244, 246, 0.88);
+  font-size: 0.72rem;
   font-weight: 900;
-  letter-spacing: 0.02em;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
-.op-mode .muted,
-.op-mode .text-muted {
-  color: var(--op-muted);
+.nuevaot-hero__badge-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--ok);
+  box-shadow: 0 0 10px rgba(34, 197, 94, 0.35);
 }
 
-/* Inputs / selects / textarea */
-.op-mode input,
-.op-mode select,
-.op-mode textarea {
-  background: rgba(15, 23, 42, 0.94);
-  color: var(--op-text);
-  border: 1px solid var(--op-border2);
-  border-radius: 14px;
+.nuevaot-hero__title {
+  margin-top: 0.2rem;
+  margin-bottom: 0.1rem;
 }
 
-.op-mode input,
-.op-mode select {
-  height: var(--op-h);
-  padding: 0 0.9rem;
-  font-size: 1rem;
+.nuevaot-hero__text {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.55;
+  font-size: 0.94rem;
 }
 
-.op-mode textarea {
-  padding: 0.75rem 0.9rem;
+.nuevaot-section {
+  display: grid;
+  gap: 12px;
+}
+
+.nuevaot-section__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.nuevaot-section__title {
+  margin-top: 0;
+  margin-bottom: 0;
+}
+
+.nuevaot-section__copy {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 0.88rem;
+  line-height: 1.5;
+}
+
+.nuevaot-grid {
+  display: grid;
+  gap: 12px;
+}
+
+.nuevaot-stack {
+  display: grid;
+  gap: 12px;
+}
+
+.nuevaot-inline-note {
+  min-height: 42px;
+  display: flex;
+  align-items: center;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background:
+    linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.035),
+      rgba(255, 255, 255, 0.01)
+    ),
+    rgba(16, 16, 16, 0.88);
+  color: rgba(243, 244, 246, 0.82);
+  font-size: 0.84rem;
   line-height: 1.45;
 }
 
-.op-mode input:focus,
-.op-mode select:focus,
-.op-mode textarea:focus {
-  outline: none;
-  border-color: rgba(56, 189, 248, 0.55);
-  box-shadow: var(--op-focus);
+.nuevaot-alert {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  padding: 10px 12px;
+  border-radius: 12px;
+  font-size: 0.84rem;
+  line-height: 1.45;
 }
 
-/* Botones: claros, “operativos” */
-.op-mode .btn,
-.op-mode .btn-outline,
-.op-mode .btn-add {
-  height: 52px;
-  border-radius: 999px;
-  font-weight: 950;
+.nuevaot-alert--warn {
+  color: rgba(255, 244, 210, 0.96);
+  border: 1px solid rgba(212, 169, 77, 0.26);
+  background: rgba(212, 169, 77, 0.12);
+}
+
+.nuevaot-actions-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.nuevaot-subcard {
+  display: grid;
+  gap: 10px;
+}
+
+.nuevaot-subcard__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.nuevaot-subcard__title {
+  font-weight: 900;
+  color: #fafafa;
   letter-spacing: 0.02em;
-  cursor: pointer;
 }
 
-.op-mode .btn {
-  border: 1px solid rgba(34, 197, 94, 0.4);
-  background: linear-gradient(
-    180deg,
-    rgba(34, 197, 94, 0.22),
-    rgba(2, 6, 23, 0.35)
-  );
-  color: rgba(240, 253, 244, 0.96);
-  box-shadow: 0 14px 28px rgba(34, 197, 94, 0.14);
+.nuevaot-history-list {
+  display: grid;
+  gap: 10px;
 }
 
-.op-mode .btn:hover {
-  border-color: rgba(34, 197, 94, 0.6);
-}
-
-.op-mode .btn-outline,
-.op-mode .btn-add {
-  border: 1px solid var(--op-border2);
-  background: rgba(15, 23, 42, 0.7);
-  color: rgba(226, 232, 240, 0.95);
-  box-shadow: none;
-}
-
-.op-mode .btn:active,
-.op-mode .btn-outline:active,
-.op-mode .btn-add:active {
-  transform: translateY(1px);
-}
-
-/* CTA final (Enviar) — “operador”: destacado pero sobrio */
-.op-mode .btn-enviar {
-  height: 56px;
-  border-radius: 999px;
-  font-weight: 1000;
-  letter-spacing: 0.02em;
-  color: rgba(240, 253, 244, 0.98);
-  border: 1px solid rgba(34, 197, 94, 0.55);
-  background: linear-gradient(
-    90deg,
-    rgba(34, 197, 94, 0.92),
-    rgba(34, 197, 94, 0.55)
-  );
-  box-shadow: 0 18px 36px rgba(34, 197, 94, 0.18);
-}
-
-/* Chips (si usás) */
-.op-mode .chip,
-.op-mode .chip-toggle {
-  background: rgba(15, 23, 42, 0.72);
-  border: 1px solid var(--op-border2);
-  color: rgba(226, 232, 240, 0.92);
-}
-
-.op-mode .chip-toggle.is-on {
-  border-color: rgba(34, 197, 94, 0.55);
-  box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.12);
-  background: rgba(34, 197, 94, 0.1);
-}
-
-/* =========================================================
-   OP MODE — UI Operador (táctil, rápido)
-   - Override robusto: funciona si .op-mode está en wrapper o en .page
-========================================================= */
-
-/* Tokens locales */
-.op-mode {
-  --op-bg: #0b1220;
-  --op-surface: rgba(15, 23, 42, 0.92);
-  --op-surface2: rgba(2, 6, 23, 0.55);
-
-  --op-text: #e5e7eb;
-  --op-muted: rgba(203, 213, 225, 0.72);
-
-  --op-border: rgba(148, 163, 184, 0.18);
-  --op-border2: rgba(148, 163, 184, 0.28);
-
-  --op-ok: #22c55e;
-  --op-info: #38bdf8;
-  --op-warn: #f59e0b;
-  --op-danger: #ef4444;
-
-  --op-radius: 16px;
-  --op-h: 52px;
-  --op-shadow: 0 10px 22px rgba(2, 6, 23, 0.55);
-  --op-focus: 0 0 0 3px rgba(56, 189, 248, 0.22);
-
-  color: var(--op-text);
-}
-
-/* Fondo: aplicá donde caiga .op-mode */
-.page.op-mode,
-.op-mode.page,
-.op-mode .page {
+.nuevaot-history-item {
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
   background:
-    radial-gradient(
-      900px 520px at 15% 0%,
-      rgba(34, 197, 94, 0.1),
-      transparent 55%
+    linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.03),
+      rgba(255, 255, 255, 0.01)
     ),
-    radial-gradient(
-      900px 520px at 90% 15%,
-      rgba(56, 189, 248, 0.1),
-      transparent 55%
+    rgba(12, 12, 12, 0.86);
+}
+
+.nuevaot-history-item__meta {
+  color: rgba(243, 244, 246, 0.56);
+  font-size: 0.74rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.nuevaot-history-item__text {
+  margin-top: 6px;
+  line-height: 1.35;
+  color: #f3f4f6;
+  font-size: 0.92rem;
+}
+
+.nuevaot-history-item__extra {
+  margin-top: 8px;
+  color: rgba(243, 244, 246, 0.66);
+  font-size: 0.78rem;
+  line-height: 1.45;
+}
+
+.nuevaot-chip-block {
+  display: grid;
+  gap: 8px;
+}
+
+.nuevaot-chip-block__label {
+  font-size: 0.78rem;
+}
+
+.nuevaot-km-summary {
+  min-height: 72px;
+  display: grid;
+  align-content: center;
+  gap: 4px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background:
+    linear-gradient(rgba(255, 255, 255, 0.02) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.02) 1px, transparent 1px),
+    linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.045),
+      rgba(255, 255, 255, 0.01)
     ),
-    var(--op-bg) !important;
+    linear-gradient(180deg, #171717 0%, #101010 100%);
+  background-size:
+    22px 22px,
+    22px 22px,
+    auto,
+    auto;
 }
 
-/* Cards */
-.op-mode .card {
-  background: linear-gradient(
-    180deg,
-    var(--op-surface),
-    rgba(2, 6, 23, 0.88)
-  ) !important;
-  border: 1px solid var(--op-border) !important;
-  border-radius: var(--op-radius) !important;
-  box-shadow: var(--op-shadow) !important;
+.nuevaot-km-summary__label {
+  color: rgba(243, 244, 246, 0.62);
+  font-size: 0.76rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
-/* Títulos */
-.op-mode .titulo {
-  color: #f8fafc !important;
-  font-weight: 950 !important;
-  letter-spacing: 0.02em !important;
-}
-
-.op-mode .muted,
-.op-mode .text-muted {
-  color: var(--op-muted) !important;
-}
-
-/* Inputs */
-.op-mode input,
-.op-mode select,
-.op-mode textarea {
-  background: rgba(15, 23, 42, 0.94) !important;
-  color: var(--op-text) !important;
-  border: 1px solid var(--op-border2) !important;
-  border-radius: 14px !important;
-  box-sizing: border-box;
-  appearance: none;
-  -webkit-appearance: none;
-  font-weight: 800;
-}
-
-.op-mode input,
-.op-mode select {
-  height: var(--op-h) !important;
-  padding: 0 0.9rem !important;
-  font-size: 1rem !important;
-}
-
-.op-mode textarea {
-  padding: 0.75rem 0.9rem !important;
-  line-height: 1.45 !important;
-}
-
-.op-mode input::placeholder,
-.op-mode textarea::placeholder {
-  color: rgba(203, 213, 225, 0.55);
-}
-
-.op-mode input:focus,
-.op-mode select:focus,
-.op-mode textarea:focus {
-  outline: none;
-  border-color: rgba(56, 189, 248, 0.55) !important;
-  box-shadow: var(--op-focus) !important;
-}
-
-/* Botones (compat con tus clases reales) */
-.op-mode .btn,
-.op-mode .btn-outline,
-.op-mode .btn-add,
-.op-mode .btn-mini {
-  height: 52px;
-  border-radius: 999px;
+.nuevaot-km-summary__value {
+  color: #fafafa;
+  font-size: 1.15rem;
   font-weight: 950;
-  letter-spacing: 0.02em;
+  letter-spacing: -0.02em;
+}
+
+.nuevaot-hint {
+  display: grid;
+  gap: 8px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background:
+    linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.04),
+      rgba(255, 255, 255, 0.01)
+    ),
+    rgba(14, 14, 14, 0.92);
+  color: rgba(243, 244, 246, 0.86);
+}
+
+.nuevaot-hint strong {
+  color: #fafafa;
+}
+
+.nuevaot-hint ul {
+  margin: 0;
+  padding-left: 1.1rem;
+  display: grid;
+  gap: 6px;
+}
+
+.nuevaot-hint small {
+  color: rgba(243, 244, 246, 0.66);
+  line-height: 1.45;
+}
+
+.nuevaot-signature-card {
+  display: grid;
+  gap: 12px;
+}
+
+.nuevaot-signature-canvas {
+  width: 100%;
+  height: 180px;
+  border-radius: 14px;
+  background: #ffffff;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  touch-action: none;
+  display: block;
+}
+
+.nuevaot-signature-actions {
+  display: grid;
+  gap: 10px;
+}
+
+.nuevaot-signature-preview {
+  display: grid;
+  gap: 8px;
+}
+
+.nuevaot-signature-preview__label {
+  margin-bottom: 0;
+}
+
+.nuevaot-signature-preview__img {
+  width: 100%;
+  max-width: 520px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: #fff;
+}
+
+.nuevaot-photo-actions {
+  display: grid;
+  gap: 10px;
+}
+
+.nuevaot-photo-picker {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
   cursor: pointer;
 }
 
-.op-mode .btn {
-  border: 1px solid rgba(34, 197, 94, 0.45) !important;
-  background: linear-gradient(
-    180deg,
-    rgba(34, 197, 94, 0.22),
-    rgba(2, 6, 23, 0.35)
-  ) !important;
-  color: rgba(240, 253, 244, 0.96) !important;
-  box-shadow: 0 14px 28px rgba(34, 197, 94, 0.14) !important;
-}
-.op-mode .btn:hover {
-  border-color: rgba(34, 197, 94, 0.65) !important;
+.nuevaot-photo-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
 }
 
-.op-mode .btn-outline,
-.op-mode .btn-add,
-.op-mode .btn-mini {
-  border: 1px solid var(--op-border2) !important;
-  background: rgba(15, 23, 42, 0.72) !important;
-  color: rgba(226, 232, 240, 0.95) !important;
-  box-shadow: none !important;
+.nuevaot-photo-item {
+  position: relative;
 }
 
-.op-mode .btn:active,
-.op-mode .btn-outline:active,
-.op-mode .btn-add:active,
-.op-mode .btn-mini:active {
-  transform: translateY(1px);
+.nuevaot-photo-item__img {
+  width: 100%;
+  display: block;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: #0b0b0b;
 }
 
-/* CTA final */
-.op-mode .btn-enviar {
-  height: 56px !important;
-  border-radius: 999px !important;
-  font-weight: 1000 !important;
-  letter-spacing: 0.02em !important;
-  color: rgba(240, 253, 244, 0.98) !important;
-  border: 1px solid rgba(34, 197, 94, 0.6) !important;
-  background: linear-gradient(
-    90deg,
-    rgba(34, 197, 94, 0.92),
-    rgba(34, 197, 94, 0.55)
-  ) !important;
-  box-shadow: 0 18px 36px rgba(34, 197, 94, 0.18) !important;
+.nuevaot-photo-item__delete {
+  position: absolute;
+  top: 6px;
+  right: 6px;
 }
 
-/* Botón X (si existe en esa pantalla) */
-.op-mode .btn-x {
-  border: 1px solid rgba(239, 68, 68, 0.5) !important;
-  background: rgba(127, 29, 29, 0.28) !important;
-  color: rgba(254, 202, 202, 0.92) !important;
+.nuevaot-cta-wrap {
+  position: relative;
+  z-index: 2;
 }
 
-/* Chips */
-.op-mode .chip,
-.op-mode .chip-toggle {
-  background: rgba(15, 23, 42, 0.72) !important;
-  border: 1px solid var(--op-border2) !important;
-  color: rgba(226, 232, 240, 0.92) !important;
+.nuevaot-page .btn-enviar {
+  width: 100%;
 }
 
-.op-mode .chip-toggle.is-on {
-  border-color: rgba(34, 197, 94, 0.55) !important;
-  box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.12) !important;
-  background: rgba(34, 197, 94, 0.1) !important;
+@media (min-width: 680px) {
+  .nuevaot-grid--2 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .nuevaot-grid--3 {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .nuevaot-signature-actions {
+    grid-template-columns: repeat(2, minmax(0, max-content));
+    justify-content: start;
+  }
+
+  .nuevaot-photo-actions {
+    grid-template-columns: repeat(2, minmax(0, max-content));
+  }
+}
+
+@media (max-width: 420px) {
+  .nuevaot-page {
+    gap: 10px;
+  }
+
+  .nuevaot-hero__text,
+  .nuevaot-section__copy {
+    font-size: 0.86rem;
+  }
+
+  .nuevaot-photo-grid {
+    grid-template-columns: 1fr;
+  }
 }

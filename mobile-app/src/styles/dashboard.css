@@ -1,1348 +1,609 @@
-/* =========================
-   DASHBOARD — PRO (alineado al JSX actual)
-   - Filtros en grid + toggles en fila propia (NO se corren)
-   - Grid robusto (minmax) para evitar overflow/solapes
-   - Cards OT con jerarquía fuerte en Tablero
-========================= */
+/* =========================================================
+   DASHBOARD — TABLERO ELÉCTRICO INDUSTRIAL
+   - Mobile first
+   - Negro / grafito / gris metal
+   - Sin efectos pesados
+========================================================= */
 
-/* ===== Helpers ===== */
-.kpi-sub {
-  opacity: 0.75;
-  font-size: 0.95rem;
-  color: #d695ef;
-}
-
-/* =========================
-   KPIs
-========================= */
-.kpis {
+.dashboard-page {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-  margin: 12px 0 14px;
+  gap: 12px;
 }
 
-.kpi {
-  border: 1px solid rgba(148, 163, 184, 0.18);
-  background: rgba(15, 23, 42, 0.7);
-  border-radius: 14px;
-  padding: 10px 12px;
-  box-shadow: 0 10px 22px rgba(2, 6, 23, 0.3);
+.dashboard-hero {
+  padding-top: 14px;
 }
 
-.kpi-label {
-  font-size: 0.82rem;
-  opacity: 0.75;
-}
-.kpi-value {
-  font-size: 1.25rem;
-  font-weight: 900;
-  margin-top: 4px;
-}
-
-/* Compact: KPIs más densos */
-.page.is-compact .kpis {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
-}
-.page.is-compact .kpi {
-  padding: 8px 10px;
-  border-radius: 12px;
-}
-.page.is-compact .kpi-label {
+.dashboard-hero__badge {
+  width: fit-content;
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 32px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background:
+    linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.05),
+      rgba(255, 255, 255, 0.01)
+    ),
+    rgba(14, 14, 14, 0.94);
+  color: rgba(243, 244, 246, 0.88);
   font-size: 0.72rem;
-}
-.page.is-compact .kpi-value {
-  font-size: 1.05rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
-/* =========================
-   Stats PRO
-========================= */
-.stats-grid {
+.dashboard-hero__badge-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--ok);
+  box-shadow: 0 0 10px rgba(34, 197, 94, 0.35);
+}
+
+.dashboard-hero__head {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 14px;
+}
+
+.dashboard-hero__title {
+  margin-top: 0.2rem;
+  margin-bottom: 0.35rem;
+}
+
+.dashboard-hero__text {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.55;
+  font-size: 0.94rem;
+}
+
+.dashboard-hero__status {
+  display: flex;
+  align-items: flex-start;
+}
+
+.dashboard-status-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  padding: 0 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(34, 197, 94, 0.22);
+  background:
+    linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.05),
+      rgba(255, 255, 255, 0.01)
+    ),
+    rgba(34, 197, 94, 0.08);
+  color: rgba(220, 252, 231, 0.96);
+  font-size: 0.8rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+
+.dashboard-actions-card,
+.dashboard-filter-card,
+.panel-tableros {
+  display: grid;
+  gap: 12px;
+}
+
+.dashboard-section-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.dashboard-section-head--tight {
+  margin-bottom: 2px;
+}
+
+.dashboard-section-copy {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 0.88rem;
+  line-height: 1.5;
+}
+
+.dashboard-actions-grid {
+  display: grid;
+  grid-template-columns: 1fr;
   gap: 10px;
-  margin: 10px 0 14px;
 }
-.statbox {
-  border: 1px solid rgba(148, 163, 184, 0.18);
-  background: rgba(15, 23, 42, 0.62);
+
+.dashboard-action-btn {
+  width: 100%;
+  min-height: 64px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  text-align: left;
   border-radius: 14px;
-  padding: 10px 12px;
-  box-shadow: 0 10px 22px rgba(2, 6, 23, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background:
+    linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.05),
+      rgba(255, 255, 255, 0.01)
+    ),
+    linear-gradient(180deg, #171717 0%, #101010 100%);
+  color: var(--text);
+  padding: 12px 14px;
+  cursor: pointer;
+  box-shadow:
+    0 10px 18px rgba(0, 0, 0, 0.34),
+    inset 0 1px 0 rgba(255, 255, 255, 0.03);
+  transition:
+    transform 0.08s ease,
+    border-color 0.12s ease,
+    background 0.12s ease,
+    box-shadow 0.12s ease;
 }
-.stat-title {
-  font-weight: 950;
-  margin-bottom: 8px;
+
+.dashboard-action-btn:hover {
+  border-color: rgba(209, 213, 219, 0.24);
+  background:
+    linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.06),
+      rgba(255, 255, 255, 0.015)
+    ),
+    linear-gradient(180deg, #1b1b1b 0%, #121212 100%);
+}
+
+.dashboard-action-btn:active {
+  transform: translateY(1px);
+}
+
+.dashboard-action-btn__icon {
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(209, 213, 219, 0.08);
+  border: 1px solid rgba(209, 213, 219, 0.1);
+  color: rgba(243, 244, 246, 0.92);
+  flex-shrink: 0;
+}
+
+.dashboard-action-btn__text {
+  display: grid;
+  gap: 2px;
+}
+
+.dashboard-action-btn__text strong {
+  font-size: 0.9rem;
   letter-spacing: 0.02em;
 }
-.stat-row {
-  display: flex;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 6px 0;
-  border-top: 1px solid rgba(148, 163, 184, 0.12);
-}
-.stat-row:first-child {
-  border-top: none;
-}
-.stat-name {
-  color: rgba(230, 237, 243, 0.85);
-  font-weight: 800;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.stat-val {
-  font-weight: 950;
-  opacity: 0.9;
-}
 
-@media (max-width: 640px) {
-  .stats-grid {
-    grid-template-columns: 1fr;
-  }
-}
-
-/* Compact stats */
-.page.is-compact .stats-grid {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
-}
-@media (max-width: 640px) {
-  .page.is-compact .stats-grid {
-    grid-template-columns: 1fr;
-  }
-}
-.page.is-compact .statbox {
-  padding: 8px 10px;
-  border-radius: 12px;
-}
-.page.is-compact .stat-title {
-  margin-bottom: 6px;
-  font-size: 0.82rem;
-}
-.page.is-compact .stat-row {
-  padding: 5px 0;
-}
-
-/* =========================
-   Filtros (CARD) — FIX definitivo (robusto)
-   Estructura:
-   [Búsqueda][Zona][Desde][Hasta]
-   [Toggles (ocupa todo)]
-========================= */
-.filtros-box {
-  display: grid;
-
-  /* ✅ columnas fluidas (evita overflow/solapes en distintos DPI) */
-  grid-template-columns:
-    minmax(0, 1fr)
-    minmax(0, 220px)
-    minmax(0, 160px)
-    minmax(0, 160px);
-
-  gap: 12px;
-  margin: 12px 0 16px;
-  padding: 12px;
-  border-radius: var(--radius);
-  border: 1px solid rgba(148, 163, 184, 0.18);
-  background: rgba(15, 23, 42, 0.7);
-  box-shadow: 0 10px 22px rgba(2, 6, 23, 0.35);
-}
-
-/* Cada bloque (label + control) */
-.filtros-box > div {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  min-width: 0; /* ✅ permite shrink dentro del grid */
-}
-
-.filtros-box label {
-  margin: 0;
-  font-size: 0.72rem;
-  text-transform: uppercase;
+.dashboard-action-btn__text small {
+  font-size: 0.76rem;
   color: var(--muted);
-  letter-spacing: 0.04em;
-  font-weight: 800;
-  line-height: 1.1;
 }
 
-/* ✅ Toggles: fila completa debajo */
-.filtros-box .toggles {
-  grid-column: 1 / -1;
-  display: flex;
+.dashboard-actions-foot {
+  display: grid;
   gap: 10px;
-  justify-content: flex-end;
-  align-items: stretch;
-  flex-wrap: wrap;
-  padding-top: 2px;
 }
 
-/* Toggle estilo “pill” */
-.toggle {
-  height: var(--h);
+.dashboard-actions-foot .btn-outline,
+.dashboard-filter-actions .btn-outline {
   display: inline-flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 0 12px;
-  border-radius: 14px;
-  border: 1px solid rgba(148, 163, 184, 0.18);
-  background: rgba(15, 23, 42, 0.6);
-  color: rgba(230, 237, 243, 0.88);
-  font-weight: 950;
-  font-size: 0.82rem;
-  user-select: none;
-  min-width: 190px;
-  box-sizing: border-box;
+  justify-content: center;
+  gap: 8px;
 }
 
-.toggle input {
-  width: 18px;
-  height: 18px;
-  margin: 0;
-  accent-color: #38bdf8;
+.dashboard-loading-note {
+  color: var(--muted);
+  font-size: 0.8rem;
+  line-height: 1.45;
 }
 
-/* =========================
-   Responsive (más temprano para evitar “cruce”)
-========================= */
-@media (max-width: 900px) {
-  .filtros-box {
-    grid-template-columns: 1fr 1fr;
-  }
-
-  /* Búsqueda ocupa toda la fila */
-  .filtros-box > div:first-child {
-    grid-column: 1 / -1;
-  }
-
-  /* Toggles abajo y full */
-  .filtros-box .toggles {
-    grid-column: 1 / -1;
-    justify-content: space-between;
-  }
+.dashboard-kpis-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
 }
 
-@media (max-width: 640px) {
-  .filtros-box {
-    grid-template-columns: 1fr;
-  }
-  .filtros-box .toggles {
-    justify-content: space-between;
-  }
-  .toggle {
-    min-width: 0;
-    flex: 1 1 auto;
-  }
-}
-
-/* =========================
-   Inputs: baseline estable
-========================= */
-.filtros-box input,
-.filtros-box select {
-  height: var(--h);
-  padding: 0 0.85rem;
-  font-size: 0.95rem;
-  line-height: 1.2;
-  box-sizing: border-box;
-  min-width: 0; /* ✅ evita overflow en grid */
-}
-
-/* =========================
-   Timeline / Secciones
-========================= */
-.section {
-  margin-top: 12px;
-}
-
-.section-title {
-  margin: 8px 0 10px;
-  font-size: 0.78rem;
-  font-weight: 950;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: rgba(230, 237, 243, 0.75);
-}
-
-.section-list {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-/* =========================
-   Cards OTs — PRO
-========================= */
-.tabla-ot {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.fila-ot {
+.kpi-card {
   position: relative;
-  border-radius: 16px;
-  border: 1px solid rgba(148, 163, 184, 0.18);
-  background: linear-gradient(
-    180deg,
-    rgba(2, 6, 23, 0.8),
-    rgba(2, 6, 23, 0.55)
-  );
-  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.38);
   overflow: hidden;
+  min-height: 102px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background:
+    linear-gradient(rgba(255, 255, 255, 0.02) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.02) 1px, transparent 1px),
+    linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.045),
+      rgba(255, 255, 255, 0.01)
+    ),
+    linear-gradient(180deg, #171717 0%, #101010 100%);
+  background-size:
+    24px 24px,
+    24px 24px,
+    auto,
+    auto;
+  box-shadow:
+    0 10px 18px rgba(0, 0, 0, 0.36),
+    inset 0 1px 0 rgba(255, 255, 255, 0.035);
   padding: 12px;
 }
 
-.fila-ot::before {
+.kpi-card::before {
   content: "";
   position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  width: 10px;
+  inset: 0 0 auto 0;
+  height: 3px;
+  opacity: 0.92;
+}
+
+.kpi-card--neutral::before {
   background: linear-gradient(
-    180deg,
-    rgba(37, 99, 235, 0.9),
-    rgba(56, 189, 248, 0.15)
+    90deg,
+    rgba(243, 244, 246, 0.95),
+    rgba(156, 163, 175, 0.82)
   );
 }
 
-.fila-ot.is-sent::before {
+.kpi-card--ok::before {
   background: linear-gradient(
-    180deg,
-    rgba(34, 197, 94, 0.9),
-    rgba(34, 197, 94, 0.18)
+    90deg,
+    rgba(34, 197, 94, 0.95),
+    rgba(187, 247, 208, 0.8)
   );
 }
 
-.fila-ot.is-fav {
-  border-color: rgba(245, 158, 11, 0.22);
-}
-.fila-ot.is-fav::before {
+.kpi-card--warn::before {
   background: linear-gradient(
-    180deg,
-    rgba(245, 158, 11, 0.95),
-    rgba(245, 158, 11, 0.14)
+    90deg,
+    rgba(212, 169, 77, 0.95),
+    rgba(255, 230, 170, 0.78)
   );
 }
 
-/* Header clickeable */
-.ot-linea {
-  cursor: pointer;
-  padding-left: 10px;
+.kpi-card__top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
 
-/* TABLERO protagonista */
-.ot-tablero {
-  font-size: 1.2rem;
+.kpi-card__icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: rgba(243, 244, 246, 0.92);
+  flex-shrink: 0;
+}
+
+.kpi-card__label {
+  font-size: 0.75rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(243, 244, 246, 0.66);
+  line-height: 1.35;
+}
+
+.kpi-card__value {
+  margin-top: 14px;
+  font-size: 1.5rem;
   font-weight: 950;
-  letter-spacing: 0.35px;
-  line-height: 1.15;
-  color: rgba(255, 255, 255, 0.96);
+  line-height: 1;
+  color: #fafafa;
+  letter-spacing: -0.03em;
+}
+
+.kpi-card__sub {
+  margin-left: 6px;
+  font-size: 0.75rem;
+  font-weight: 800;
+  color: var(--muted);
+  letter-spacing: 0;
+}
+
+.dashboard-stats-grid {
+  display: grid;
+  gap: 12px;
+}
+
+.statbox--panel {
+  display: grid;
+  gap: 10px;
+}
+
+.statbox__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.statbox__title {
+  font-size: 0.8rem;
+  font-weight: 950;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(243, 244, 246, 0.72);
+}
+
+.statbox__list {
+  display: grid;
+  gap: 8px;
+}
+
+.stat-row {
+  min-height: 42px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background:
+    linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.035),
+      rgba(255, 255, 255, 0.01)
+    ),
+    rgba(15, 15, 15, 0.92);
+}
+
+.stat-name {
+  color: rgba(243, 244, 246, 0.9);
+  font-size: 0.9rem;
+  line-height: 1.35;
+}
+
+.stat-val {
+  min-width: 34px;
+  height: 28px;
+  padding: 0 10px;
+  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(209, 213, 219, 0.08);
+  border: 1px solid rgba(209, 213, 219, 0.12);
+  color: #fafafa;
+  font-weight: 900;
+  font-size: 0.82rem;
+}
+
+.dashboard-filter-grid {
+  display: grid;
+  gap: 12px;
+}
+
+.dashboard-filter-field {
+  display: grid;
+  gap: 6px;
+}
+
+.dashboard-inline-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: rgba(243, 244, 246, 0.7);
+  font-size: 0.75rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
 }
 
-/* Meta */
-.ot-meta {
-  margin-top: 6px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 0.78rem;
-  color: rgba(230, 237, 243, 0.72);
-}
-.ot-fecha {
-  font-weight: 950;
-  letter-spacing: 0.25px;
-}
-
-/* Zona badge */
-.zbadge {
-  display: inline-flex;
-  align-items: center;
-  height: 22px;
-  padding: 0 8px;
-  border-radius: 999px;
-  font-size: 0.72rem;
-  font-weight: 950;
-  border: 1px solid rgba(56, 189, 248, 0.28);
-  background: rgba(56, 189, 248, 0.1);
-  color: rgba(230, 237, 243, 0.92);
-}
-
-/* Ubicación */
-.ot-sub {
-  margin-top: 10px;
-  padding-left: 10px;
-  font-size: 0.95rem;
-  font-weight: 750;
-  color: rgba(230, 237, 243, 0.86);
-}
-
-/* Info pills */
-.ot-info {
-  margin-top: 10px;
-  padding-left: 10px;
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.pill {
-  display: inline-flex;
-  align-items: center;
-  height: 26px;
-  padding: 0 10px;
-  border-radius: 999px;
-  font-size: 0.78rem;
-  font-weight: 900;
-  color: rgba(230, 237, 243, 0.86);
-  border: 1px solid rgba(148, 163, 184, 0.18);
-  background: rgba(15, 23, 42, 0.55);
-}
-
-/* Chips */
-.chip {
-  display: inline-flex;
-  align-items: center;
-  height: 22px;
-  padding: 0 8px;
-  border-radius: 999px;
-  font-size: 0.74rem;
-  font-weight: 950;
-  border: 1px solid rgba(148, 163, 184, 0.22);
-  background: rgba(15, 23, 42, 0.55);
-  color: rgba(230, 237, 243, 0.9);
-  transform: translateY(-1px);
-}
-
-.chip.ok {
-  border-color: rgba(34, 197, 94, 0.38);
-}
-
-/* Acciones */
-.ot-actions {
-  margin-top: 12px;
-  padding-left: 10px;
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.btn-mini {
-  height: 36px;
-  padding: 0 12px;
-  border-radius: 12px;
-  border: 1px solid rgba(148, 163, 184, 0.22);
-  background: rgba(15, 23, 42, 0.55);
-  color: rgba(230, 237, 243, 0.92);
-  font-weight: 900;
-}
-
-.btn-mini.primary {
-  border-color: rgba(56, 189, 248, 0.35);
-  background: rgba(56, 189, 248, 0.12);
-}
-
-.btn-mini.danger {
-  border-color: rgba(239, 68, 68, 0.38);
-  background: rgba(239, 68, 68, 0.1);
-}
-
-/* Hover */
-.fila-ot:hover {
-  border-color: rgba(148, 163, 184, 0.3);
-  box-shadow: 0 18px 42px rgba(0, 0, 0, 0.46);
-}
-.fila-ot:hover .ot-tablero {
-  color: #fff;
-}
-
-/* Sin datos */
-.sin-datos {
-  text-align: center;
-  margin: 18px 0 0;
-  color: rgba(230, 237, 243, 0.65);
-}
-
-/* =========================
-   Highlight
-========================= */
-.hl {
-  padding: 0 3px;
-  border-radius: 6px;
-  background: rgba(56, 189, 248, 0.16);
-  border: 1px solid rgba(56, 189, 248, 0.26);
-  color: rgba(255, 255, 255, 0.96);
-}
-
-/* Compact: cards más densas */
-.page.is-compact .fila-ot {
-  padding: 10px;
-  border-radius: 14px;
-}
-.page.is-compact .fila-ot::before {
-  width: 8px;
-}
-.page.is-compact .ot-linea {
-  padding-left: 8px;
-}
-.page.is-compact .ot-tablero {
-  font-size: 1.05rem;
-  letter-spacing: 0.25px;
-}
-.page.is-compact .ot-meta {
-  margin-top: 4px;
-  gap: 6px;
-  font-size: 0.74rem;
-}
-.page.is-compact .ot-sub {
-  margin-top: 8px;
-  padding-left: 8px;
-  font-size: 0.88rem;
-}
-.page.is-compact .ot-info {
-  margin-top: 8px;
-  padding-left: 8px;
-  gap: 6px;
-}
-.page.is-compact .pill {
-  height: 24px;
-  padding: 0 9px;
-  font-size: 0.74rem;
-}
-.page.is-compact .chip {
-  height: 20px;
-  padding: 0 7px;
-  font-size: 0.7rem;
-}
-.page.is-compact .ot-actions {
-  margin-top: 10px;
-  padding-left: 8px;
-  gap: 6px;
-}
-.page.is-compact .btn-mini {
-  height: 34px;
-  padding: 0 10px;
-  border-radius: 11px;
-  font-size: 0.86rem;
-}
-/* =========================================================
-   FIX SOLAPE “REDONDEL”: elevar filtros/input en el stack
-   ========================================================= */
-
-/* el card de filtros se pone por arriba */
-.filtros-box {
-  position: relative;
-  z-index: 50;
-}
-
-/* y los controles también */
-.filtros-box input,
-.filtros-box select {
-  position: relative;
-  z-index: 51;
-}
-
-/* opcional: si el redondel se mete desde la izquierda, evitás “visual clash” */
-.filtros-box > div:first-child input[type="text"] {
-  padding-left: 14px; /* mantenelo normal */
-}
-/* =========================================================
-   FIX REAL: cortar pseudo/decoraciones que se dibujan encima
-   ========================================================= */
-.filtros-box > div:first-child {
-  position: relative;
-  isolation: isolate; /* crea stacking context propio */
-}
-
-/* si el “redondel” viene de ::before/::after, lo apagamos */
-.filtros-box > div:first-child::before,
-.filtros-box > div:first-child::after {
-  content: none !important;
-  display: none !important;
-}
-
-/* el input queda sólido y no “deja ver” cosas detrás */
-.filtros-box > div:first-child input[type="text"] {
-  background: rgba(15, 23, 42, 0.95) !important;
-}
-
-/* premium dashboard  */
-.panel-tableros {
-  margin-top: 12px;
-  border: 1px solid rgba(148, 163, 184, 0.18);
-  border-radius: 14px;
-  background: rgba(2, 6, 23, 0.55);
-  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.25);
-  overflow: hidden;
-}
-
-.panel-title {
-  padding: 10px 12px;
-  font-weight: 900;
-  border-bottom: 1px solid rgba(148, 163, 184, 0.16);
-  background: rgba(2, 6, 23, 0.75);
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.panel-sub {
-  font-weight: 500;
-  opacity: 0.8;
-  font-size: 0.9rem;
+.dashboard-filter-actions {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
 }
 
 .panel-grid {
-  padding: 10px 12px 12px;
   display: grid;
   gap: 10px;
-  grid-template-columns: 1fr;
 }
 
-@media (min-width: 700px) {
+.tablero-card {
+  width: 100%;
+  text-align: left;
+  border-radius: 14px;
+  border: 1px solid color-mix(in srgb, var(--tablero-color) 55%, white 10%);
+  background:
+    linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.04),
+      rgba(255, 255, 255, 0.01)
+    ),
+    linear-gradient(180deg, #181818 0%, #101010 100%);
+  padding: 12px;
+  cursor: pointer;
+  box-shadow:
+    0 10px 18px rgba(0, 0, 0, 0.34),
+    inset 0 1px 0 rgba(255, 255, 255, 0.03);
+  transition:
+    transform 0.08s ease,
+    box-shadow 0.12s ease,
+    border-color 0.12s ease;
+}
+
+.tablero-card:hover {
+  transform: translateY(-1px);
+  box-shadow:
+    0 14px 22px rgba(0, 0, 0, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.03);
+}
+
+.tablero-card:active {
+  transform: translateY(1px);
+}
+
+.tablero-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.tablero-head__left {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: var(--tablero-color);
+  box-shadow: 0 0 10px color-mix(in srgb, var(--tablero-color) 42%, transparent);
+  flex-shrink: 0;
+}
+
+.nm {
+  min-width: 0;
+  color: #fafafa;
+  font-size: 0.92rem;
+  font-weight: 900;
+  line-height: 1.3;
+  word-break: break-word;
+}
+
+.badge {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 10px;
+  border-radius: 10px;
+  font-size: 0.68rem;
+  font-weight: 950;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.badge.ok {
+  background: rgba(34, 197, 94, 0.12);
+  border-color: rgba(34, 197, 94, 0.26);
+  color: rgba(220, 252, 231, 0.96);
+}
+
+.badge.parcial {
+  background: rgba(212, 169, 77, 0.12);
+  border-color: rgba(212, 169, 77, 0.28);
+  color: rgba(255, 244, 210, 0.96);
+}
+
+.badge.critico {
+  background: rgba(239, 68, 68, 0.12);
+  border-color: rgba(239, 68, 68, 0.28);
+  color: rgba(254, 202, 202, 0.96);
+}
+
+.badge.none {
+  background: rgba(156, 163, 175, 0.1);
+  border-color: rgba(156, 163, 175, 0.2);
+  color: rgba(229, 231, 235, 0.92);
+}
+
+.tablero-foot {
+  margin-top: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.mini {
+  min-height: 28px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 10px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: rgba(243, 244, 246, 0.86);
+  font-size: 0.76rem;
+  line-height: 1;
+}
+
+.mini strong {
+  margin-left: 4px;
+  color: #fafafa;
+}
+
+.dashboard-empty-state {
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px dashed rgba(255, 255, 255, 0.14);
+  color: var(--muted);
+  font-size: 0.88rem;
+  line-height: 1.45;
+}
+
+.dashboard-admin-row {
+  display: flex;
+  justify-content: flex-end;
+}
+
+@media (min-width: 560px) {
+  .dashboard-actions-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .dashboard-actions-foot {
+    grid-template-columns: auto 1fr;
+    align-items: center;
+  }
+
+  .dashboard-kpis-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .dashboard-filter-actions {
+    grid-template-columns: repeat(2, minmax(0, max-content));
+    justify-content: end;
+  }
+
   .panel-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
-@media (min-width: 1020px) {
+
+@media (min-width: 820px) {
+  .dashboard-hero__head {
+    grid-template-columns: 1fr auto;
+    align-items: start;
+  }
+
+  .dashboard-stats-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .dashboard-filter-grid {
+    grid-template-columns: minmax(220px, 280px) 1fr;
+    align-items: end;
+  }
+
   .panel-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
-}
-
-.tablero-card {
-  border-radius: 14px;
-  border: 1px solid rgba(148, 163, 184, 0.2);
-  background: rgba(15, 23, 42, 0.45);
-  padding: 10px 10px;
-  text-align: left;
-  cursor: pointer;
-}
-
-.tablero-card:hover {
-  background: rgba(15, 23, 42, 0.62);
-}
-
-.tablero-head {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.tablero-head .dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 999px;
-  flex: 0 0 auto;
-}
-
-.tablero-head .nm {
-  font-weight: 800;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  flex: 1 1 auto;
-}
-
-.badge {
-  font-size: 0.78rem;
-  padding: 6px 8px;
-  border-radius: 999px;
-  border: 1px solid rgba(148, 163, 184, 0.22);
-  background: rgba(2, 6, 23, 0.35);
-  font-weight: 900;
-}
-
-.badge.ok {
-  border-color: rgba(34, 197, 94, 0.35);
-}
-.badge.parcial {
-  border-color: rgba(245, 158, 11, 0.35);
-}
-.badge.critico {
-  border-color: rgba(239, 68, 68, 0.35);
-}
-.badge.none {
-  border-color: rgba(148, 163, 184, 0.2);
-  opacity: 0.85;
-}
-
-.tablero-foot {
-  margin-top: 10px;
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.tablero-foot .mini {
-  font-size: 0.82rem;
-  padding: 6px 8px;
-  border-radius: 999px;
-  border: 1px solid rgba(148, 163, 184, 0.2);
-  background: rgba(2, 6, 23, 0.25);
-  opacity: 0.92;
-}
-
-/* =========================================================
-   SEMÁFORO — PRO VISUAL (override final)
-   Pegalo al final para que pise lo anterior
-========================================================= */
-
-.panel-tableros {
-  margin-top: 14px;
-  border-radius: 18px;
-  border: 1px solid rgba(148, 163, 184, 0.18);
-  background:
-    radial-gradient(
-      1200px 420px at 20% 0%,
-      rgba(56, 189, 248, 0.12),
-      transparent 60%
-    ),
-    radial-gradient(
-      900px 360px at 85% 10%,
-      rgba(168, 85, 247, 0.12),
-      transparent 55%
-    ),
-    rgba(2, 6, 23, 0.62);
-  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.45);
-  overflow: hidden;
-}
-
-.panel-title {
-  padding: 12px 14px;
-  border-bottom: 1px solid rgba(148, 163, 184, 0.14);
-  background: linear-gradient(
-    180deg,
-    rgba(2, 6, 23, 0.88),
-    rgba(2, 6, 23, 0.68)
-  );
-  position: relative;
-}
-
-.panel-title::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background: radial-gradient(
-    700px 120px at 20% 0%,
-    rgba(56, 189, 248, 0.12),
-    transparent 70%
-  );
-}
-
-.panel-sub {
-  font-size: 0.9rem;
-  opacity: 0.82;
-}
-
-/* Grid un poco más “apretado” y armónico */
-.panel-grid {
-  padding: 12px 14px 14px;
-  gap: 12px;
-}
-
-/* Card: más premium + “lift” */
-.tablero-card {
-  position: relative;
-  border-radius: 16px;
-  border: 1px solid rgba(148, 163, 184, 0.18);
-  background: linear-gradient(
-    180deg,
-    rgba(15, 23, 42, 0.55),
-    rgba(2, 6, 23, 0.4)
-  );
-  padding: 12px 12px;
-  text-align: left;
-  cursor: pointer;
-  transition:
-    transform 160ms ease,
-    box-shadow 160ms ease,
-    border-color 160ms ease,
-    background 160ms ease,
-    filter 160ms ease;
-  box-shadow: 0 10px 22px rgba(0, 0, 0, 0.25);
-}
-
-/* Borde de estado “pro” (usa tu inline style borderColor) + halo suave */
-.tablero-card::before {
-  content: "";
-  position: absolute;
-  inset: -1px;
-  border-radius: 16px;
-  pointer-events: none;
-  border: 1px solid rgba(148, 163, 184, 0.12);
-  box-shadow: 0 0 0 1px rgba(2, 6, 23, 0.2) inset;
-}
-
-/* Glow suave según borderColor actual */
-.tablero-card::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: 16px;
-  pointer-events: none;
-  opacity: 0.55;
-  filter: blur(14px);
-  background: radial-gradient(
-    220px 120px at 12% 18%,
-    currentColor,
-    transparent 65%
-  );
-  /* currentColor por defecto; la empujamos con el borderColor via color */
-}
-
-/* Para que el glow use el mismo tono que el borde */
-.tablero-card {
-  color: rgba(230, 237, 243, 0.92);
-}
-.tablero-card[style*="border-color"] {
-  /* hack: al tener borderColor inline, usamos color para el glow */
-  /* no todos los browsers leen attr(style); si no toma, igual queda bonito */
-}
-
-.tablero-card:hover {
-  transform: translateY(-2px);
-  border-color: rgba(226, 232, 240, 0.26) !important;
-  background: linear-gradient(
-    180deg,
-    rgba(15, 23, 42, 0.72),
-    rgba(2, 6, 23, 0.46)
-  );
-  box-shadow: 0 16px 34px rgba(0, 0, 0, 0.4);
-}
-
-.tablero-head {
-  gap: 10px;
-}
-
-/* Dot con halo + “pulse” sutil */
-.tablero-head .dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 999px;
-  flex: 0 0 auto;
-  box-shadow:
-    0 0 0 4px rgba(148, 163, 184, 0.12),
-    0 0 18px rgba(148, 163, 184, 0.25);
-}
-
-.tablero-card:hover .tablero-head .dot {
-  box-shadow:
-    0 0 0 5px rgba(148, 163, 184, 0.14),
-    0 0 22px rgba(148, 163, 184, 0.32);
-}
-
-/* Nombre con más jerarquía */
-.tablero-head .nm {
-  font-weight: 950;
-  letter-spacing: 0.25px;
-  text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.95);
-}
-
-/* Badge: ahora con fondo por estado (no solo borde) */
-.badge {
-  font-size: 0.75rem;
-  padding: 6px 10px;
-  border-radius: 999px;
-  font-weight: 950;
-  letter-spacing: 0.04em;
-  border: 1px solid rgba(148, 163, 184, 0.22);
-  background: rgba(2, 6, 23, 0.35);
-  color: rgba(230, 237, 243, 0.92);
-  box-shadow: 0 10px 18px rgba(0, 0, 0, 0.25);
-}
-
-.badge.ok {
-  border-color: rgba(34, 197, 94, 0.38);
-  background: rgba(34, 197, 94, 0.14);
-}
-.badge.parcial {
-  border-color: rgba(245, 158, 11, 0.42);
-  background: rgba(245, 158, 11, 0.14);
-}
-.badge.critico {
-  border-color: rgba(239, 68, 68, 0.42);
-  background: rgba(239, 68, 68, 0.13);
-}
-.badge.none {
-  border-color: rgba(148, 163, 184, 0.2);
-  background: rgba(148, 163, 184, 0.08);
-  opacity: 0.92;
-}
-
-/* Foot pills más “dashboard” */
-.tablero-foot {
-  margin-top: 10px;
-  gap: 8px;
-}
-
-.tablero-foot .mini {
-  font-size: 0.82rem;
-  padding: 6px 10px;
-  border-radius: 999px;
-  border: 1px solid rgba(148, 163, 184, 0.18);
-  background: rgba(15, 23, 42, 0.5);
-  color: rgba(230, 237, 243, 0.88);
-}
-
-/* Estado visual adicional: si querés más punch en CRITICO */
-.badge.critico,
-.tablero-card:has(.badge.critico) .tablero-head .nm {
-  text-shadow: 0 0 18px rgba(239, 68, 68, 0.18);
-}
-
-/* Compat: :has no está en todos; no rompe si no existe */
-
-/* Compact: semáforo más denso */
-.page.is-compact .panel-title {
-  padding: 10px 12px;
-}
-.page.is-compact .panel-grid {
-  padding: 10px 12px 12px;
-  gap: 10px;
-}
-.page.is-compact .tablero-card {
-  padding: 10px 10px;
-  border-radius: 14px;
-}
-.page.is-compact .tablero-head .nm {
-  font-size: 0.95rem;
-}
-.page.is-compact .badge {
-  padding: 5px 9px;
-  font-size: 0.72rem;
-}
-.page.is-compact .tablero-foot .mini {
-  padding: 5px 9px;
-  font-size: 0.78rem;
-}
-
-/* =========================================================
-   DASHBOARD — RÚSTICO SOFISTICADO INDUSTRIAL (OVERRIDE)
-   - Mantiene clases / lógica
-   - Industrial: grafito + cobre/ámbar + cian técnico sutil
-   - Sin blur/backdrop (performance)
-   Pegar AL FINAL para pisar lo anterior
-========================================================= */
-
-:root {
-  /* Base */
-  --ind-bg: #060708;
-  --ind-panel: rgba(12, 15, 14, 0.92);
-  --ind-panel2: rgba(18, 22, 20, 0.92);
-
-  /* Ink */
-  --ind-ink: rgba(236, 241, 238, 0.94);
-  --ind-muted: rgba(236, 241, 238, 0.62);
-
-  /* Accentos */
-  --ind-copper: #d6a15e; /* cobre */
-  --ind-copper2: #f0c37a; /* cobre claro */
-  --ind-amber: #d6b25e; /* arena/ámbar */
-  --ind-teal: rgba(88, 225, 255, 0.18); /* cian técnico SUTIL */
-
-  /* Bordes */
-  --ind-b: rgba(236, 241, 238, 0.14);
-  --ind-b2: rgba(236, 241, 238, 0.2);
-
-  /* Sombras */
-  --ind-shadow: 0 14px 28px rgba(0, 0, 0, 0.62);
-  --ind-shadow2: 0 18px 40px rgba(0, 0, 0, 0.72);
-}
-
-/* ===== Helpers ===== */
-.kpi-sub {
-  color: rgba(240, 195, 122, 0.85) !important; /* cobre */
-  opacity: 0.85 !important;
-}
-
-/* =========================
-   KPIs
-========================= */
-.kpi {
-  border: 1px solid var(--ind-b) !important;
-  border-radius: 12px !important;
-  background:
-    /* micro “chapa” */
-    repeating-linear-gradient(
-      135deg,
-      rgba(255, 255, 255, 0.018) 0px,
-      rgba(255, 255, 255, 0.018) 6px,
-      rgba(0, 0, 0, 0) 6px,
-      rgba(0, 0, 0, 0) 14px
-    ),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(0, 0, 0, 0.18)),
-    var(--ind-panel) !important;
-  box-shadow: var(--ind-shadow) !important;
-  position: relative;
-  overflow: hidden;
-}
-
-.kpi::before {
-  content: "";
-  position: absolute;
-  left: 0;
-  top: 0;
-  width: 100%;
-  height: 3px;
-  background: linear-gradient(
-    90deg,
-    rgba(214, 161, 94, 0.9),
-    rgba(240, 195, 122, 0.55)
-  );
-  opacity: 0.9;
-}
-
-.kpi-label {
-  opacity: 0.78 !important;
-  color: var(--ind-muted) !important;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  font-weight: 900;
-  font-size: 0.74rem !important;
-}
-.kpi-value {
-  color: var(--ind-ink) !important;
-  font-weight: 950 !important;
-}
-
-/* =========================
-   Stats PRO
-========================= */
-.statbox {
-  border: 1px solid var(--ind-b) !important;
-  border-radius: 12px !important;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(0, 0, 0, 0.2)),
-    var(--ind-panel2) !important;
-  box-shadow: var(--ind-shadow) !important;
-}
-
-.stat-title {
-  letter-spacing: 0.1em !important;
-  text-transform: uppercase;
-  color: rgba(236, 241, 238, 0.9) !important;
-}
-
-.stat-row {
-  border-top: 1px dashed rgba(236, 241, 238, 0.12) !important;
-}
-.stat-name {
-  color: rgba(236, 241, 238, 0.78) !important;
-}
-.stat-val {
-  color: rgba(236, 241, 238, 0.92) !important;
-}
-
-/* =========================
-   Filtros (CARD)
-========================= */
-.filtros-box {
-  border: 1px solid var(--ind-b2) !important;
-  border-radius: 14px !important;
-
-  background:
-    radial-gradient(900px 300px at 18% 0%, var(--ind-teal), transparent 60%),
-    repeating-linear-gradient(
-      90deg,
-      rgba(255, 255, 255, 0.015),
-      rgba(255, 255, 255, 0.015) 1px,
-      rgba(0, 0, 0, 0.02) 2px,
-      rgba(0, 0, 0, 0.02) 4px
-    ),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(0, 0, 0, 0.2)),
-    var(--ind-panel) !important;
-
-  box-shadow: var(--ind-shadow2) !important;
-}
-
-/* Labels de filtros más HMI */
-.filtros-box label {
-  color: rgba(236, 241, 238, 0.58) !important;
-  letter-spacing: 0.12em !important;
-  font-weight: 950 !important;
-}
-
-/* Toggle pill (más industrial, menos “app”) */
-.toggle {
-  border-radius: 12px !important;
-  border: 1px solid rgba(236, 241, 238, 0.14) !important;
-
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(0, 0, 0, 0.18)),
-    rgba(14, 18, 16, 0.82) !important;
-
-  color: rgba(236, 241, 238, 0.86) !important;
-  letter-spacing: 0.1em !important;
-  text-transform: uppercase;
-}
-
-/* checkbox accent más “cobre técnico” */
-.toggle input {
-  accent-color: var(--ind-copper) !important;
-}
-
-/* =========================
-   Secciones / Timeline
-========================= */
-.section-title {
-  color: rgba(236, 241, 238, 0.62) !important;
-  letter-spacing: 0.14em !important;
-}
-
-/* =========================
-   Cards OTs
-========================= */
-.fila-ot {
-  border-radius: 14px !important;
-  border: 1px solid rgba(236, 241, 238, 0.14) !important;
-
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(0, 0, 0, 0.2)),
-    linear-gradient(180deg, rgba(12, 15, 14, 0.88), rgba(6, 7, 8, 0.7)) !important;
-
-  box-shadow: var(--ind-shadow2) !important;
-}
-
-/* Barra lateral: cobre por defecto */
-.fila-ot::before {
-  width: 9px !important;
-  background: linear-gradient(
-    180deg,
-    rgba(214, 161, 94, 0.95),
-    rgba(240, 195, 122, 0.12)
-  ) !important;
-}
-
-/* Enviado: verde sobrio */
-.fila-ot.is-sent::before {
-  background: linear-gradient(
-    180deg,
-    rgba(34, 197, 94, 0.85),
-    rgba(34, 197, 94, 0.14)
-  ) !important;
-}
-
-/* Favorito: ámbar */
-.fila-ot.is-fav {
-  border-color: rgba(214, 178, 94, 0.22) !important;
-}
-.fila-ot.is-fav::before {
-  background: linear-gradient(
-    180deg,
-    rgba(214, 178, 94, 0.92),
-    rgba(214, 178, 94, 0.14)
-  ) !important;
-}
-
-/* Header */
-.ot-tablero {
-  color: rgba(244, 249, 246, 0.96) !important;
-  letter-spacing: 0.12em !important;
-  text-transform: uppercase;
-  font-weight: 950 !important;
-}
-
-/* Meta */
-.ot-meta {
-  color: rgba(236, 241, 238, 0.62) !important;
-}
-.ot-fecha {
-  color: rgba(236, 241, 238, 0.78) !important;
-}
-
-/* Zona badge: industrial cobre */
-.zbadge {
-  border: 1px solid rgba(214, 161, 94, 0.3) !important;
-  background: rgba(214, 161, 94, 0.1) !important;
-  color: rgba(244, 249, 246, 0.92) !important;
-}
-
-/* Ubicación */
-.ot-sub {
-  color: rgba(236, 241, 238, 0.84) !important;
-}
-
-/* Pills */
-.pill {
-  border: 1px solid rgba(236, 241, 238, 0.14) !important;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(0, 0, 0, 0.16)),
-    rgba(14, 18, 16, 0.72) !important;
-  color: rgba(236, 241, 238, 0.86) !important;
-  border-radius: 12px !important;
-}
-
-/* Chips inline de OT */
-.fila-ot .chip {
-  border: 1px solid rgba(236, 241, 238, 0.14) !important;
-  background: rgba(14, 18, 16, 0.74) !important;
-  color: rgba(236, 241, 238, 0.88) !important;
-  border-radius: 10px !important;
-}
-.fila-ot .chip.ok {
-  border-color: rgba(34, 197, 94, 0.34) !important;
-}
-
-/* Acciones */
-.btn-mini {
-  border-radius: 12px !important;
-  border: 1px solid rgba(236, 241, 238, 0.16) !important;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(0, 0, 0, 0.16)),
-    rgba(14, 18, 16, 0.74) !important;
-  color: rgba(236, 241, 238, 0.92) !important;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  font-weight: 950;
-}
-
-/* Primary: cian técnico MUY sutil (no neón) */
-.btn-mini.primary {
-  border-color: rgba(88, 225, 255, 0.22) !important;
-  background:
-    linear-gradient(180deg, rgba(88, 225, 255, 0.1), rgba(0, 0, 0, 0.18)),
-    rgba(14, 18, 16, 0.74) !important;
-}
-
-/* Danger: rojo sobrio */
-.btn-mini.danger {
-  border-color: rgba(239, 68, 68, 0.3) !important;
-  background: rgba(239, 68, 68, 0.08) !important;
-}
-
-/* Hover */
-.fila-ot:hover {
-  border-color: rgba(236, 241, 238, 0.22) !important;
-  box-shadow: 0 22px 48px rgba(0, 0, 0, 0.72) !important;
-}
-
-/* Sin datos */
-.sin-datos {
-  color: rgba(236, 241, 238, 0.55) !important;
-}
-
-/* Highlight */
-.hl {
-  background: rgba(214, 161, 94, 0.14) !important;
-  border: 1px solid rgba(214, 161, 94, 0.22) !important;
-  color: rgba(244, 249, 246, 0.96) !important;
-  border-radius: 8px !important;
-}
-
-/* =========================
-   Panel tableros / semáforo
-   (pisamos tu “override final” neón)
-========================= */
-.panel-tableros {
-  border: 1px solid rgba(236, 241, 238, 0.14) !important;
-  border-radius: 16px !important;
-  background:
-    /* toque técnico sutil */
-    radial-gradient(
-      1100px 380px at 18% 0%,
-      rgba(88, 225, 255, 0.1),
-      transparent 62%
-    ),
-    /* chapa mate */
-    repeating-linear-gradient(
-        135deg,
-        rgba(255, 255, 255, 0.016) 0px,
-        rgba(255, 255, 255, 0.016) 6px,
-        rgba(0, 0, 0, 0) 6px,
-        rgba(0, 0, 0, 0) 14px
-      ),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(0, 0, 0, 0.2)),
-    rgba(10, 12, 12, 0.64) !important;
-  box-shadow: var(--ind-shadow2) !important;
-}
-
-.panel-title {
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(0, 0, 0, 0.22)),
-    rgba(6, 7, 8, 0.88) !important;
-  border-bottom: 1px solid rgba(236, 241, 238, 0.12) !important;
-}
-.panel-title::after {
-  /* apagamos el brillo fuerte */
-  background: none !important;
-}
-
-.tablero-card {
-  border-radius: 14px !important;
-  border: 1px solid rgba(236, 241, 238, 0.14) !important;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(0, 0, 0, 0.18)),
-    rgba(14, 18, 16, 0.62) !important;
-  box-shadow: var(--ind-shadow) !important;
-}
-
-/* Quitamos blur del glow */
-.tablero-card::after {
-  opacity: 0 !important;
-  filter: none !important;
-  background: none !important;
-}
-
-.tablero-card:hover {
-  transform: translateY(-2px);
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(0, 0, 0, 0.16)),
-    rgba(18, 22, 20, 0.72) !important;
-  box-shadow: 0 18px 42px rgba(0, 0, 0, 0.72) !important;
-}
-
-.tablero-head .dot {
-  box-shadow: 0 0 0 4px rgba(236, 241, 238, 0.1) !important;
-}
-
-.tablero-head .nm {
-  color: rgba(244, 249, 246, 0.95) !important;
-  letter-spacing: 0.1em !important;
-  text-transform: uppercase;
-  font-weight: 950 !important;
-}
-
-/* Badge: menos “color pastel”, más industrial */
-.badge {
-  border: 1px solid rgba(236, 241, 238, 0.14) !important;
-  background: rgba(0, 0, 0, 0.18) !important;
-  box-shadow: 0 10px 18px rgba(0, 0, 0, 0.34) !important;
-  letter-spacing: 0.1em !important;
-  text-transform: uppercase;
-  font-weight: 950 !important;
-  color: rgba(236, 241, 238, 0.92) !important;
-}
-
-.badge.ok {
-  border-color: rgba(34, 197, 94, 0.3) !important;
-  background: rgba(34, 197, 94, 0.1) !important;
-}
-.badge.parcial {
-  border-color: rgba(214, 178, 94, 0.34) !important;
-  background: rgba(214, 178, 94, 0.12) !important;
-}
-.badge.critico {
-  border-color: rgba(239, 68, 68, 0.32) !important;
-  background: rgba(239, 68, 68, 0.1) !important;
-}
-.badge.none {
-  opacity: 0.9 !important;
-  background: rgba(236, 241, 238, 0.06) !important;
-}
-
-.tablero-foot .mini {
-  border: 1px solid rgba(236, 241, 238, 0.12) !important;
-  background: rgba(0, 0, 0, 0.16) !important;
-  color: rgba(236, 241, 238, 0.82) !important;
-  border-radius: 12px !important;
 }

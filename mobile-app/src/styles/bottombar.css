@@ -1,31 +1,39 @@
 /* =========================================================
-   BOTTOM BAR — RÚSTICO MILITAR (CHAPA / HMI)
+   BOTTOM BAR — TABLERO ELÉCTRICO INDUSTRIAL
    ICON-ONLY SIEMPRE + TOOLTIP EN HOVER/FOCUS (sin JS)
-   - Tooltip usa aria-label/title (ya los ponés en el NavLink)
-   - Performance: 0 JS, 0 blur
+   - Negro / grafito / gris metal
+   - LED activo sutil
+   - Sin blur, sin costo pesado
 ========================================================= */
 
 :root {
   --bottom-bar-h: 74px;
 
-  /* Base chapa */
-  --mil-900: #0b1210;
-  --mil-800: #0f1916;
-  --mil-700: #15231f;
-  --mil-600: #1c2e28;
+  /* Base panel */
+  --panel-950: #050505;
+  --panel-900: #0a0a0a;
+  --panel-850: #101010;
+  --panel-800: #161616;
+  --panel-750: #1c1c1c;
 
-  /* Acentos */
-  --oliva: #8aa85a;
-  --oliva-strong: #c2d59a;
-  --arena: #d6b25e;
+  /* Metal */
+  --steel-100: #f3f4f6;
+  --steel-300: #d1d5db;
+  --steel-400: #9ca3af;
+  --steel-600: #4b5563;
 
-  /* Texto / iconos (lucide usa currentColor) */
-  --ink: rgba(231, 239, 233, 0.95);
-  --muted: rgba(231, 239, 233, 0.58);
+  /* Estado */
+  --led-ok: #22c55e;
+  --led-warn: #d4a94d;
+  --led-danger: #ef4444;
+
+  /* Texto / iconos */
+  --ink: rgba(243, 244, 246, 0.96);
+  --muted: rgba(243, 244, 246, 0.54);
 
   /* Tooltip */
-  --tip-bg: rgba(7, 10, 9, 0.94);
-  --tip-border: rgba(231, 239, 233, 0.16);
+  --tip-bg: rgba(10, 10, 10, 0.98);
+  --tip-border: rgba(255, 255, 255, 0.14);
   --tip-shadow: 0 14px 30px rgba(0, 0, 0, 0.55);
 }
 
@@ -47,24 +55,42 @@
   justify-content: space-between;
 
   background:
-    linear-gradient(180deg, rgba(231, 239, 233, 0.06), rgba(0, 0, 0, 0.22)),
-    repeating-linear-gradient(
-      90deg,
-      rgba(231, 239, 233, 0.018),
-      rgba(231, 239, 233, 0.018) 1px,
-      rgba(0, 0, 0, 0.02) 2px,
-      rgba(0, 0, 0, 0.02) 4px
-    ),
-    linear-gradient(90deg, var(--mil-900), var(--mil-700), var(--mil-900));
+    linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(0, 0, 0, 0.24)),
+    linear-gradient(rgba(255, 255, 255, 0.018) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.018) 1px, transparent 1px),
+    linear-gradient(90deg, var(--panel-900), var(--panel-750), var(--panel-900));
+  background-size:
+    auto,
+    26px 26px,
+    26px 26px,
+    auto;
 
-  border-top: 1px solid rgba(231, 239, 233, 0.12);
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
 
   box-shadow:
-    0 -24px 48px rgba(0, 0, 0, 0.7),
-    inset 0 1px 0 rgba(231, 239, 233, 0.05),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.45);
+    0 -24px 48px rgba(0, 0, 0, 0.68),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.48);
 
   z-index: 2000;
+}
+
+/* Barra metálica superior */
+.bottom-bar::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  height: 3px;
+  width: 100%;
+  background: linear-gradient(
+    90deg,
+    rgba(243, 244, 246, 0.95),
+    rgba(156, 163, 175, 0.78),
+    rgba(75, 85, 99, 0.76)
+  );
+  opacity: 0.96;
+  pointer-events: none;
 }
 
 /* =========================
@@ -77,19 +103,23 @@
   display: grid;
   place-items: center;
 
-  border-radius: 12px;
+  border-radius: 14px;
   text-decoration: none;
 
   background:
-    linear-gradient(180deg, rgba(231, 239, 233, 0.06), rgba(0, 0, 0, 0.26)),
-    linear-gradient(90deg, var(--mil-700), var(--mil-600), var(--mil-700));
+    linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(0, 0, 0, 0.22)),
+    linear-gradient(180deg, var(--panel-750) 0%, var(--panel-850) 100%);
 
-  border: 1px solid rgba(231, 239, 233, 0.16);
+  border: 1px solid rgba(255, 255, 255, 0.12);
   color: var(--muted);
 
   position: relative;
-  overflow: visible; /* tooltip puede salir */
+  overflow: visible;
   -webkit-tap-highlight-color: transparent;
+
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.035),
+    0 8px 18px rgba(0, 0, 0, 0.34);
 
   transition:
     transform 0.12s ease,
@@ -102,10 +132,13 @@
 /* Hover */
 .nav-btn:hover {
   color: var(--ink);
-  border-color: rgba(194, 213, 154, 0.34);
+  border-color: rgba(209, 213, 219, 0.24);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(0, 0, 0, 0.2)),
+    linear-gradient(180deg, #202020 0%, #131313 100%);
   box-shadow:
-    0 0 0 2px rgba(138, 168, 90, 0.12),
-    0 8px 22px rgba(0, 0, 0, 0.62);
+    0 0 0 2px rgba(209, 213, 219, 0.08),
+    0 10px 22px rgba(0, 0, 0, 0.48);
 }
 
 /* Press */
@@ -114,7 +147,7 @@
 }
 
 /* =========================
-   FOCO (teclado / accesibilidad)
+   FOCO
 ========================= */
 .nav-btn:focus {
   outline: none;
@@ -122,27 +155,27 @@
 
 .nav-btn:focus-visible {
   color: var(--ink);
-  border-color: rgba(194, 213, 154, 0.45);
+  border-color: rgba(209, 213, 219, 0.3);
   box-shadow:
-    0 0 0 3px rgba(138, 168, 90, 0.22),
-    0 10px 26px rgba(0, 0, 0, 0.62);
+    0 0 0 3px rgba(209, 213, 219, 0.12),
+    0 10px 26px rgba(0, 0, 0, 0.54);
 }
 
 /* =========================
    ACTIVO
 ========================= */
 .nav-btn--active {
-  color: rgba(194, 213, 154, 0.98);
-  border-color: rgba(194, 213, 154, 0.55);
+  color: rgba(243, 244, 246, 0.98);
+  border-color: rgba(209, 213, 219, 0.3);
 
   background:
-    linear-gradient(180deg, rgba(138, 168, 90, 0.22), rgba(0, 0, 0, 0.38)),
-    linear-gradient(90deg, var(--mil-800), var(--mil-700), var(--mil-800));
+    linear-gradient(180deg, rgba(255, 255, 255, 0.09), rgba(0, 0, 0, 0.28)),
+    linear-gradient(180deg, #232323 0%, #141414 100%);
 
   box-shadow:
-    0 0 0 3px rgba(138, 168, 90, 0.16),
-    inset 0 0 18px rgba(138, 168, 90, 0.14),
-    0 10px 22px rgba(0, 0, 0, 0.62);
+    0 0 0 3px rgba(209, 213, 219, 0.08),
+    inset 0 0 16px rgba(255, 255, 255, 0.03),
+    0 10px 22px rgba(0, 0, 0, 0.52);
 }
 
 /* Punto testigo */
@@ -154,12 +187,14 @@
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: rgba(214, 178, 94, 0.85);
-  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.35);
+  background: var(--led-ok);
+  box-shadow:
+    0 0 10px rgba(34, 197, 94, 0.42),
+    0 0 0 2px rgba(0, 0, 0, 0.34);
 }
 
 /* =========================
-   ICONOS (Lucide)
+   ICONOS
 ========================= */
 .nav-btn svg {
   display: block;
@@ -172,9 +207,7 @@
 }
 
 /* =========================
-   TOOLTIP (sin JS)
-   - Muestra el texto de aria-label
-   - Se activa en hover y focus-visible
+   TOOLTIP
 ========================= */
 .nav-btn::after {
   content: attr(aria-label);
@@ -204,26 +237,44 @@
     transform 0.12s ease;
 }
 
-/* Flechita */
-.nav-btn::before {
+/* Flecha */
+.bottom-bar .nav-btn:not(.nav-btn--active)::before,
+.bottom-bar .nav-btn.nav-btn--active[data-tip]::before {
+  content: "";
+}
+
+.nav-btn[data-tip]::before {
+  display: none;
+}
+
+/* Flechita tooltip */
+.nav-btn .tooltip-arrow {
+  display: none;
+}
+
+.nav-btn-tooltip-fix::before {
+  display: none;
+}
+
+.nav-btn:not(.nav-btn--active):hover::before,
+.nav-btn:not(.nav-btn--active):focus-visible::before {
   content: "";
   position: absolute;
   left: 50%;
   bottom: calc(100% + 4px);
-  transform: translateX(-50%) translateY(4px);
-
   width: 10px;
   height: 10px;
   background: var(--tip-bg);
   border-left: 1px solid var(--tip-border);
   border-top: 1px solid var(--tip-border);
   transform: translateX(-50%) rotate(45deg);
-
-  opacity: 0;
+  opacity: 1;
   pointer-events: none;
-  transition:
-    opacity 0.12s ease,
-    transform 0.12s ease;
+}
+
+.nav-btn--active:hover .tooltip-arrow,
+.nav-btn--active:focus-visible .tooltip-arrow {
+  display: none;
 }
 
 /* Mostrar tooltip */
@@ -233,17 +284,50 @@
   transform: translateX(-50%) translateY(0);
 }
 
-.nav-btn:hover::before,
-.nav-btn:focus-visible::before {
+/* Cuando está activo, el LED usa ::before.
+   entonces la flecha del tooltip va con un pseudo alternativo */
+.nav-btn--active:hover::after,
+.nav-btn--active:focus-visible::after {
   opacity: 1;
-  transform: translateX(-50%) rotate(45deg) translateY(0);
+  transform: translateX(-50%) translateY(0);
 }
 
-/* En pantallas táctiles, el hover puede “pegarse”:
-   desactivamos tooltip por hover cuando no hay hover real */
+.nav-btn--active:hover .nav-btn-tip,
+.nav-btn--active:focus-visible .nav-btn-tip {
+  opacity: 1;
+}
+
+/* Flecha del tooltip para activo usando sombra extra visual */
+.nav-btn--active:hover,
+.nav-btn--active:focus-visible {
+  box-shadow:
+    0 0 0 3px rgba(209, 213, 219, 0.1),
+    inset 0 0 16px rgba(255, 255, 255, 0.03),
+    0 10px 22px rgba(0, 0, 0, 0.52);
+}
+
+/* En pantallas táctiles, desactivar hover pegado */
 @media (hover: none) {
-  .nav-btn:hover::after,
+  .nav-btn:hover::after {
+    opacity: 0;
+  }
+
   .nav-btn:hover::before {
     opacity: 0;
+    content: none;
+  }
+}
+
+/* Ajuste compacto en móviles muy chicos */
+@media (max-width: 380px) {
+  .bottom-bar {
+    gap: 8px;
+    padding-left: 10px;
+    padding-right: 10px;
+  }
+
+  .nav-btn {
+    height: 50px;
+    border-radius: 12px;
   }
 }

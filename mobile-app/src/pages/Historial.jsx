@@ -1,9 +1,17 @@
 // src/pages/Historial.jsx
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
+import {
+  CalendarDays,
+  Filter,
+  Layers3,
+  ListFilter,
+  Search,
+} from "lucide-react";
 
 import TableroAutocomplete from "../components/TableroAutocomplete";
 import { obtenerHistorial } from "../services/historialApi";
+import "../styles/historial.css";
 
 const PAGE_SIZE = 30;
 
@@ -39,26 +47,21 @@ export default function Historial() {
 
   const [tableroSel, setTableroSel] = useState(initialTablero);
 
-  // filtros
   const [desde, setDesde] = useState(searchParams.get("desde") || "");
   const [hasta, setHasta] = useState(searchParams.get("hasta") || "");
   const [circuito, setCircuito] = useState(searchParams.get("circuito") || "");
   const [q, setQ] = useState(searchParams.get("q") || "");
 
-  // UI filter (local)
   const [soloPendientes, setSoloPendientes] = useState(
     searchParams.get("pendientes") === "1",
   );
 
-  // paginación
   const [page, setPage] = useState(Number(searchParams.get("page") || 1));
 
-  // data
   const [resp, setResp] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  // params “base” (sin page), para evitar bug de page viejo en goPage()
   const baseParams = useMemo(() => {
     const p = { page_size: PAGE_SIZE };
     if (desde) p.desde = desde;
@@ -73,7 +76,6 @@ export default function Historial() {
     return resp.results || resp.historial || [];
   }, [resp]);
 
-  // Resultado final a renderizar (con filtro local “solo pendientes”)
   const results = useMemo(() => {
     if (!soloPendientes) return rawResults;
     return rawResults.filter((h) => hasPendiente(h));
@@ -114,7 +116,6 @@ export default function Historial() {
       const data = await obtenerHistorial(nombre, p);
       setResp(data);
 
-      // persistir query params en URL
       const next = {};
       if (nombre) next.tablero = nombre;
       if (p.desde) next.desde = p.desde;
@@ -122,7 +123,6 @@ export default function Historial() {
       if (p.circuito) next.circuito = p.circuito;
       if (p.q) next.q = p.q;
 
-      // ✅ UI filter (local)
       if (soloPendientes) next.pendientes = "1";
 
       next.page = String(p.page || 1);
@@ -206,7 +206,6 @@ export default function Historial() {
     fetchHistorial(tableroSel, { ...baseParams, page: p });
   }
 
-  // Toggle local “solo pendientes” + sync URL (sin refetch)
   function toggleSoloPendientes() {
     setSoloPendientes((prev) => {
       const nextVal = !prev;
@@ -228,9 +227,7 @@ export default function Historial() {
     });
   }
 
-  // Inicial (si viene tablero desde URL)
   useEffect(() => {
-    // Si hay tablero en URL, lo cargamos.
     if (!initialTablero) return;
 
     const initialPage = Number(searchParams.get("page") || 1);
@@ -251,13 +248,9 @@ export default function Historial() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // =========================
-  // Agrupación por tablero (solo en modo “todo”)
-  // =========================
   const grouped = useMemo(() => {
     if (!isModoTodo) return null;
 
-    // groupMap: key -> { tablero, zona, items: [] }
     const map = new Map();
 
     for (const h of results) {
@@ -269,7 +262,6 @@ export default function Historial() {
       map.get(k).items.push(h);
     }
 
-    // orden por nombre de tablero, y dentro por fecha desc si el backend no lo hace
     const arr = Array.from(map.values()).sort((a, b) =>
       a.tablero.localeCompare(b.tablero, "es", { sensitivity: "base" }),
     );
@@ -278,169 +270,179 @@ export default function Historial() {
   }, [isModoTodo, results]);
 
   return (
-    <div className="page">
-      <h1 className="titulo">Historial</h1>
-
-      <TableroAutocomplete
-        value={tableroSel}
-        placeholder="Buscar tablero…"
-        onChangeText={(v) => setTableroSel(v)}
-        onSubmit={() => {
-          // Enter: aplica filtros (permite buscar sin tablero si hay filtros)
-          aplicarFiltros();
-        }}
-        onSelect={onSelectTablero}
-      />
-
-      {/* Filtros */}
-      <div className="card" style={{ marginTop: 10, padding: 12 }}>
-        <div className="muted" style={{ marginBottom: 8 }}>
-          Filtros
+    <div className="page historial-page">
+      <section className="card historial-hero">
+        <div className="historial-hero__badge">
+          <span className="historial-hero__badge-dot" />
+          Consulta operativa
         </div>
 
-        <div
-          style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}
-        >
-          <div>
-            <label>Desde</label>
-            <input
-              type="date"
-              value={desde}
-              onChange={(e) => setDesde(e.target.value)}
-            />
-          </div>
+        <h1 className="titulo historial-hero__title">Historial</h1>
 
-          <div>
-            <label>Hasta</label>
-            <input
-              type="date"
-              value={hasta}
-              onChange={(e) => setHasta(e.target.value)}
-            />
-          </div>
+        <p className="historial-hero__text">
+          Buscá intervenciones por tablero, fecha, circuito o texto libre. El
+          historial puede verse por tablero o agrupado globalmente.
+        </p>
+      </section>
 
+      <section className="card historial-section">
+        <div className="historial-section__head">
           <div>
-            <label>Circuito</label>
-            <input
-              type="text"
-              placeholder="fd1, alum exterior…"
-              value={circuito}
-              onChange={(e) => setCircuito(e.target.value)}
-            />
-          </div>
-
-          <div>
-            <label>Buscar</label>
-            <input
-              type="text"
-              placeholder="reparación, cable, luminaria…"
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-            />
+            <h3 className="subtitulo historial-section__title">Búsqueda</h3>
+            <p className="historial-section__copy">
+              Elegí tablero o combiná filtros para consultar el historial.
+            </p>
           </div>
         </div>
 
-        {/* Acciones */}
-        <div
-          style={{
-            display: "flex",
-            gap: 10,
-            marginTop: 10,
-            flexWrap: "wrap",
-            alignItems: "center",
-          }}
-        >
-          <button
-            type="button"
-            className="btn-add"
-            onClick={aplicarFiltros}
-            disabled={loading}
-          >
-            {loading ? "Cargando…" : "Aplicar"}
-          </button>
+        <div className="historial-stack">
+          <div>
+            <TableroAutocomplete
+              value={tableroSel}
+              placeholder="Buscar tablero…"
+              onChangeText={(v) => setTableroSel(v)}
+              onSubmit={() => {
+                aplicarFiltros();
+              }}
+              onSelect={onSelectTablero}
+            />
+          </div>
 
-          <button
-            type="button"
-            className="btn-outline"
-            onClick={limpiarFiltros}
-            disabled={loading}
-          >
-            Limpiar
-          </button>
+          <div className="historial-filters-grid">
+            <div>
+              <label className="historial-inline-label" htmlFor="desde">
+                <CalendarDays size={14} strokeWidth={2.2} />
+                <span>Desde</span>
+              </label>
+              <input
+                id="desde"
+                type="date"
+                value={desde}
+                onChange={(e) => setDesde(e.target.value)}
+              />
+            </div>
 
-          <button
-            type="button"
-            className="btn-outline"
-            onClick={verTodoHistorial}
-            disabled={loading}
-          >
-            Ver todo
-          </button>
+            <div>
+              <label className="historial-inline-label" htmlFor="hasta">
+                <CalendarDays size={14} strokeWidth={2.2} />
+                <span>Hasta</span>
+              </label>
+              <input
+                id="hasta"
+                type="date"
+                value={hasta}
+                onChange={(e) => setHasta(e.target.value)}
+              />
+            </div>
 
-          {/* ✅ Toggle local: Solo pendientes */}
+            <div>
+              <label className="historial-inline-label" htmlFor="circuito">
+                <Layers3 size={14} strokeWidth={2.2} />
+                <span>Circuito</span>
+              </label>
+              <input
+                id="circuito"
+                type="text"
+                placeholder="fd1, alum exterior…"
+                value={circuito}
+                onChange={(e) => setCircuito(e.target.value)}
+              />
+            </div>
 
-          {false && (
+            <div>
+              <label className="historial-inline-label" htmlFor="q">
+                <Search size={14} strokeWidth={2.2} />
+                <span>Buscar</span>
+              </label>
+              <input
+                id="q"
+                type="text"
+                placeholder="reparación, cable, luminaria…"
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+              />
+            </div>
+          </div>
+
+          <div className="historial-actions-row">
+            <button
+              type="button"
+              className="btn-add"
+              onClick={aplicarFiltros}
+              disabled={loading}
+            >
+              {loading ? "Cargando…" : "Aplicar"}
+            </button>
+
+            <button
+              type="button"
+              className="btn-outline"
+              onClick={limpiarFiltros}
+              disabled={loading}
+            >
+              Limpiar
+            </button>
+
+            <button
+              type="button"
+              className="btn-outline"
+              onClick={verTodoHistorial}
+              disabled={loading}
+            >
+              Ver todo
+            </button>
+
             <button
               type="button"
               className={`chip-toggle ${soloPendientes ? "is-on" : ""}`}
               onClick={toggleSoloPendientes}
               disabled={loading}
-              title="Filtra en pantalla (no recarga)."
+              title="Filtra en pantalla sin recargar"
             >
-              {soloPendientes ? "✓ Solo pendientes" : "Solo pendientes"}
+              <ListFilter size={15} strokeWidth={2.2} />
+              {soloPendientes ? "Solo pendientes" : "Ver pendientes"}
             </button>
-          )}
+          </div>
         </div>
-      </div>
+      </section>
 
       {loading && (
-        <p className="muted" style={{ marginTop: 10 }}>
+        <div className="historial-status historial-status--loading">
           Cargando…
-        </p>
-      )}
-      {error && (
-        <p className="error" style={{ marginTop: 10 }}>
-          {error}
-        </p>
+        </div>
       )}
 
-      {/* Header */}
+      {error && <p className="error historial-error">{error}</p>}
+
       {header && (
-        <div className="card" style={{ marginTop: 10 }}>
-          <strong>{header.tablero}</strong>
+        <section className="card historial-summary">
+          <div className="historial-summary__main">
+            <strong>{header.tablero}</strong>
 
-          <div className="muted">
-            {header.zona && header.zona !== "—"
-              ? `Zona: ${header.zona}`
-              : "Múltiples zonas"}
+            <div className="muted">
+              {header.zona && header.zona !== "—"
+                ? `Zona: ${header.zona}`
+                : "Múltiples zonas"}
+            </div>
+
+            <div className="muted">
+              Registros: {totalCount}{" "}
+              {resp?.count != null ? `(página ${page}/${totalPages})` : ""}
+              {soloPendientes ? (
+                <span className="muted historial-summary__pending-note">
+                  · mostrando {results.length} pendientes en esta página
+                </span>
+              ) : null}
+            </div>
           </div>
 
-          <div className="muted">
-            Registros: {totalCount}{" "}
-            {resp?.count != null ? `(página ${page}/${totalPages})` : ""}
-            {soloPendientes ? (
-              <span className="muted" style={{ marginLeft: 8 }}>
-                · mostrando {results.length} pendientes en esta página
-              </span>
-            ) : null}
-          </div>
-
-          {/* Chips rápidos: tableros match (si backend los manda) */}
           {Array.isArray(resp?.tableros) && resp.tableros.length > 0 && (
-            <div
-              style={{
-                display: "flex",
-                gap: 8,
-                flexWrap: "wrap",
-                marginTop: 10,
-              }}
-            >
+            <div className="historial-summary__chips">
               {resp.tableros.slice(0, 8).map((t, idx) => (
                 <button
                   key={t.id ?? `${t.nombre}-${idx}`}
                   type="button"
-                  className="btn-outline"
-                  style={{ padding: "6px 10px" }}
+                  className="btn-outline historial-summary__tab-chip"
                   onClick={() => onSelectTablero(t)}
                   title={t.zona || ""}
                 >
@@ -448,29 +450,28 @@ export default function Historial() {
                 </button>
               ))}
               {resp.tableros.length > 8 && (
-                <span className="muted" style={{ alignSelf: "center" }}>
+                <span className="muted historial-summary__more">
                   +{resp.tableros.length - 8} más…
                 </span>
               )}
             </div>
           )}
-        </div>
+        </section>
       )}
 
-      {/* =========================
-          MODO TODO: agrupado por tablero con sticky header
-         ========================= */}
       {isModoTodo && grouped && grouped.length > 0 && (
-        <div className="timeline" style={{ marginTop: 10 }}>
+        <div className="timeline historial-timeline">
           {grouped.map((g) => (
-            <div key={g.tablero} className="group-block">
-              <div className="group-header">
-                <div style={{ fontWeight: 900 }}>{g.tablero}</div>
-                <div className="muted" style={{ fontSize: 12 }}>
-                  {g.zona ? g.zona : "—"}
-                  <span style={{ marginLeft: 10 }}>
-                    · {g.items.length} regs
-                  </span>
+            <div key={g.tablero} className="group-block historial-group-block">
+              <div className="group-header historial-group-header">
+                <div>
+                  <div className="historial-group-header__title">
+                    {g.tablero}
+                  </div>
+                  <div className="muted historial-group-header__meta">
+                    {g.zona ? g.zona : "—"}
+                    <span>· {g.items.length} regs</span>
+                  </div>
                 </div>
               </div>
 
@@ -483,7 +484,7 @@ export default function Historial() {
                       key={h.id || `${h.fecha}-${h.creado}-${h.circuito || ""}`}
                       className={`timeline-item ${
                         pendiente ? "is-pendiente" : ""
-                      }`}
+                      } historial-item`}
                     >
                       <div className="row-top">
                         <div className="fecha">{fmtDateISO(h.fecha)}</div>
@@ -492,19 +493,16 @@ export default function Historial() {
                         ) : null}
                       </div>
 
-                      <div className="muted" style={{ marginTop: 2 }}>
+                      <div className="muted historial-item__meta">
                         {h.circuito ? `Circuito: ${h.circuito}` : ""}
                       </div>
 
-                      <div className="desc" style={{ marginTop: 8 }}>
+                      <div className="desc historial-item__desc">
                         {pickDescripcion(h)}
                       </div>
 
                       {(h.tarea_pedida || h.tarea_pendiente) && (
-                        <div
-                          className="muted"
-                          style={{ marginTop: 8, lineHeight: 1.3 }}
-                        >
+                        <div className="muted historial-item__extra">
                           {h.tarea_pedida ? (
                             <div>
                               <strong>Pedida:</strong> {h.tarea_pedida}
@@ -524,9 +522,8 @@ export default function Historial() {
             </div>
           ))}
 
-          {/* paginación (en modo todo también aplica si backend soporta) */}
           {resp?.count != null && (
-            <div style={{ display: "flex", gap: 10, marginTop: 14 }}>
+            <div className="historial-pagination">
               <button
                 type="button"
                 className="btn-outline"
@@ -548,19 +545,18 @@ export default function Historial() {
         </div>
       )}
 
-      {/* =========================
-          MODO TABLERO ÚNICO: timeline normal (sin agrupar)
-         ========================= */}
       {!isModoTodo && results?.length > 0 && (
         <>
-          <div className="timeline" style={{ marginTop: 10 }}>
+          <div className="timeline historial-timeline">
             {results.map((h) => {
               const pendiente = hasPendiente(h);
 
               return (
                 <div
                   key={h.id || `${h.fecha}-${h.creado}-${h.circuito || ""}`}
-                  className={`timeline-item ${pendiente ? "is-pendiente" : ""}`}
+                  className={`timeline-item ${
+                    pendiente ? "is-pendiente" : ""
+                  } historial-item`}
                 >
                   <div className="row-top">
                     <div className="fecha">{fmtDateISO(h.fecha)}</div>
@@ -569,20 +565,17 @@ export default function Historial() {
                     ) : null}
                   </div>
 
-                  <div className="muted" style={{ marginTop: 2 }}>
+                  <div className="muted historial-item__meta">
                     {h.zona ? `Zona: ${h.zona}` : ""}
                     {h.circuito ? ` · Circuito: ${h.circuito}` : ""}
                   </div>
 
-                  <div className="desc" style={{ marginTop: 8 }}>
+                  <div className="desc historial-item__desc">
                     {pickDescripcion(h)}
                   </div>
 
                   {(h.tarea_pedida || h.tarea_pendiente) && (
-                    <div
-                      className="muted"
-                      style={{ marginTop: 8, lineHeight: 1.3 }}
-                    >
+                    <div className="muted historial-item__extra">
                       {h.tarea_pedida ? (
                         <div>
                           <strong>Pedida:</strong> {h.tarea_pedida}
@@ -601,7 +594,7 @@ export default function Historial() {
           </div>
 
           {resp?.count != null && (
-            <div style={{ display: "flex", gap: 10, marginTop: 14 }}>
+            <div className="historial-pagination">
               <button
                 type="button"
                 className="btn-outline"
@@ -623,9 +616,8 @@ export default function Historial() {
         </>
       )}
 
-      {/* Vacío */}
       {resp && results?.length === 0 && !loading && !error && (
-        <div className="card" style={{ marginTop: 10 }}>
+        <div className="card historial-empty">
           <div className="muted">
             {soloPendientes
               ? "No hay pendientes con esos filtros (en esta página)."

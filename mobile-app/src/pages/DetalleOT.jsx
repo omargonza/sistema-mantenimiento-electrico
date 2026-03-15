@@ -1,6 +1,17 @@
 // src/pages/DetalleOT.jsx
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import {
+  ArrowLeft,
+  CheckCircle2,
+  FileText,
+  Image as ImageIcon,
+  MapPin,
+  Share2,
+  ShieldCheck,
+  UserCog,
+  Wrench,
+} from "lucide-react";
 import "../styles/detalle.css";
 import { getOtById, getPdfBlob, setFlags } from "../storage/ot_db";
 
@@ -91,10 +102,8 @@ export default function DetalleOT() {
     };
   }, [id]);
 
-  // ✅ Fuente de verdad: si existe detalle, usamos eso
   const d = useMemo(() => {
     const det = ot?.detalle || {};
-    // fallback defensivo a campos “rápidos” si faltan
     return {
       ...det,
       fecha: det.fecha ?? ot?.fecha,
@@ -111,6 +120,13 @@ export default function DetalleOT() {
     return `${fecha} - ${tablero}.pdf`;
   }, [d]);
 
+  async function bumpFlags(patch) {
+    try {
+      await setFlags(ot.id, patch);
+      setOt((prev) => (prev ? { ...prev, ...patch } : prev));
+    } catch {}
+  }
+
   const openPdf = async () => {
     const blob = await getPdfBlob(ot?.pdfId || ot?.id);
     if (!blob) {
@@ -118,9 +134,7 @@ export default function DetalleOT() {
       return;
     }
 
-    try {
-      await setFlags(ot.id, { reimpreso: (ot.reimpreso || 0) + 1 });
-    } catch {}
+    await bumpFlags({ reimpreso: (ot?.reimpreso || 0) + 1 });
 
     const url = URL.createObjectURL(blob);
     window.open(url, "_blank", "noopener,noreferrer");
@@ -142,9 +156,7 @@ export default function DetalleOT() {
     try {
       const shared = await sharePdfBlob({ blob, filename, title, text });
       if (shared) {
-        try {
-          await setFlags(ot.id, { enviado: true });
-        } catch {}
+        await bumpFlags({ enviado: true });
       }
     } catch (e) {
       console.warn("Share cancelado o no disponible:", e);
@@ -163,16 +175,20 @@ export default function DetalleOT() {
   if (notFound || !ot) {
     return (
       <div className="detalle-page">
-        <header className="detalle-topbar">
+        <header className="detalle-topbar detalle-topbar--solo">
           <button className="btn-volver-simple" onClick={() => navigate(-1)}>
-            Volver
+            <ArrowLeft size={16} strokeWidth={2.2} />
+            <span>Volver</span>
           </button>
+
           <h1 className="detalle-topbar-title">Orden no encontrada</h1>
         </header>
 
-        <p className="detalle-empty">
-          {errMsg || "No se encontró la OT en el respaldo local (IndexedDB)."}
-        </p>
+        <div className="card detalle-empty-card">
+          <p className="detalle-empty">
+            {errMsg || "No se encontró la OT en el respaldo local (IndexedDB)."}
+          </p>
+        </div>
       </div>
     );
   }
@@ -192,57 +208,70 @@ export default function DetalleOT() {
     <div className="detalle-page">
       <header className="detalle-topbar">
         <button className="btn-volver-simple" onClick={() => navigate(-1)}>
-          Volver
+          <ArrowLeft size={16} strokeWidth={2.2} />
+          <span>Volver</span>
         </button>
 
-        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+        <div className="detalle-topbar-right">
           <h1 className="detalle-topbar-title">OT #{numeroOT}</h1>
           {hasPendiente(d) ? (
-            <span className="badge-pendiente">PENDIENTE</span>
+            <span className="badge-pendiente">Pendiente</span>
           ) : null}
         </div>
       </header>
 
       <main className="detalle-main">
-        {/* Header resumen */}
-        <section className="detalle-header-card">
+        <section className="card detalle-header-card">
           <div className="detalle-header-row">
-            <h2>Orden de trabajo</h2>
+            <div>
+              <div className="detalle-header-kicker">Orden de trabajo</div>
+              <h2 className="detalle-header-title">{fmt(d?.tablero)}</h2>
+            </div>
+
             <span className="detalle-pill-fecha">{fechaLabel}</span>
           </div>
 
           {d?.ubicacion ? (
-            <p className="detalle-ubicacion">{d.ubicacion}</p>
+            <p className="detalle-ubicacion">
+              <MapPin size={16} strokeWidth={2.2} />
+              <span>{d.ubicacion}</span>
+            </p>
           ) : null}
 
           <div className="detalle-chips-row">
             {d?.zona ? (
-              <span className="chip chip-zona">Zona: {d.zona}</span>
+              <span className="detalle-chip">Zona: {d.zona}</span>
             ) : null}
             {d?.vehiculo ? (
-              <span className="chip chip-veh">Veh: {d.vehiculo}</span>
+              <span className="detalle-chip">Veh: {d.vehiculo}</span>
             ) : null}
             {d?.circuito ? (
-              <span className="chip chip-circ">Circ: {d.circuito}</span>
+              <span className="detalle-chip">Circ: {d.circuito}</span>
             ) : null}
             {d?.tiene_firma ? (
-              <span className="chip chip-ok">Firma</span>
+              <span className="detalle-chip detalle-chip--ok">Firma</span>
             ) : null}
             {Number(d?.fotos_count || 0) > 0 ? (
-              <span className="chip chip-info">Fotos: {d.fotos_count}</span>
+              <span className="detalle-chip detalle-chip--info">
+                Fotos: {d.fotos_count}
+              </span>
+            ) : null}
+            {ot?.enviado ? (
+              <span className="detalle-chip detalle-chip--ok">Enviado</span>
             ) : null}
           </div>
 
-          {errMsg ? (
-            <p className="detalle-muted" style={{ marginTop: 10 }}>
-              {errMsg}
-            </p>
-          ) : null}
+          {errMsg ? <p className="detalle-muted">{errMsg}</p> : null}
         </section>
 
-        {/* Datos generales */}
         <section className="detalle-section">
-          <h3 className="detalle-section-title">Datos generales</h3>
+          <div className="detalle-section-head">
+            <h3 className="detalle-section-title">
+              <Wrench size={16} strokeWidth={2.2} />
+              <span>Datos generales</span>
+            </h3>
+          </div>
+
           <div className="detalle-grid">
             <DetalleItem label="Tablero" value={fmt(d?.tablero)} />
             <DetalleItem label="Circuito" value={fmt(d?.circuito)} />
@@ -252,12 +281,18 @@ export default function DetalleOT() {
               label="Luminarias / Equipos"
               value={fmt(d?.luminaria_equipos)}
             />
+            <DetalleItem label="Ubicación" value={fmt(d?.ubicacion)} />
           </div>
         </section>
 
-        {/* Recorrido */}
         <section className="detalle-section">
-          <h3 className="detalle-section-title">Recorrido</h3>
+          <div className="detalle-section-head">
+            <h3 className="detalle-section-title">
+              <MapPin size={16} strokeWidth={2.2} />
+              <span>Recorrido</span>
+            </h3>
+          </div>
+
           <div className="detalle-grid">
             <DetalleItem label="Km inicial" value={fmt(d?.km_inicial)} />
             <DetalleItem label="Km final" value={fmt(d?.km_final)} />
@@ -265,9 +300,14 @@ export default function DetalleOT() {
           </div>
         </section>
 
-        {/* Técnicos */}
         <section className="detalle-section">
-          <h3 className="detalle-section-title">Técnicos</h3>
+          <div className="detalle-section-head">
+            <h3 className="detalle-section-title">
+              <UserCog size={16} strokeWidth={2.2} />
+              <span>Técnicos</span>
+            </h3>
+          </div>
+
           {tecnicos.length > 0 ? (
             <ul className="detalle-list">
               {tecnicos.map((t, i) => (
@@ -286,9 +326,14 @@ export default function DetalleOT() {
           )}
         </section>
 
-        {/* Materiales */}
         <section className="detalle-section">
-          <h3 className="detalle-section-title">Materiales</h3>
+          <div className="detalle-section-head">
+            <h3 className="detalle-section-title">
+              <Wrench size={16} strokeWidth={2.2} />
+              <span>Materiales</span>
+            </h3>
+          </div>
+
           {materiales.length > 0 ? (
             <ul className="detalle-list">
               {materiales.map((m, i) => (
@@ -307,9 +352,13 @@ export default function DetalleOT() {
           )}
         </section>
 
-        {/* Tareas */}
         <section className="detalle-section">
-          <h3 className="detalle-section-title">Detalle de tareas</h3>
+          <div className="detalle-section-head">
+            <h3 className="detalle-section-title">
+              <FileText size={16} strokeWidth={2.2} />
+              <span>Detalle de tareas</span>
+            </h3>
+          </div>
 
           <DetalleBloqueTexto label="Tarea pedida" value={pedida} />
           <DetalleBloqueTexto label="Tarea realizada" value={realizada} />
@@ -318,13 +367,17 @@ export default function DetalleOT() {
             value={pendiente}
             highlight={Boolean(pendiente)}
           />
-
           <DetalleBloqueTexto label="Observaciones" value={obs} />
         </section>
 
-        {/* Auditoría */}
         <section className="detalle-section">
-          <h3 className="detalle-section-title">Auditoría</h3>
+          <div className="detalle-section-head">
+            <h3 className="detalle-section-title">
+              <ShieldCheck size={16} strokeWidth={2.2} />
+              <span>Auditoría</span>
+            </h3>
+          </div>
+
           <div className="detalle-grid">
             <DetalleItem
               label="Firma técnico (aclaración)"
@@ -339,16 +392,24 @@ export default function DetalleOT() {
               value={d?.tiene_firma ? "Sí" : "No"}
             />
             <DetalleItem label="Fotos (cantidad)" value={fmt(d?.fotos_count)} />
+            <DetalleItem label="Enviado" value={ot?.enviado ? "Sí" : "No"} />
+            <DetalleItem
+              label="Reimpresiones"
+              value={fmt(ot?.reimpreso || 0)}
+            />
+            <DetalleItem label="Favorita" value={ot?.favorito ? "Sí" : "No"} />
           </div>
         </section>
       </main>
 
       <footer className="detalle-footer-bar">
         <button className="btn-footer btn-secundario" onClick={sharePdf}>
-          Compartir
+          <Share2 size={16} strokeWidth={2.2} />
+          <span>Compartir</span>
         </button>
         <button className="btn-footer btn-primario" onClick={openPdf}>
-          Abrir PDF
+          <CheckCircle2 size={16} strokeWidth={2.2} />
+          <span>Abrir PDF</span>
         </button>
       </footer>
     </div>
@@ -387,7 +448,7 @@ function DetalleBloqueTexto({ label, value, highlight = false }) {
               </p>
             ) : (
               <div key={i} className="detalle-prose-blank" />
-            )
+            ),
           )}
         </div>
       )}

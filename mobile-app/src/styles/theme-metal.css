@@ -1,40 +1,80 @@
 /* =========================================================
-   THEME METAL GLOBAL — INDUSTRIAL / SCADA PRO
-   Performance-safe:
-   - No JS
-   - No heavy filters on scrolling containers
-   - Shadows & gradients only
+   THEME METAL GLOBAL — INDUSTRIAL / TABLERO ELÉCTRICO
+   Seguro para producción:
+   - Sin JS
+   - Sin blur pesado
+   - Sin filtros costosos en contenedores scrolleables
+   - Reusa tokens existentes de la app
 ========================================================= */
 
 :root {
   /* =========================
      METAL PALETTE
   ========================= */
-  --m-bg-950: #070b10;
-  --m-bg-900: #0b1016;
-  --m-bg-850: #101720;
-  --m-bg-800: #151e28;
-  --m-bg-700: #1b2633;
-  --m-bg-600: #243141;
+  --m-bg-950: #050505;
+  --m-bg-900: #0a0a0a;
+  --m-bg-850: #101010;
+  --m-bg-800: #171717;
+  --m-bg-700: #1f1f1f;
+  --m-bg-600: #2a2f36;
 
-  --m-line-soft: rgba(148, 163, 184, 0.18);
-  --m-line-strong: rgba(148, 163, 184, 0.32);
+  --m-line-soft: rgba(255, 255, 255, 0.08);
+  --m-line-strong: rgba(255, 255, 255, 0.14);
 
-  --m-text: rgba(226, 232, 240, 0.95);
-  --m-muted: rgba(226, 232, 240, 0.55);
+  --m-text: rgba(243, 244, 246, 0.95);
+  --m-muted: rgba(243, 244, 246, 0.58);
 
-  /* Accents */
-  --m-steel: #7dd3fc;
-  --m-steel-strong: #38bdf8;
+  --m-steel: #d1d5db;
+  --m-steel-soft: #9ca3af;
+  --m-steel-strong: #f3f4f6;
 
   --m-ok: #22c55e;
-  --m-warn: #f59e0b;
+  --m-warn: #d4a94d;
   --m-danger: #ef4444;
+  --m-info: #60a5fa;
 
-  /* Radii */
   --m-r-sm: 10px;
   --m-r-md: 14px;
   --m-r-lg: 18px;
+
+  --m-shadow-1: 0 10px 22px rgba(0, 0, 0, 0.42);
+  --m-shadow-2: 0 18px 32px rgba(0, 0, 0, 0.58);
+  --m-focus: 0 0 0 3px rgba(209, 213, 219, 0.12);
+
+  /* =========================
+     ALIAS A TOKENS EXISTENTES
+     Esto hace que gran parte de la app
+     herede el tema sin reescribir todo
+  ========================= */
+  --bg: var(--m-bg-950);
+  --bg-soft: var(--m-bg-850);
+  --bg-soft2: var(--m-bg-800);
+
+  --text: var(--m-text);
+  --muted: var(--m-muted);
+
+  --primary: var(--m-steel);
+  --primary2: var(--m-steel-soft);
+
+  --border: var(--m-line-soft);
+  --border-strong: var(--m-line-strong);
+
+  --radius: var(--m-r-md);
+  --radius-sm: var(--m-r-sm);
+
+  --shadow-1: var(--m-shadow-1);
+  --shadow-2: var(--m-shadow-2);
+  --focus: var(--m-focus);
+
+  --ok: var(--m-ok);
+  --warning: var(--m-warn);
+  --danger: var(--m-danger);
+
+  --chip-bg: rgba(16, 16, 16, 0.96);
+  --chip-border: rgba(255, 255, 255, 0.12);
+  --chip-hover: rgba(24, 24, 24, 0.98);
+  --chip-active-bg: rgba(209, 213, 219, 0.08);
+  --chip-active-border: rgba(209, 213, 219, 0.28);
 }
 
 /* =========================
@@ -43,33 +83,74 @@
 body {
   background:
     radial-gradient(
-      circle at 50% 0%,
-      rgba(125, 211, 252, 0.05),
-      transparent 60%
+      1000px 620px at 50% 0%,
+      rgba(209, 213, 219, 0.06),
+      transparent 58%
+    ),
+    radial-gradient(
+      820px 480px at 85% 16%,
+      rgba(156, 163, 175, 0.05),
+      transparent 56%
     ),
     linear-gradient(180deg, var(--m-bg-900), var(--m-bg-950));
   color: var(--m-text);
 }
 
 /* =========================
-   PAGES / CARDS
+   PAGE
+   OJO: page NO es card
 ========================= */
 .page,
+.dashboard-page,
+.historial-page,
+.detalle-page {
+  color: var(--m-text);
+}
+
+/* =========================
+   SURFACES / PANELS / CARDS
+========================= */
 .card,
 .lumdash-card,
 .panel-tableros,
 .tablero-card,
 .kpi,
 .statbox,
-.filtros-box {
+.filtros-box,
+.timeline,
+.group-block,
+.detalle-section,
+.detalle-header-card,
+.login-card,
+.login-panel {
   border-radius: var(--m-r-lg);
   border: 1px solid var(--m-line-soft);
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(0, 0, 0, 0.35)),
+    linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.045),
+      rgba(255, 255, 255, 0.01)
+    ),
     linear-gradient(90deg, var(--m-bg-800), var(--m-bg-700), var(--m-bg-800));
   box-shadow:
-    0 10px 22px rgba(0, 0, 0, 0.45),
-    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+    var(--m-shadow-1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+/* Barra metálica superior */
+.card::before,
+.lumdash-card::before,
+.panel-tableros::before,
+.detalle-header-card::before,
+.detalle-section::before,
+.login-card::before,
+.login-panel::before {
+  background: linear-gradient(
+    90deg,
+    rgba(243, 244, 246, 0.95),
+    rgba(156, 163, 175, 0.82),
+    rgba(75, 85, 99, 0.76)
+  );
 }
 
 /* =========================
@@ -77,20 +158,23 @@ body {
 ========================= */
 .titulo,
 .lumdash-title,
-.panel-title {
-  letter-spacing: 0.12em;
+.panel-title,
+.detalle-section-title,
+.historial-section__title,
+.nuevaot-section__title,
+.dashboard-section-head .subtitulo {
+  letter-spacing: 0.08em;
   text-transform: uppercase;
-  font-weight: 900;
-  color: var(--m-steel);
-  text-shadow:
-    0 0 8px rgba(125, 211, 252, 0.35),
-    0 0 18px rgba(125, 211, 252, 0.25);
+  font-weight: 950;
+  color: var(--m-steel-strong);
 }
 
-.muted,
-.lumdash-muted,
+.subtitulo,
+.panel-sub,
 .kpi-sub,
-.panel-sub {
+.text-muted,
+.muted,
+.lumdash-muted {
   color: var(--m-muted);
 }
 
@@ -99,153 +183,284 @@ body {
 ========================= */
 input,
 select,
-textarea {
-  background: linear-gradient(
-    180deg,
-    rgba(255, 255, 255, 0.06),
-    rgba(0, 0, 0, 0.5)
-  );
-  border: 1px solid var(--m-line-soft);
+textarea,
+.smartselect-display,
+.ss-search {
+  background:
+    linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.04),
+      rgba(255, 255, 255, 0.012)
+    ),
+    linear-gradient(180deg, #0a0a0a 0%, #131313 100%);
+  border: 1px solid var(--m-line-strong);
   border-radius: var(--m-r-md);
   color: var(--m-text);
 }
 
 input:focus,
 select:focus,
-textarea:focus {
+textarea:focus,
+.smartselect-display:focus,
+.ss-search:focus {
   outline: none;
-  border-color: var(--m-steel);
-  box-shadow:
-    0 0 0 2px rgba(125, 211, 252, 0.25),
-    inset 0 0 12px rgba(125, 211, 252, 0.15);
+  border-color: rgba(209, 213, 219, 0.24);
+  box-shadow: var(--m-focus);
 }
 
 /* =========================
    BUTTONS
+   Mejor tocar clases y no TODO button
 ========================= */
-button,
 .btn-add,
 .btn-outline,
-.btn-mini {
+.btn-mini,
+.btn-enviar,
+.btn-footer,
+.btn-volver-simple,
+.dashboard-action-btn,
+.nav-btn,
+.ss-close {
   border-radius: var(--m-r-md);
   border: 1px solid var(--m-line-soft);
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(0, 0, 0, 0.45)),
-    linear-gradient(90deg, var(--m-bg-700), var(--m-bg-600), var(--m-bg-700));
   color: var(--m-text);
   font-weight: 900;
-  letter-spacing: 0.04em;
   transition:
     transform 0.1s ease,
     box-shadow 0.15s ease,
     border-color 0.15s ease,
-    color 0.15s ease;
+    color 0.15s ease,
+    background 0.15s ease;
 }
 
-button:hover,
+.btn-add,
+.btn-outline,
+.btn-mini,
+.btn-volver-simple,
+.dashboard-action-btn,
+.ss-close {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(0, 0, 0, 0.38)),
+    linear-gradient(90deg, var(--m-bg-700), var(--m-bg-600), var(--m-bg-700));
+}
+
 .btn-add:hover,
 .btn-outline:hover,
-.btn-mini:hover {
-  border-color: var(--m-steel);
-  color: var(--m-steel);
+.btn-mini:hover,
+.btn-volver-simple:hover,
+.dashboard-action-btn:hover,
+.ss-close:hover {
+  border-color: rgba(209, 213, 219, 0.24);
   box-shadow:
-    0 0 0 2px rgba(125, 211, 252, 0.2),
-    0 8px 18px rgba(0, 0, 0, 0.5);
+    0 0 0 2px rgba(209, 213, 219, 0.08),
+    0 8px 18px rgba(0, 0, 0, 0.46);
 }
 
-button:active {
-  transform: translateY(1px) scale(0.98);
+.btn-enviar,
+.btn-footer.btn-primario,
+.op-mode .btn,
+.op-mode .btn-enviar {
+  border-color: rgba(243, 244, 246, 0.22);
+  background:
+    linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.18),
+      rgba(255, 255, 255, 0.04)
+    ),
+    linear-gradient(90deg, var(--m-steel-strong), var(--m-steel-soft));
+  color: #050505;
+  box-shadow:
+    0 14px 28px rgba(0, 0, 0, 0.34),
+    inset 0 1px 0 rgba(255, 255, 255, 0.3);
+}
+
+.btn-enviar:hover,
+.btn-footer.btn-primario:hover,
+.op-mode .btn:hover,
+.op-mode .btn-enviar:hover {
+  border-color: rgba(243, 244, 246, 0.3);
+  filter: brightness(1.03);
+}
+
+.btn-add:active,
+.btn-outline:active,
+.btn-mini:active,
+.btn-enviar:active,
+.btn-footer:active,
+.btn-volver-simple:active,
+.dashboard-action-btn:active,
+.ss-close:active {
+  transform: translateY(1px) scale(0.985);
 }
 
 /* =========================
-   KPIs
+   KPIs / HIGHLIGHT PANELS
 ========================= */
-.kpi {
+.kpi,
+.kpi-card {
   position: relative;
   overflow: hidden;
 }
 
-.kpi::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(
-    120deg,
-    transparent,
-    rgba(125, 211, 252, 0.18),
-    transparent
-  );
-  transform: translateX(-100%);
-  transition: transform 0.6s ease;
-}
+/* Hover sheen solo en desktop con hover real */
+@media (hover: hover) {
+  .kpi::after,
+  .kpi-card::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+      120deg,
+      transparent,
+      rgba(209, 213, 219, 0.14),
+      transparent
+    );
+    transform: translateX(-100%);
+    transition: transform 0.6s ease;
+    pointer-events: none;
+  }
 
-.kpi:hover::after {
-  transform: translateX(100%);
+  .kpi:hover::after,
+  .kpi-card:hover::after {
+    transform: translateX(100%);
+  }
 }
 
 /* =========================
-   SEMÁFORO TABLEROS
+   SEMÁFORO / TABLEROS
 ========================= */
 .tablero-card {
   transition:
     transform 0.12s ease,
-    box-shadow 0.15s ease;
+    box-shadow 0.15s ease,
+    border-color 0.15s ease;
 }
 
 .tablero-card:hover {
-  transform: translateY(-2px) scale(1.01);
+  transform: translateY(-2px);
   box-shadow:
-    0 0 0 2px rgba(125, 211, 252, 0.25),
-    0 18px 32px rgba(0, 0, 0, 0.7);
+    0 0 0 2px rgba(209, 213, 219, 0.1),
+    0 18px 32px rgba(0, 0, 0, 0.62);
 }
 
 /* =========================
-   PILLS / BADGES
+   PILLS / BADGES / CHIPS
 ========================= */
 .pill,
 .badge,
 .badge-pendiente,
-.chip {
+.chip,
+.detalle-chip {
   border-radius: 999px;
   padding: 4px 10px;
   font-weight: 900;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.04em;
 }
 
-.pill-OK {
+.pill-OK,
+.badge.ok,
+.detalle-chip--ok {
   color: var(--m-ok);
-  border-color: rgba(34, 197, 94, 0.6);
-  box-shadow: 0 0 12px rgba(34, 197, 94, 0.35);
+  border-color: rgba(34, 197, 94, 0.34);
+  box-shadow: 0 0 10px rgba(34, 197, 94, 0.16);
 }
 
-.pill-PENDIENTE {
+.pill-PENDIENTE,
+.badge-pendiente {
   color: var(--m-warn);
-  border-color: rgba(245, 158, 11, 0.6);
-  box-shadow: 0 0 12px rgba(245, 158, 11, 0.35);
+  border-color: rgba(212, 169, 77, 0.34);
+  box-shadow: 0 0 10px rgba(212, 169, 77, 0.14);
 }
 
-.pill-APAGADO {
+.pill-APAGADO,
+.badge.critico {
   color: var(--m-danger);
-  border-color: rgba(239, 68, 68, 0.6);
-  box-shadow: 0 0 12px rgba(239, 68, 68, 0.35);
+  border-color: rgba(239, 68, 68, 0.34);
+  box-shadow: 0 0 10px rgba(239, 68, 68, 0.14);
+}
+
+.badge.none {
+  color: var(--m-muted);
 }
 
 /* =========================
-   TABLE (CONSOLE STYLE)
+   TABLE / CONSOLE STYLE
 ========================= */
 .lumdash-table th {
   background: linear-gradient(
     180deg,
-    rgba(125, 211, 252, 0.12),
-    rgba(0, 0, 0, 0.85)
+    rgba(209, 213, 219, 0.12),
+    rgba(0, 0, 0, 0.82)
   );
 }
 
 .lumdash-table tbody tr:hover {
-  background: rgba(125, 211, 252, 0.08);
+  background: rgba(209, 213, 219, 0.06);
+}
+
+/* =========================
+   TIMELINE / LISTS
+========================= */
+.timeline-item,
+.detalle-list-item,
+.stat-row,
+.nuevaot-history-item {
+  background:
+    linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.03),
+      rgba(255, 255, 255, 0.01)
+    ),
+    rgba(14, 14, 14, 0.88);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+/* =========================
+   SMARTSELECT / SHEETS
+========================= */
+.ss-sheet {
+  background:
+    linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.045),
+      rgba(255, 255, 255, 0.012)
+    ),
+    linear-gradient(180deg, #191919 0%, #0f0f0f 100%);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.ss-group-title {
+  background:
+    linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.04),
+      rgba(255, 255, 255, 0.01)
+    ),
+    rgba(20, 20, 20, 0.96);
+}
+
+/* =========================
+   BOTTOM BAR
+========================= */
+.bottom-bar {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(0, 0, 0, 0.24)),
+    linear-gradient(rgba(255, 255, 255, 0.018) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.018) 1px, transparent 1px),
+    linear-gradient(90deg, var(--m-bg-900), var(--m-bg-700), var(--m-bg-900));
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.nav-btn {
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+.nav-btn:hover,
+.nav-btn--active {
+  border-color: rgba(209, 213, 219, 0.24);
 }
 
 /* =========================
    PERFORMANCE NOTES
 ========================= */
-/* No filters, no animations on scrollable containers */
+/* Sin blur / sin filtros pesados / sin animación continua */

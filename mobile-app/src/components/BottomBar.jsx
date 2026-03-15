@@ -1,3 +1,4 @@
+// src/components/BottomBar.jsx
 import { NavLink } from "react-router-dom";
 import {
   Home,
@@ -9,12 +10,18 @@ import {
 import "../styles/bottombar.css";
 
 export default function BottomBar() {
-  const cls = ({ isActive }) => `nav-btn ${isActive ? "nav-btn--active" : ""}`;
+  const cls = ({ isActive }) => `nav-btn${isActive ? " nav-btn--active" : ""}`;
 
   return (
     <nav className="bottom-bar" aria-label="Navegación inferior">
-      <NavLink to="/" className={cls} title="Inicio" aria-label="Inicio">
-        <Home size={22} />
+      <NavLink
+        to="/dashboard"
+        end
+        className={cls}
+        title="Inicio"
+        aria-label="Inicio"
+      >
+        <Home size={22} strokeWidth={2.2} />
       </NavLink>
 
       <NavLink
@@ -23,7 +30,7 @@ export default function BottomBar() {
         title="Nueva OT"
         aria-label="Nueva OT"
       >
-        <PlusCircle size={22} />
+        <PlusCircle size={22} strokeWidth={2.2} />
       </NavLink>
 
       <NavLink
@@ -32,7 +39,7 @@ export default function BottomBar() {
         title="Historial"
         aria-label="Historial"
       >
-        <LayoutList size={22} />
+        <LayoutList size={22} strokeWidth={2.2} />
       </NavLink>
 
       <NavLink
@@ -41,7 +48,7 @@ export default function BottomBar() {
         title="Mis PDFs"
         aria-label="Mis PDFs"
       >
-        <FileText size={22} />
+        <FileText size={22} strokeWidth={2.2} />
       </NavLink>
 
       <NavLink
@@ -50,7 +57,7 @@ export default function BottomBar() {
         title="Luminarias"
         aria-label="Luminarias"
       >
-        <ListChecks size={22} />
+        <ListChecks size={22} strokeWidth={2.2} />
       </NavLink>
     </nav>
   );
