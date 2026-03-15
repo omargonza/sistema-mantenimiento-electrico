@@ -1,6 +1,3 @@
-from django.db import models
-
-# Create your models here.
 from django.conf import settings
 from django.db import models
 
@@ -29,6 +26,8 @@ class UserProfile(models.Model):
     class Meta:
         db_table = "accounts_user_profile"
         ordering = ["-created_at"]
+        verbose_name = "Perfil de usuario"
+        verbose_name_plural = "Perfiles de usuario"
 
     def __str__(self):
         return f"{self.user.username} - {self.role}"

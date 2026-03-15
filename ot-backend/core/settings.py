@@ -44,7 +44,7 @@ INSTALLED_APPS = [
     # Local apps
     "orders.apps.OrdersConfig",
     "historial",
-    "accounts",
+    "accounts.apps.AccountsConfig",
 ]
 
 # =========================================================

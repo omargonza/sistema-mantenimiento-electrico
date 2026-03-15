@@ -1,5 +1,6 @@
 from django.contrib.auth import authenticate, get_user_model
 from django.contrib.auth.password_validation import validate_password
+from django.db import transaction
 from rest_framework import serializers
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 
@@ -41,13 +42,15 @@ class UsernameTokenObtainPairSerializer(TokenObtainPairSerializer):
     @classmethod
     def get_token(cls, user):
         token = super().get_token(user)
+
+        profile = getattr(user, "profile", None)
+        if profile is None:
+            profile, _ = UserProfile.objects.get_or_create(user=user)
+
         token["legajo"] = user.username
-        token["role"] = getattr(user.profile, "role", None)
-        token["nombre_completo"] = getattr(
-            user.profile,
-            "nombre_completo",
-            user.username,
-        )
+        token["role"] = profile.role
+        token["nombre_completo"] = profile.nombre_completo or user.username
+
         return token
 
     def validate(self, attrs):
@@ -107,24 +110,27 @@ class UserCreateSerializer(serializers.ModelSerializer):
         validate_password(value)
         return value
 
+    @transaction.atomic
     def create(self, validated_data):
         legajo = validated_data.pop("legajo").strip()
         password = validated_data.pop("password")
         nombre_completo = validated_data.pop("nombre_completo")
         role = validated_data.pop("role")
+        email = validated_data.get("email", "").strip()
 
         user = User(
             username=legajo,
-            email=validated_data.get("email", ""),
+            email=email,
             is_active=validated_data.get("is_active", True),
             is_staff=validated_data.get("is_staff", role == UserProfile.Role.ADMIN),
         )
         user.set_password(password)
         user.save()
 
-        user.profile.nombre_completo = nombre_completo
-        user.profile.role = role
-        user.profile.save(update_fields=["nombre_completo", "role", "updated_at"])
+        profile, _ = UserProfile.objects.get_or_create(user=user)
+        profile.nombre_completo = nombre_completo
+        profile.role = role
+        profile.save(update_fields=["nombre_completo", "role", "updated_at"])
 
         return user
 
@@ -176,6 +182,7 @@ class UserUpdateSerializer(serializers.ModelSerializer):
         validate_password(value)
         return value
 
+    @transaction.atomic
     def update(self, instance, validated_data):
         legajo = validated_data.pop("legajo", None)
         password = validated_data.pop("password", None)
@@ -185,23 +192,29 @@ class UserUpdateSerializer(serializers.ModelSerializer):
         if legajo is not None:
             instance.username = legajo.strip()
 
+        if "email" in validated_data and validated_data["email"] is not None:
+            instance.email = validated_data["email"].strip()
+
         for attr, value in validated_data.items():
-            setattr(instance, attr, value)
+            if attr != "email":
+                setattr(instance, attr, value)
 
         if password:
             instance.set_password(password)
 
+        if role is not None:
+            instance.is_staff = role == UserProfile.Role.ADMIN
+
         instance.save()
 
+        profile, _ = UserProfile.objects.get_or_create(user=instance)
+
         if nombre_completo is not None:
-            instance.profile.nombre_completo = nombre_completo
+            profile.nombre_completo = nombre_completo
 
         if role is not None:
-            instance.profile.role = role
-            if role == UserProfile.Role.ADMIN:
-                instance.is_staff = True
-                instance.save(update_fields=["is_staff"])
+            profile.role = role
 
-        instance.profile.save()
+        profile.save()
 
         return instance

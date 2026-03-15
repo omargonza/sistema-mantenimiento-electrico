@@ -44,7 +44,7 @@ class MeView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        return Response(MeSerializer(request.user), status=status.HTTP_200_OK)
+        return Response(MeSerializer(request.user).data, status=status.HTTP_200_OK)
 
 
 class UserViewSet(viewsets.ModelViewSet):
@@ -70,9 +70,10 @@ class UserViewSet(viewsets.ModelViewSet):
         instance.is_active = False
         instance.save(update_fields=["is_active"])
 
-        if hasattr(instance, "profile"):
-            instance.profile.is_soft_deleted = True
-            instance.profile.save(update_fields=["is_soft_deleted", "updated_at"])
+        profile = getattr(instance, "profile", None)
+        if profile:
+            profile.is_soft_deleted = True
+            profile.save(update_fields=["is_soft_deleted", "updated_at"])
 
         return Response(
             {"detail": "Usuario desactivado correctamente."},
