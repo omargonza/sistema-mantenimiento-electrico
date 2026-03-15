@@ -1,29 +1,34 @@
 from pathlib import Path
 import os
 import logging
-from dotenv import load_dotenv
-import dj_database_url
 from datetime import timedelta
 
+from dotenv import load_dotenv
+import dj_database_url
+
 # =========================================================
-#  BASE / ENV
+# BASE / ENV
 # =========================================================
 BASE_DIR = Path(__file__).resolve().parent.parent
-
 load_dotenv()
 
 # =========================================================
-#  FLAGS
+# FLAGS
 # =========================================================
-SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "dev-secret-key")
-DEBUG = os.getenv("DJANGO_DEBUG", "True").lower() == "true"
+DEBUG = os.getenv("DJANGO_DEBUG", "False").lower() == "true"
 
-# Hosts
-_allowed = os.getenv("ALLOWED_HOSTS", "*" if DEBUG else "localhost,127.0.0.1")
-ALLOWED_HOSTS = [h.strip() for h in _allowed.split(",") if h.strip()]
+if DEBUG:
+    SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "dev-secret-key")
+else:
+    SECRET_KEY = os.environ["DJANGO_SECRET_KEY"]
+
+_allowed_hosts = os.getenv(
+    "ALLOWED_HOSTS", "*" if DEBUG else "ot-backend-pro.onrender.com"
+)
+ALLOWED_HOSTS = [h.strip() for h in _allowed_hosts.split(",") if h.strip()]
 
 # =========================================================
-#  APPS
+# APPS
 # =========================================================
 INSTALLED_APPS = [
     "django.contrib.admin",
@@ -39,19 +44,18 @@ INSTALLED_APPS = [
     # Local apps
     "orders.apps.OrdersConfig",
     "historial",
-    # Local
     "accounts",
 ]
 
 # =========================================================
-#  MIDDLEWARE
+# MIDDLEWARE
 # =========================================================
 MIDDLEWARE = [
     "corsheaders.middleware.CorsMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
-    "django.middleware.common.CommonMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
+    "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
@@ -59,9 +63,10 @@ MIDDLEWARE = [
 ]
 
 ROOT_URLCONF = "core.urls"
+WSGI_APPLICATION = "core.wsgi.application"
 
 # =========================================================
-#  TEMPLATES / WSGI
+# TEMPLATES
 # =========================================================
 TEMPLATES = [
     {
@@ -79,10 +84,8 @@ TEMPLATES = [
     }
 ]
 
-WSGI_APPLICATION = "core.wsgi.application"
-
 # =========================================================
-#  DATABASE
+# DATABASE
 # =========================================================
 DATABASE_URL = os.getenv("DATABASE_URL", "").strip()
 
@@ -105,7 +108,7 @@ else:
     }
 
 # =========================================================
-#  LOGGING (Render friendly)
+# LOGGING
 # =========================================================
 LOGGING = {
     "version": 1,
@@ -120,13 +123,14 @@ LOGGING = {
 }
 
 logger = logging.getLogger("startup")
+logger.info("DEBUG: %s", DEBUG)
 logger.info("DATABASE_URL present: %s", bool(DATABASE_URL))
 logger.info("DB ENGINE: %s", DATABASES["default"].get("ENGINE"))
 logger.info("DB NAME: %s", DATABASES["default"].get("NAME"))
 logger.info("DB HOST: %s", DATABASES["default"].get("HOST"))
 
 # =========================================================
-#  CORS / CSRF
+# CORS / CSRF
 # =========================================================
 if DEBUG:
     CORS_ALLOW_ALL_ORIGINS = True
@@ -140,17 +144,25 @@ else:
 csrf_env = os.getenv("CSRF_TRUSTED_ORIGINS", "")
 CSRF_TRUSTED_ORIGINS = [x.strip() for x in csrf_env.split(",") if x.strip()]
 
-CORS_ALLOW_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
+CORS_ALLOW_METHODS = [
+    "GET",
+    "POST",
+    "PUT",
+    "PATCH",
+    "DELETE",
+    "OPTIONS",
+]
+
 CORS_ALLOW_HEADERS = [
-    "content-type",
-    "authorization",
     "accept",
+    "authorization",
+    "content-type",
     "origin",
     "x-requested-with",
 ]
 
 # =========================================================
-#  STATIC / MEDIA
+# STATIC / MEDIA
 # =========================================================
 STATIC_URL = "/static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
@@ -165,22 +177,28 @@ MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
 
 # =========================================================
-#  SECURITY (PROD)
+# SECURITY
 # =========================================================
 if not DEBUG:
     SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
-    SESSION_COOKIE_SECURE = True
-    CSRF_COOKIE_SECURE = True
     SECURE_SSL_REDIRECT = True
 
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+
+    SECURE_CONTENT_TYPE_NOSNIFF = True
+    X_FRAME_OPTIONS = "DENY"
+
 # =========================================================
-#  DEFAULTS
+# DEFAULTS
 # =========================================================
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
-
 TIME_ZONE = "America/Argentina/Buenos_Aires"
 USE_TZ = True
 
+# =========================================================
+# PASSWORDS
+# =========================================================
 PASSWORD_HASHERS = [
     "django.contrib.auth.hashers.Argon2PasswordHasher",
     "django.contrib.auth.hashers.PBKDF2PasswordHasher",
@@ -204,6 +222,9 @@ AUTH_PASSWORD_VALIDATORS = [
     },
 ]
 
+# =========================================================
+# DRF
+# =========================================================
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": (
         "rest_framework_simplejwt.authentication.JWTAuthentication",
@@ -221,13 +242,18 @@ REST_FRAMEWORK = {
     },
 }
 
+# =========================================================
+# JWT
+# =========================================================
+JWT_SIGNING_KEY = os.getenv("JWT_SIGNING_KEY") or SECRET_KEY
+
 SIMPLE_JWT = {
     "ACCESS_TOKEN_LIFETIME": timedelta(minutes=15),
     "REFRESH_TOKEN_LIFETIME": timedelta(days=7),
     "ROTATE_REFRESH_TOKENS": True,
     "BLACKLIST_AFTER_ROTATION": True,
     "ALGORITHM": "HS256",
-    "SIGNING_KEY": os.environ.get("JWT_SIGNING_KEY"),
+    "SIGNING_KEY": JWT_SIGNING_KEY,
     "AUTH_HEADER_TYPES": ("Bearer",),
     "USER_ID_FIELD": "id",
     "USER_ID_CLAIM": "user_id",
