@@ -8,6 +8,7 @@ djangorestframework>=3.15,<3.16
 # CORS
 # =========================
 django-cors-headers>=4.6,<5.0
+djangorestframework-simplejwt
 
 # =========================
 # Server / Static
