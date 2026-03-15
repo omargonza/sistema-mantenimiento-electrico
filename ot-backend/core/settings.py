@@ -5,6 +5,7 @@ from datetime import timedelta
 
 from dotenv import load_dotenv
 import dj_database_url
+import sys
 
 # =========================================================
 # BASE / ENV
@@ -104,6 +105,39 @@ else:
         "default": {
             "ENGINE": "django.db.backends.sqlite3",
             "NAME": BASE_DIR / "db.sqlite3",
+        }
+    }
+
+    # =========================================================
+    # test database (separada para evitar pisar datos locales)
+    # =========================================================
+
+
+IS_TEST = "test" in sys.argv
+
+DATABASE_URL = os.getenv("DATABASE_URL", "").strip()
+
+if DATABASE_URL:
+    DATABASES = {
+        "default": dj_database_url.parse(
+            DATABASE_URL,
+            conn_max_age=0 if IS_TEST else 600,
+            ssl_require=True,
+        )
+    }
+    DATABASES["default"]["TEST"] = {
+        "NAME": "ot_backend_test",
+    }
+else:
+    if not DEBUG:
+        raise RuntimeError("DATABASE_URL is required in production")
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.sqlite3",
+            "NAME": BASE_DIR / "db.sqlite3",
+            "TEST": {
+                "NAME": BASE_DIR / "test_db.sqlite3",
+            },
         }
     }
 
