@@ -2,6 +2,16 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { buscarTableros } from "../services/tablerosAutocompleteApi";
 
+function isAbortLikeError(err) {
+  const msg = String(err?.message || "").toLowerCase();
+  return (
+    err?.name === "AbortError" ||
+    msg.includes("signal is aborted") ||
+    msg.includes("aborted") ||
+    msg.includes("aborterror")
+  );
+}
+
 /**
  * TableroAutocomplete (PRO)
  * - Debounce + AbortController
@@ -29,7 +39,7 @@ export default function TableroAutocomplete({
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  // NUEVO: source del resultado (remote/cache)
+  // source del resultado (remote/cache)
   const [source, setSource] = useState("remote"); // "remote" | "cache"
 
   const ctrlRef = useRef(null);
@@ -111,11 +121,10 @@ export default function TableroAutocomplete({
         setItems(nextItems);
         setSource(nextSource);
       } catch (e) {
-        if (e?.name !== "AbortError") {
-          if (reqIdRef.current !== myReqId) return;
-          setItems([]);
-          setSource("remote");
-        }
+        if (isAbortLikeError(e)) return;
+        if (reqIdRef.current !== myReqId) return;
+        setItems([]);
+        setSource("remote");
       } finally {
         if (reqIdRef.current === myReqId) setLoading(false);
       }
@@ -167,7 +176,6 @@ export default function TableroAutocomplete({
         enterKeyHint="search"
       />
 
-      {/* Badge OFFLINE (cache) */}
       {open && canSearch && !loading && source === "cache" && (
         <div className="muted" style={{ marginTop: 6, fontSize: 12 }}>
           Modo offline: sugerencias desde cache local.
@@ -211,7 +219,7 @@ export default function TableroAutocomplete({
                 onChangeText?.(nombre);
 
                 closeDropdown();
-                onSelect?.(t); // {id, nombre, zona}
+                onSelect?.(t);
               }}
               style={{
                 width: "100%",
@@ -274,4 +282,3 @@ export default function TableroAutocomplete({
     </div>
   );
 }
-// src/services/tablerosAutocompleteApi.js

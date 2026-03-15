@@ -10,6 +10,11 @@ from django.http import HttpResponse
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.exceptions import ValidationError
+from rest_framework_simplejwt.authentication import JWTAuthentication
+
+from accounts.permissions import IsAdminRole, IsAdminOrTechnicianRole
 
 from .models import (
     OrdenTrabajo,
@@ -134,9 +139,12 @@ def _serialize_grupos_for_pdf(grupos_data):
     return out
 
 
-def _persistir_ot_y_grupos(data: dict):
+def _persistir_ot_y_grupos(data: dict, user=None):
     payload = dict(data)
     grupos_data = payload.pop("luminarias_por_tablero", []) or []
+
+    if user is not None:
+        payload["created_by"] = user
 
     ot = OrdenTrabajo.objects.create(**payload)
 
@@ -171,13 +179,186 @@ def _persistir_ot_y_grupos(data: dict):
 
 
 # ==========================================================
-# API: List + Create (debug / admin)
+# Core de procesamiento OT + PDF
+# ==========================================================
+def _procesar_ot_payload(request_data: dict, user=None, return_pdf_bytes: bool = False):
+    request_data = dict(request_data or {})
+    request_data.pop("tablero_catalogado", None)
+
+    serializer = OrdenTrabajoSerializer(data=request_data)
+    serializer.is_valid(raise_exception=True)
+
+    data = dict(serializer.validated_data)
+    alcance = (data.get("alcance") or "").strip().upper()
+
+    cods = data.get("codigos_luminarias") or []
+    if alcance == "LUMINARIA":
+        if not cods:
+            from .views_luminarias import parse_luminaria_codes
+
+            cods = parse_luminaria_codes(data.get("luminaria_equipos", "")) or []
+
+        data["codigos_luminarias"] = cods
+
+        if not (data.get("codigo_luminaria") or "").strip() and cods:
+            data["codigo_luminaria"] = cods[0]
+        data["codigo_luminaria"] = (data.get("codigo_luminaria") or "")[:30]
+    else:
+        data["codigos_luminarias"] = []
+        data["codigo_luminaria"] = ""
+        data["ramal"] = ""
+        data["km_luminaria"] = None
+        data["luminaria_equipos"] = ""
+        data["luminaria_estado"] = ""
+        data["luminarias_por_tablero"] = []
+
+    grupos_data = data.get("luminarias_por_tablero", []) or []
+
+    if alcance == "LUMINARIA" and grupos_data:
+        primer = grupos_data[0]
+        tablero_obj = primer.get("tablero")
+        tablero_nombre = getattr(tablero_obj, "nombre", "") if tablero_obj else ""
+
+        data["tablero"] = tablero_nombre or data.get("tablero", "")
+        data["zona"] = primer.get("zona", "") or data.get("zona", "")
+        data["circuito"] = primer.get("circuito", "") or data.get("circuito", "")
+        data["ramal"] = primer.get("ramal", "") or data.get("ramal", "")
+        data["resultado"] = primer.get("resultado", "COMPLETO") or data.get(
+            "resultado", "COMPLETO"
+        )
+        data["luminaria_estado"] = primer.get("luminaria_estado", "") or data.get(
+            "luminaria_estado", ""
+        )
+        data["tarea_pedida"] = primer.get("tarea_pedida", "") or data.get(
+            "tarea_pedida", ""
+        )
+        data["tarea_realizada"] = primer.get("tarea_realizada", "") or data.get(
+            "tarea_realizada", ""
+        )
+        data["tarea_pendiente"] = primer.get("tarea_pendiente", "") or data.get(
+            "tarea_pendiente", ""
+        )
+        data["observaciones"] = primer.get("observaciones", "") or data.get(
+            "observaciones", ""
+        )
+
+    tablero_raw = data.get("tablero")
+    tablero_final, tablero_ok = _resolve_tablero_catalogo(tablero_raw)
+
+    data["tablero"] = tablero_final
+    data["zona"] = (data.get("zona") or "").strip()
+    data["circuito"] = (data.get("circuito") or "").strip()
+
+    ahora = timezone.now()
+    year = ahora.strftime("%Y")
+    month = ahora.strftime("%m")
+
+    ot_ts = int(ahora.timestamp())
+    evidence_rel = os.path.join("ordenes", year, month, f"evid_{ot_ts}")
+    evidence_abs = os.path.join(settings.MEDIA_ROOT, evidence_rel)
+    os.makedirs(evidence_abs, exist_ok=True)
+
+    firma_b64 = data.pop("firma_tecnico_img", "")
+    fotos_b64 = data.pop("fotos_b64", []) or []
+    print_mode = bool(data.pop("print_mode", False))
+
+    firma_rel = ""
+    if firma_b64:
+        firma_abs = _save_b64_image(
+            evidence_abs,
+            "firma_tecnico.png",
+            firma_b64,
+        )
+        firma_rel = _rel_media_path(firma_abs)
+
+    fotos_rel = []
+    for idx, fb64 in enumerate(list(fotos_b64)[:4], start=1):
+        p_abs = _save_b64_image(
+            evidence_abs,
+            f"foto_{idx}.jpg",
+            fb64,
+        )
+        p_rel = _rel_media_path(p_abs)
+        if p_rel:
+            fotos_rel.append(p_rel)
+
+    if firma_rel:
+        data["firma_tecnico_path"] = firma_rel
+    if fotos_rel:
+        data["fotos"] = fotos_rel
+
+    ot = _persistir_ot_y_grupos(data, user=user)
+
+    pdf_data = dict(data)
+    pdf_data["print_mode"] = print_mode
+    pdf_data["id_ot"] = f"OT-{ot.id:06d}"
+    pdf_data["firma_tecnico_path"] = firma_rel
+    pdf_data["fotos_paths"] = fotos_rel
+    pdf_data["luminarias_por_tablero"] = _serialize_grupos_for_pdf(grupos_data)
+    pdf_data["tablero_catalogado"] = bool(tablero_ok)
+
+    pdf_bytes = generar_pdf(pdf_data)
+
+    pdf_folder = os.path.join(settings.MEDIA_ROOT, "ordenes", year, month)
+    os.makedirs(pdf_folder, exist_ok=True)
+
+    fecha = _safe_filename(str(pdf_data.get("fecha", "")))
+    tablero = _safe_filename(str(pdf_data.get("tablero") or "OT"))
+    filename = f"OT_{fecha}_{tablero}_{ot.id}.pdf"
+    filepath = os.path.join(pdf_folder, filename)
+
+    with open(filepath, "wb") as f:
+        f.write(pdf_bytes)
+
+    result = {
+        "ot": ot,
+        "filename": filename,
+        "filepath": filepath,
+        "tablero_catalogado": bool(tablero_ok),
+    }
+
+    if return_pdf_bytes:
+        result["pdf_bytes"] = pdf_bytes
+
+    return result
+
+
+# ==========================================================
+# API: List + Create
 # ==========================================================
 class OrdenListCreateView(APIView):
+    authentication_classes = [JWTAuthentication]
+
+    def get_permissions(self):
+        if self.request.method == "GET":
+            return [IsAuthenticated(), IsAdminRole()]
+        return [IsAuthenticated(), IsAdminOrTechnicianRole()]
+
     def get(self, request):
-        ordenes = OrdenTrabajo.objects.all().order_by("-id")
-        serializer = OrdenTrabajoSerializer(ordenes, many=True)
-        return Response(serializer.data)
+        ordenes = (
+            OrdenTrabajo.objects.select_related("created_by").all().order_by("-id")
+        )
+
+        data = []
+        for ot in ordenes:
+            row = OrdenTrabajoSerializer(ot).data
+
+            row["creado_por_legajo"] = (
+                ot.created_by.username if getattr(ot, "created_by_id", None) else ""
+            )
+
+            profile = (
+                getattr(ot.created_by, "profile", None)
+                if getattr(ot, "created_by", None)
+                else None
+            )
+            row["creado_por_nombre"] = (
+                getattr(profile, "nombre_completo", "") if profile else ""
+            )
+
+            data.append(row)
+
+        return Response(data)
 
     def post(self, request):
         serializer = OrdenTrabajoSerializer(data=request.data)
@@ -188,7 +369,7 @@ class OrdenListCreateView(APIView):
         data.pop("fotos_b64", None)
         data.pop("print_mode", None)
 
-        ot = _persistir_ot_y_grupos(data)
+        ot = _persistir_ot_y_grupos(data, user=request.user)
 
         return Response(
             OrdenTrabajoSerializer(ot).data,
@@ -200,137 +381,93 @@ class OrdenListCreateView(APIView):
 # API: Generar PDF + Persistir OT
 # ==========================================================
 class OrdenPDFView(APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated, IsAdminOrTechnicianRole]
+
     def post(self, request):
-        request_data = dict(request.data)
-        request_data.pop("tablero_catalogado", None)
-
-        serializer = OrdenTrabajoSerializer(data=request_data)
-        if not serializer.is_valid():
-            print("ERRORES SERIALIZER OT:", serializer.errors)
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-        data = dict(serializer.validated_data)
-        alcance = (data.get("alcance") or "").strip().upper()
-
-        cods = data.get("codigos_luminarias") or []
-        if alcance == "LUMINARIA":
-            if not cods:
-                from .views_luminarias import parse_luminaria_codes
-
-                cods = parse_luminaria_codes(data.get("luminaria_equipos", "")) or []
-
-            data["codigos_luminarias"] = cods
-
-            if not (data.get("codigo_luminaria") or "").strip() and cods:
-                data["codigo_luminaria"] = cods[0]
-            data["codigo_luminaria"] = (data.get("codigo_luminaria") or "")[:30]
-        else:
-            data["codigos_luminarias"] = []
-            data["codigo_luminaria"] = ""
-            data["ramal"] = ""
-            data["km_luminaria"] = None
-            data["luminaria_equipos"] = ""
-            data["luminaria_estado"] = ""
-            data["luminarias_por_tablero"] = []
-
-        grupos_data = data.get("luminarias_por_tablero", []) or []
-
-        if alcance == "LUMINARIA" and grupos_data:
-            primer = grupos_data[0]
-            tablero_obj = primer.get("tablero")
-            tablero_nombre = getattr(tablero_obj, "nombre", "") if tablero_obj else ""
-
-            data["tablero"] = tablero_nombre or data.get("tablero", "")
-            data["zona"] = primer.get("zona", "") or data.get("zona", "")
-            data["circuito"] = primer.get("circuito", "") or data.get("circuito", "")
-            data["ramal"] = primer.get("ramal", "") or data.get("ramal", "")
-            data["resultado"] = primer.get("resultado", "COMPLETO") or data.get(
-                "resultado", "COMPLETO"
+        try:
+            result = _procesar_ot_payload(
+                request.data,
+                user=request.user,
+                return_pdf_bytes=True,
             )
-            data["luminaria_estado"] = primer.get("luminaria_estado", "") or data.get(
-                "luminaria_estado", ""
-            )
-            data["tarea_pedida"] = primer.get("tarea_pedida", "") or data.get(
-                "tarea_pedida", ""
-            )
-            data["tarea_realizada"] = primer.get("tarea_realizada", "") or data.get(
-                "tarea_realizada", ""
-            )
-            data["tarea_pendiente"] = primer.get("tarea_pendiente", "") or data.get(
-                "tarea_pendiente", ""
-            )
-            data["observaciones"] = primer.get("observaciones", "") or data.get(
-                "observaciones", ""
-            )
+        except ValidationError as e:
+            print("ERRORES SERIALIZER OT:", e.detail)
+            return Response(e.detail, status=status.HTTP_400_BAD_REQUEST)
 
-        tablero_raw = data.get("tablero")
-        tablero_final, tablero_ok = _resolve_tablero_catalogo(tablero_raw)
-
-        data["tablero"] = tablero_final
-        data["zona"] = (data.get("zona") or "").strip()
-        data["circuito"] = (data.get("circuito") or "").strip()
-
-        ahora = timezone.now()
-        year = ahora.strftime("%Y")
-        month = ahora.strftime("%m")
-
-        ot_ts = int(ahora.timestamp())
-        evidence_rel = os.path.join("ordenes", year, month, f"evid_{ot_ts}")
-        evidence_abs = os.path.join(settings.MEDIA_ROOT, evidence_rel)
-        os.makedirs(evidence_abs, exist_ok=True)
-
-        firma_b64 = data.pop("firma_tecnico_img", "")
-        fotos_b64 = data.pop("fotos_b64", []) or []
-        print_mode = bool(data.pop("print_mode", False))
-
-        firma_rel = ""
-        if firma_b64:
-            firma_abs = _save_b64_image(
-                evidence_abs,
-                "firma_tecnico.png",
-                firma_b64,
-            )
-            firma_rel = _rel_media_path(firma_abs)
-
-        fotos_rel = []
-        for idx, fb64 in enumerate(list(fotos_b64)[:4], start=1):
-            p_abs = _save_b64_image(
-                evidence_abs,
-                f"foto_{idx}.jpg",
-                fb64,
-            )
-            p_rel = _rel_media_path(p_abs)
-            if p_rel:
-                fotos_rel.append(p_rel)
-
-        if firma_rel:
-            data["firma_tecnico_path"] = firma_rel
-        if fotos_rel:
-            data["fotos"] = fotos_rel
-
-        ot = _persistir_ot_y_grupos(data)
-
-        pdf_data = dict(data)
-        pdf_data["print_mode"] = print_mode
-        pdf_data["id_ot"] = f"OT-{ot.id:06d}"
-        pdf_data["firma_tecnico_path"] = firma_rel
-        pdf_data["fotos_paths"] = fotos_rel
-        pdf_data["luminarias_por_tablero"] = _serialize_grupos_for_pdf(grupos_data)
-        pdf_data["tablero_catalogado"] = bool(tablero_ok)
-
-        pdf_bytes = generar_pdf(pdf_data)
-
-        pdf_folder = os.path.join(settings.MEDIA_ROOT, "ordenes", year, month)
-        os.makedirs(pdf_folder, exist_ok=True)
-
-        fecha = _safe_filename(str(pdf_data.get("fecha", "")))
-        tablero = _safe_filename(str(pdf_data.get("tablero") or "OT"))
-        filename = f"OT_{fecha}_{tablero}_{ot.id}.pdf"
-        filepath = os.path.join(pdf_folder, filename)
-
-        with open(filepath, "wb") as f:
-            f.write(pdf_bytes)
+        pdf_bytes = result["pdf_bytes"]
+        filename = result["filename"]
 
         resp = HttpResponse(pdf_bytes, content_type="application/pdf")
         resp["Content-Disposition"] = f'attachment; filename="{filename}"'
         return resp
+
+
+# ==========================================================
+# API: Sync batch de órdenes offline
+# ==========================================================
+class OrdenSyncView(APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated, IsAdminOrTechnicianRole]
+
+    def post(self, request):
+        ordenes = request.data.get("ordenes", None)
+
+        if not isinstance(ordenes, list):
+            return Response(
+                {"detail": "El body debe incluir 'ordenes' como lista."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        results = []
+        processed = 0
+        failed = 0
+
+        for idx, item in enumerate(ordenes):
+            try:
+                result = _procesar_ot_payload(
+                    item,
+                    user=request.user,
+                    return_pdf_bytes=False,
+                )
+                ot = result["ot"]
+
+                processed += 1
+                results.append(
+                    {
+                        "index": idx,
+                        "status": "ok",
+                        "id": ot.id,
+                        "id_ot": f"OT-{ot.id:06d}",
+                        "filename": result["filename"],
+                        "tablero_catalogado": result["tablero_catalogado"],
+                    }
+                )
+            except ValidationError as e:
+                failed += 1
+                results.append(
+                    {
+                        "index": idx,
+                        "status": "error",
+                        "error": e.detail,
+                    }
+                )
+            except Exception as e:
+                failed += 1
+                results.append(
+                    {
+                        "index": idx,
+                        "status": "error",
+                        "error": str(e),
+                    }
+                )
+
+        return Response(
+            {
+                "received": len(ordenes),
+                "processed": processed,
+                "failed": failed,
+                "results": results,
+            },
+            status=status.HTTP_200_OK,
+        )

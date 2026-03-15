@@ -5,7 +5,10 @@ from django.db.models import Prefetch
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
+from rest_framework.permissions import IsAuthenticated
+from rest_framework_simplejwt.authentication import JWTAuthentication
 
+from accounts.permissions import IsAdminOrTechnicianRole
 from orders.models import (
     OrdenTrabajo,
     OrdenTrabajoLuminariaGrupo,
@@ -36,6 +39,9 @@ def parse_luminaria_codes(text: str):
 
 
 class LuminariasHistorialView(APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated, IsAdminOrTechnicianRole]
+
     def get(self, request):
         q_from = request.query_params.get("from", "")
         q_to = request.query_params.get("to", "")
@@ -68,6 +74,7 @@ class LuminariasHistorialView(APIView):
             .order_by("-fecha", "-id")
         )
 
+        # Historial global compartido para admin y técnicos
         if q_from:
             qs = qs.filter(fecha__gte=q_from)
         if q_to:

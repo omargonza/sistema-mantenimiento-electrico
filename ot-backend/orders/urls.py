@@ -1,12 +1,13 @@
 # orders/urls.py
 from django.urls import path
-from .views import OrdenListCreateView, OrdenPDFView
+from .views import OrdenListCreateView, OrdenPDFView, OrdenSyncView
 from .views_luminarias import LuminariasHistorialView
 
 urlpatterns = [
     # Core OT
     path("ordenes/", OrdenListCreateView.as_view(), name="ordenes"),
     path("ordenes/pdf/", OrdenPDFView.as_view(), name="ordenes-pdf"),
+    path("ordenes/sync/", OrdenSyncView.as_view(), name="ordenes-sync"),
     # Luminarias (mapa / historial)
     path(
         "luminarias/historial/",

@@ -236,9 +236,13 @@ function extraerCodigosLuminaria(texto) {
   return out;
 }
 
+function newUid() {
+  return crypto?.randomUUID?.() || `${Date.now()}_${Math.random()}`;
+}
+
 function emptyLuminariaGrupo() {
   return {
-    uid: crypto.randomUUID(),
+    uid: newUid(),
     tablero_id: null,
     tablero: "",
     tablero_confirmado: false,
@@ -277,9 +281,39 @@ function uniqCodes(list) {
   return out;
 }
 
+function safeFilenamePart(value) {
+  return String(value || "")
+    .replace(/[\\/:*?"<>|]+/g, "_")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function buildPdfFilename(payload) {
+  const fecha = safeFilenamePart(payload?.fecha || "");
+  const tablero = safeFilenamePart(payload?.tablero || "LUMINARIAS");
+  return `OT_${fecha}_${tablero}.pdf`;
+}
+
+function revokeFotoUrls(list) {
+  try {
+    (list || []).forEach((it) => {
+      if (it?.url) URL.revokeObjectURL(it.url);
+    });
+  } catch {}
+}
+
+function isAbortLikeError(err) {
+  const msg = String(err?.message || "").toLowerCase();
+  return (
+    err?.name === "AbortError" ||
+    msg.includes("signal is aborted") ||
+    msg.includes("aborted") ||
+    msg.includes("aborterror")
+  );
+}
+
 /* =======================================================
    FORMULARIO INICIAL
-   Cambio: factory en vez de objeto estático
 ======================================================= */
 function createInitialForm() {
   return {
@@ -325,27 +359,6 @@ function cloneFormForSubmit(source) {
       items: (g.items || []).map((it) => ({ ...it })),
     })),
   };
-}
-
-function safeFilenamePart(value) {
-  return String(value || "")
-    .replace(/[\\/:*?"<>|]+/g, "_")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-function buildPdfFilename(payload) {
-  const fecha = safeFilenamePart(payload?.fecha || "");
-  const tablero = safeFilenamePart(payload?.tablero || "LUMINARIAS");
-  return `OT_${fecha}_${tablero}.pdf`;
-}
-
-function revokeFotoUrls(list) {
-  try {
-    (list || []).forEach((it) => {
-      if (it?.url) URL.revokeObjectURL(it.url);
-    });
-  } catch {}
 }
 
 /* =======================================================
@@ -675,7 +688,7 @@ export default function NuevaOT() {
           );
         }
       } catch (e) {
-        if (e?.name === "AbortError") return;
+        if (isAbortLikeError(e)) return;
         console.warn("tableroExists error:", e);
       }
     }, 300);
@@ -1015,8 +1028,6 @@ export default function NuevaOT() {
   }
 
   async function generarPDF() {
-    // CAMBIO CLAVE:
-    // lock duro contra doble tap / doble ejecución
     if (generatingRef.current || loading) return;
 
     const error = validarCampos();
@@ -1051,13 +1062,9 @@ export default function NuevaOT() {
       return;
     }
 
-    // CAMBIO CLAVE:
-    // activar loading ANTES de los awaits pesados
     generatingRef.current = true;
     setLoading(true);
 
-    // CAMBIO:
-    // snapshot estable para que la OT no cambie si el usuario toca campos
     const formSnapshot = cloneFormForSubmit(form);
 
     const requestId =
@@ -1068,6 +1075,7 @@ export default function NuevaOT() {
     payload.client_request_id = requestId;
     payload.tablero_catalogado =
       alcance === "LUMINARIA" ? true : Boolean(tableroCatalogado);
+
     try {
       const fotosB64 = await Promise.all(
         (formSnapshot.fotos || []).map(async (it, idx) => {

@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 import "../styles/dashboard.css";
 
 import { queryOts, migrateOtsOperationalFields } from "../storage/ot_db";
+import AdminAuditButton from "../components/AdminAuditButton";
 
 /**
  * Feature flags (para apagar áreas que hoy confunden en campo)
@@ -479,6 +480,7 @@ export default function Dashboard() {
           )}
         </div>
       )}
+      <AdminAuditButton />
     </div>
   );
 }

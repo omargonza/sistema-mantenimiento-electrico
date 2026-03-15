@@ -1,7 +1,7 @@
 // src/pages/HistorialLuminarias.jsx
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { API } from "../api";
+import { API, authHeaders, getCurrentUser } from "../api";
 import "../styles/historial_luminarias.css";
 
 /* =======================================================
@@ -24,7 +24,9 @@ async function fetchLuminarias({ ramal, from, to }) {
   if (to) params.set("to", to);
 
   const url = `${API}/api/luminarias/historial/?${params.toString()}`;
-  const res = await fetch(url);
+  const res = await fetch(url, {
+    headers: authHeaders(),
+  });
   if (!res.ok) throw new Error("Error cargando historial luminarias");
   return await res.json();
 }
@@ -114,7 +116,7 @@ function uniqueSortedOptions(list, accessor) {
 }
 
 /* =======================================================
-   Mini charts
+   Mini charts / cards (solo admin)
 ======================================================= */
 function MiniBars({ title, subtitle, items, maxBars = 12 }) {
   const sliced = items.slice(0, maxBars);
@@ -243,6 +245,9 @@ function QuickList({ title, subtitle, items }) {
 export default function HistorialLuminarias() {
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
+
+  const role = getCurrentUser()?.profile?.role || "";
+  const isAdmin = role === "admin";
 
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -723,29 +728,34 @@ export default function HistorialLuminarias() {
         <div>
           <div className="lumdash-title">Historial de Luminarias</div>
           <div className="lumdash-sub">
-            KPIs · ramales · tableros · circuitos · hotspots KM · exportable
-            para Power BI
+            {isAdmin
+              ? "KPIs · ramales · tableros · circuitos · hotspots KM · exportable para Power BI"
+              : "Consulta operativa de luminarias reparadas y su estado"}
           </div>
         </div>
 
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          <button
-            type="button"
-            className="lumdash-btn"
-            onClick={() => navigate("/dashboard-luminarias")}
-            title="Ver dashboard"
-          >
-            Dashboard
-          </button>
+          {isAdmin && (
+            <button
+              type="button"
+              className="lumdash-btn"
+              onClick={() => navigate("/dashboard-luminarias")}
+              title="Ver dashboard"
+            >
+              Ver dashboard
+            </button>
+          )}
 
-          <button
-            type="button"
-            className="lumdash-btn"
-            onClick={exportCSV}
-            title="Export CSV"
-          >
-            Export CSV
-          </button>
+          {isAdmin && (
+            <button
+              type="button"
+              className="lumdash-btn"
+              onClick={exportCSV}
+              title="Export CSV"
+            >
+              Export CSV
+            </button>
+          )}
         </div>
       </div>
 
@@ -843,9 +853,18 @@ export default function HistorialLuminarias() {
         </div>
 
         <div className="lumdash-muted" style={{ marginTop: 10 }}>
-          Para Power BI: dejá <b>Último estado OFF</b> si querés exportar todas
-          las intervenciones históricas. Si lo dejás ON, exportás solo el estado
-          más reciente por luminaria.
+          {isAdmin ? (
+            <>
+              Para Power BI: dejá <b>Último estado OFF</b> si querés exportar
+              todas las intervenciones históricas. Si lo dejás ON, exportás solo
+              el estado más reciente por luminaria.
+            </>
+          ) : (
+            <>
+              La tabla muestra luminarias según filtros aplicados. “Último
+              estado ON” deja una fila por luminaria con su estado más reciente.
+            </>
+          )}
         </div>
       </div>
 
@@ -854,116 +873,123 @@ export default function HistorialLuminarias() {
 
       {!loading && !error && (
         <>
-          <div className="lumdash-kpis">
-            <div className="lumdash-kpi">
-              <div className="lumdash-kpiLabel">Filas</div>
-              <div className="lumdash-kpiVal">{kpis.total}</div>
-              <div className="lumdash-kpiSub">Dataset actual</div>
-            </div>
+          {isAdmin && (
+            <>
+              <div className="lumdash-kpis">
+                <div className="lumdash-kpi">
+                  <div className="lumdash-kpiLabel">Filas</div>
+                  <div className="lumdash-kpiVal">{kpis.total}</div>
+                  <div className="lumdash-kpiSub">Dataset actual</div>
+                </div>
 
-            <div className="lumdash-kpi">
-              <div className="lumdash-kpiLabel">Luminarias únicas</div>
-              <div className="lumdash-kpiVal">{kpis.uniqueCodes}</div>
-              <div className="lumdash-kpiSub">Por código</div>
-            </div>
+                <div className="lumdash-kpi">
+                  <div className="lumdash-kpiLabel">Luminarias únicas</div>
+                  <div className="lumdash-kpiVal">{kpis.uniqueCodes}</div>
+                  <div className="lumdash-kpiSub">Por código</div>
+                </div>
 
-            <div className="lumdash-kpi">
-              <div className="lumdash-kpiLabel">Tableros</div>
-              <div className="lumdash-kpiVal">{kpis.uniqueTableros}</div>
-              <div className="lumdash-kpiSub">En filtro actual</div>
-            </div>
+                <div className="lumdash-kpi">
+                  <div className="lumdash-kpiLabel">Tableros</div>
+                  <div className="lumdash-kpiVal">{kpis.uniqueTableros}</div>
+                  <div className="lumdash-kpiSub">En filtro actual</div>
+                </div>
 
-            <div className="lumdash-kpi">
-              <div className="lumdash-kpiLabel">Circuitos</div>
-              <div className="lumdash-kpiVal">{kpis.uniqueCircuitos}</div>
-              <div className="lumdash-kpiSub">En filtro actual</div>
-            </div>
+                <div className="lumdash-kpi">
+                  <div className="lumdash-kpiLabel">Circuitos</div>
+                  <div className="lumdash-kpiVal">{kpis.uniqueCircuitos}</div>
+                  <div className="lumdash-kpiSub">En filtro actual</div>
+                </div>
 
-            <div className="lumdash-kpi tone-ok">
-              <div className="lumdash-kpiLabel">OK</div>
-              <div className="lumdash-kpiVal">{kpis.ok}</div>
-              <div className="lumdash-kpiSub">{kpis.okPct}%</div>
-            </div>
+                <div className="lumdash-kpi tone-ok">
+                  <div className="lumdash-kpiLabel">OK</div>
+                  <div className="lumdash-kpiVal">{kpis.ok}</div>
+                  <div className="lumdash-kpiSub">{kpis.okPct}%</div>
+                </div>
 
-            <div className="lumdash-kpi tone-warn">
-              <div className="lumdash-kpiLabel">Pendientes</div>
-              <div className="lumdash-kpiVal">{kpis.pend}</div>
-              <div className="lumdash-kpiSub">{kpis.pendPct}%</div>
-            </div>
+                <div className="lumdash-kpi tone-warn">
+                  <div className="lumdash-kpiLabel">Pendientes</div>
+                  <div className="lumdash-kpiVal">{kpis.pend}</div>
+                  <div className="lumdash-kpiSub">{kpis.pendPct}%</div>
+                </div>
 
-            <div className="lumdash-kpi tone-danger">
-              <div className="lumdash-kpiLabel">Apagadas</div>
-              <div className="lumdash-kpiVal">{kpis.apag}</div>
-              <div className="lumdash-kpiSub">{kpis.apagPct}%</div>
-            </div>
-          </div>
-
-          <div className="lumdash-grid2">
-            <div className="lumdash-card">
-              <div className="lumdash-cardhead">
-                <div className="lumdash-cardtitle">Volumen por día</div>
-                <div className="lumdash-muted">
-                  Últimos {Math.min(14, byDay.length)} días
+                <div className="lumdash-kpi tone-danger">
+                  <div className="lumdash-kpiLabel">Apagadas</div>
+                  <div className="lumdash-kpiVal">{kpis.apag}</div>
+                  <div className="lumdash-kpiSub">{kpis.apagPct}%</div>
                 </div>
               </div>
-              <Sparkline points={byDay} />
-            </div>
 
-            <MiniBars
-              title="Estados"
-              subtitle="Distribución actual"
-              items={byState}
-              maxBars={6}
-            />
+              <div className="lumdash-grid2">
+                <div className="lumdash-card">
+                  <div className="lumdash-cardhead">
+                    <div className="lumdash-cardtitle">Volumen por día</div>
+                    <div className="lumdash-muted">
+                      Últimos {Math.min(14, byDay.length)} días
+                    </div>
+                  </div>
+                  <Sparkline points={byDay} />
+                </div>
 
-            <MiniBars
-              title="Top ramales"
-              subtitle="Dónde hubo más registros"
-              items={byRamal}
-              maxBars={8}
-            />
+                <MiniBars
+                  title="Estados"
+                  subtitle="Distribución actual"
+                  items={byState}
+                  maxBars={6}
+                />
 
-            <MiniBars
-              title="Hotspots por KM"
-              subtitle="Tramos de 1 km"
-              items={byKmBucket}
-              maxBars={10}
-            />
+                <MiniBars
+                  title="Top ramales"
+                  subtitle="Dónde hubo más registros"
+                  items={byRamal}
+                  maxBars={8}
+                />
 
-            <MiniBars
-              title="Top tableros"
-              subtitle="Mayor cantidad de registros"
-              items={byTablero}
-              maxBars={10}
-            />
+                <MiniBars
+                  title="Hotspots por KM"
+                  subtitle="Tramos de 1 km"
+                  items={byKmBucket}
+                  maxBars={10}
+                />
 
-            <MiniBars
-              title="Top circuitos"
-              subtitle="Mayor cantidad de registros"
-              items={byCircuito}
-              maxBars={10}
-            />
+                <MiniBars
+                  title="Top tableros"
+                  subtitle="Mayor cantidad de registros"
+                  items={byTablero}
+                  maxBars={10}
+                />
 
-            <MiniBars
-              title="Top zonas"
-              subtitle="Mayor cantidad de registros"
-              items={byZona}
-              maxBars={10}
-            />
+                <MiniBars
+                  title="Top circuitos"
+                  subtitle="Mayor cantidad de registros"
+                  items={byCircuito}
+                  maxBars={10}
+                />
 
-            <QuickList
-              title="Últimos pendientes / apagados"
-              subtitle="Foco operativo"
-              items={recentAlerts}
-            />
-          </div>
+                <MiniBars
+                  title="Top zonas"
+                  subtitle="Mayor cantidad de registros"
+                  items={byZona}
+                  maxBars={10}
+                />
+
+                <QuickList
+                  title="Últimos pendientes / apagados"
+                  subtitle="Foco operativo"
+                  items={recentAlerts}
+                />
+              </div>
+            </>
+          )}
 
           <div className="lumdash-card" style={{ marginTop: 14 }}>
             <div className="lumdash-tableHead">
               <div>
-                <div className="lumdash-cardtitle">Detalle analítico</div>
+                <div className="lumdash-cardtitle">
+                  {isAdmin ? "Detalle analítico" : "Tabla de luminarias"}
+                </div>
                 <div className="lumdash-muted">
-                  {sorted.length} filas · listo para exportar
+                  {sorted.length} filas
+                  {isAdmin ? " · listo para exportar" : ""}
                 </div>
               </div>
 
@@ -1014,10 +1040,7 @@ export default function HistorialLuminarias() {
             </div>
 
             <div className="lumdash-tableWrap">
-              <table
-                className="lumdash-table"
-                aria-label="Tabla analítica de luminarias"
-              >
+              <table className="lumdash-table" aria-label="Tabla de luminarias">
                 <thead>
                   <tr>
                     <th>Fecha</th>

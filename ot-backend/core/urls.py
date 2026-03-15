@@ -5,6 +5,8 @@ from django.conf.urls.static import static
 
 urlpatterns = [
     path("admin/", admin.site.urls),
+    # auth + users
+    path("api/", include("accounts.urls")),
     # Todo orders entra por acá
     path("api/", include("orders.urls")),
     # Historial / tableros / etc

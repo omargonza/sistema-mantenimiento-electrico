@@ -1,16 +1,14 @@
 from datetime import date
+
 from django.db.models import Count, Q
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from rest_framework.permissions import AllowAny
-
-from .models import Tablero, HistorialTarea
-from .serializers import TableroSerializer
-
-
+from rest_framework.permissions import IsAuthenticated
 from rest_framework import status
 
-from .models import Tablero
+from accounts.permissions import IsAdminOrTechnicianRole
+from .models import Tablero, HistorialTarea
+from .serializers import TableroSerializer
 
 
 class TablerosListView(APIView):
@@ -19,7 +17,7 @@ class TablerosListView(APIView):
     GET /api/tableros/
     """
 
-    permission_classes = [AllowAny]
+    permission_classes = [IsAuthenticated, IsAdminOrTechnicianRole]
 
     def get(self, request):
         qs = Tablero.objects.all().order_by("zona", "nombre")
@@ -32,7 +30,7 @@ class TableroAutocompleteView(APIView):
     GET /api/tableros/autocomplete/?q=TI%201400&limit=20
     """
 
-    permission_classes = [AllowAny]
+    permission_classes = [IsAuthenticated, IsAdminOrTechnicianRole]
 
     def get(self, request):
         q = (request.query_params.get("q") or "").strip()
@@ -53,7 +51,6 @@ def _parse_date(s: str | None) -> date | None:
     if not s:
         return None
     try:
-        # espera YYYY-MM-DD
         y, m, d = s.split("-")
         return date(int(y), int(m), int(d))
     except Exception:
@@ -64,10 +61,9 @@ class HistorialView(APIView):
     """
     Historial paginado + filtros, con tablero opcional.
     GET /api/historial/?tablero=TI%201400&page=1&page_size=20&desde=2025-01-01&hasta=2025-01-31&circuito=fd1&q=texto
-    Si NO mandás tablero -> devuelve historial global (más pesado, se recomienda usar filtros).
     """
 
-    permission_classes = [AllowAny]
+    permission_classes = [IsAuthenticated, IsAdminOrTechnicianRole]
 
     def get(self, request):
         tablero = (request.query_params.get("tablero") or "").strip()
@@ -84,10 +80,8 @@ class HistorialView(APIView):
 
         qs = HistorialTarea.objects.select_related("tablero").all()
 
-        # tablero: exacto o parcial
         if tablero:
             tnorm = " ".join(tablero.split())
-            # si existe exacto, priorizamos exacto
             exact = Tablero.objects.filter(nombre__iexact=tnorm).first()
             if exact:
                 qs = qs.filter(tablero=exact)
@@ -103,7 +97,6 @@ class HistorialView(APIView):
             qs = qs.filter(fecha__lte=hasta)
 
         if qtext:
-            # busca en campos analíticos + legado
             qs = qs.filter(
                 Q(tarea_realizada__icontains=qtext)
                 | Q(tarea_pedida__icontains=qtext)
@@ -119,12 +112,10 @@ class HistorialView(APIView):
         end = start + page_size
         rows = qs[start:end]
 
-        # header informativo
         header_tablero = ""
         header_zona = ""
 
         if tablero:
-            # si filtró por exacto lo reflejamos mejor
             exact = Tablero.objects.filter(
                 nombre__iexact=" ".join(tablero.split())
             ).first()
@@ -132,7 +123,7 @@ class HistorialView(APIView):
                 header_tablero = exact.nombre
                 header_zona = exact.zona
             else:
-                header_tablero = tablero  # texto ingresado (parcial)
+                header_tablero = tablero
 
         results = []
         for h in rows:
@@ -169,7 +160,7 @@ class CircuitosFrecuentesView(APIView):
     GET /api/tableros/circuitos/?tablero=TI%201400&limit=8
     """
 
-    permission_classes = [AllowAny]
+    permission_classes = [IsAuthenticated, IsAdminOrTechnicianRole]
 
     def get(self, request):
         tablero = (request.query_params.get("tablero") or "").strip()
@@ -183,7 +174,6 @@ class CircuitosFrecuentesView(APIView):
         exact = Tablero.objects.filter(nombre__iexact=tnorm).first()
 
         if not exact:
-            # sin tablero exacto no devolvemos sugerencias (evita ruido)
             return Response({"items": []})
 
         qs = (
@@ -198,16 +188,12 @@ class CircuitosFrecuentesView(APIView):
         return Response({"tablero": exact.nombre, "items": list(qs)})
 
 
-#
-
-
 class TableroExistsView(APIView):
     """
     GET /api/tableros/exists/?nombre=TI%201400
-    Respuesta:
-      { "exists": true, "nombre": "TI 1400", "zona": "..." }
-      { "exists": false, "nombre": "TI 1400" }
     """
+
+    permission_classes = [IsAuthenticated, IsAdminOrTechnicianRole]
 
     def get(self, request):
         raw = (request.query_params.get("nombre") or "").strip()

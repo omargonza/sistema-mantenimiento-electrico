@@ -16,7 +16,7 @@ import {
   Tooltip,
   Legend,
 } from "recharts";
-import { API } from "../api";
+import { API, authHeaders, getCurrentUser } from "../api";
 
 const RAMAL_RANGES = {
   ACC_NORTE: { min: 11, max: 32, label: "Acc Norte" },
@@ -43,7 +43,9 @@ async function fetchLuminarias({ ramal, from, to }) {
   if (to) params.set("to", to);
 
   const url = `${API}/api/luminarias/historial/?${params.toString()}`;
-  const res = await fetch(url);
+  const res = await fetch(url, {
+    headers: authHeaders(),
+  });
   if (!res.ok) throw new Error("Error cargando dashboard de luminarias");
   return await res.json();
 }
@@ -297,6 +299,19 @@ function KpiExplain({ children }) {
 function DashboardLuminarias() {
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
+
+  const user = getCurrentUser();
+  const role = user?.profile?.role;
+
+  useEffect(() => {
+    if (role && role !== "admin") {
+      navigate("/historial-luminarias", { replace: true });
+    }
+  }, [role, navigate]);
+
+  if (role && role !== "admin") {
+    return null;
+  }
 
   const ramal = params.get("ramal") || "";
   const from = params.get("from") || "";
@@ -677,138 +692,12 @@ function DashboardLuminarias() {
             >
               Ver historial tabular
             </button>
-            <button type="button" onClick={exportCSV} style={topBtnStyle}>
-              Export CSV
-            </button>
-          </div>
-        </div>
 
-        <div style={cardStyle()}>
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-              gap: 10,
-            }}
-          >
-            <select
-              value={ramal}
-              onChange={(e) => updateParam("ramal", e.target.value)}
-              style={inputStyle}
-            >
-              <option value="">Todos los ramales</option>
-              {RAMALES.map((r) => (
-                <option key={r} value={r}>
-                  {RAMAL_RANGES[r].label}
-                </option>
-              ))}
-            </select>
-
-            <input
-              type="date"
-              value={from}
-              onChange={(e) => updateParam("from", e.target.value)}
-              style={inputStyle}
-            />
-
-            <input
-              type="date"
-              value={to}
-              onChange={(e) => updateParam("to", e.target.value)}
-              style={inputStyle}
-            />
-
-            <select
-              value={stateFilter}
-              onChange={(e) => setStateFilter(e.target.value)}
-              style={inputStyle}
-            >
-              <option value="ALL">Todos los estados</option>
-              <option value="OK">Reparado / OK</option>
-              <option value="PENDIENTE">Pendiente</option>
-              <option value="APAGADO">Apagado</option>
-              <option value="OTRO">Otro</option>
-            </select>
-
-            <select
-              value={tableroFilter}
-              onChange={(e) => setTableroFilter(e.target.value)}
-              style={inputStyle}
-            >
-              <option value="">Todos los tableros</option>
-              {tableroOptions.map((x) => (
-                <option key={x} value={x}>
-                  {x}
-                </option>
-              ))}
-            </select>
-
-            <select
-              value={circuitoFilter}
-              onChange={(e) => setCircuitoFilter(e.target.value)}
-              style={inputStyle}
-            >
-              <option value="">Todos los circuitos</option>
-              {circuitoOptions.map((x) => (
-                <option key={x} value={x}>
-                  {x}
-                </option>
-              ))}
-            </select>
-
-            <select
-              value={zonaFilter}
-              onChange={(e) => setZonaFilter(e.target.value)}
-              style={inputStyle}
-            >
-              <option value="">Todas las zonas</option>
-              {zonaOptions.map((x) => (
-                <option key={x} value={x}>
-                  {x}
-                </option>
-              ))}
-            </select>
-
-            <input
-              type="text"
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-              placeholder="Buscar por código, tablero, OT, ubicación…"
-              style={inputStyle}
-            />
-          </div>
-
-          <div
-            style={{
-              display: "flex",
-              gap: 10,
-              alignItems: "center",
-              flexWrap: "wrap",
-              marginTop: 10,
-            }}
-          >
-            <button
-              type="button"
-              onClick={() => setOnlyLatestPerCode((v) => !v)}
-              style={{
-                ...inputStyle,
-                cursor: "pointer",
-                width: "auto",
-                minWidth: 230,
-                background: onlyLatestPerCode
-                  ? "rgba(22,163,74,.16)"
-                  : "rgba(255,255,255,.7)",
-              }}
-            >
-              {onlyLatestPerCode
-                ? "Último estado por luminaria: ON"
-                : "Último estado por luminaria: OFF"}
-            </button>
-
-            <div style={{ color: "#475569", fontSize: 13 }}>
-              ON: una fila por luminaria con su estado más reciente. OFF: todas
-              las intervenciones históricas.
-            </div>
+            {role === "admin" && (
+              <button type="button" onClick={exportCSV} style={topBtnStyle}>
+                Export CSV
+              </button>
+            )}
           </div>
         </div>
 
@@ -830,6 +719,135 @@ function DashboardLuminarias() {
 
         {!loading && !error && (
           <>
+            <div style={cardStyle()}>
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+                  gap: 10,
+                }}
+              >
+                <select
+                  value={ramal}
+                  onChange={(e) => updateParam("ramal", e.target.value)}
+                  style={inputStyle}
+                >
+                  <option value="">Todos los ramales</option>
+                  {RAMALES.map((r) => (
+                    <option key={r} value={r}>
+                      {RAMAL_RANGES[r].label}
+                    </option>
+                  ))}
+                </select>
+
+                <input
+                  type="date"
+                  value={from}
+                  onChange={(e) => updateParam("from", e.target.value)}
+                  style={inputStyle}
+                />
+
+                <input
+                  type="date"
+                  value={to}
+                  onChange={(e) => updateParam("to", e.target.value)}
+                  style={inputStyle}
+                />
+
+                <select
+                  value={stateFilter}
+                  onChange={(e) => setStateFilter(e.target.value)}
+                  style={inputStyle}
+                >
+                  <option value="ALL">Todos los estados</option>
+                  <option value="OK">Reparado / OK</option>
+                  <option value="PENDIENTE">Pendiente</option>
+                  <option value="APAGADO">Apagado</option>
+                  <option value="OTRO">Otro</option>
+                </select>
+
+                <select
+                  value={tableroFilter}
+                  onChange={(e) => setTableroFilter(e.target.value)}
+                  style={inputStyle}
+                >
+                  <option value="">Todos los tableros</option>
+                  {tableroOptions.map((x) => (
+                    <option key={x} value={x}>
+                      {x}
+                    </option>
+                  ))}
+                </select>
+
+                <select
+                  value={circuitoFilter}
+                  onChange={(e) => setCircuitoFilter(e.target.value)}
+                  style={inputStyle}
+                >
+                  <option value="">Todos los circuitos</option>
+                  {circuitoOptions.map((x) => (
+                    <option key={x} value={x}>
+                      {x}
+                    </option>
+                  ))}
+                </select>
+
+                <select
+                  value={zonaFilter}
+                  onChange={(e) => setZonaFilter(e.target.value)}
+                  style={inputStyle}
+                >
+                  <option value="">Todas las zonas</option>
+                  {zonaOptions.map((x) => (
+                    <option key={x} value={x}>
+                      {x}
+                    </option>
+                  ))}
+                </select>
+
+                <input
+                  type="text"
+                  value={q}
+                  onChange={(e) => setQ(e.target.value)}
+                  placeholder="Buscar por código, tablero, OT, ubicación…"
+                  style={inputStyle}
+                />
+              </div>
+
+              <div
+                style={{
+                  display: "flex",
+                  gap: 10,
+                  alignItems: "center",
+                  flexWrap: "wrap",
+                  marginTop: 10,
+                }}
+              >
+                <button
+                  type="button"
+                  onClick={() => setOnlyLatestPerCode((v) => !v)}
+                  style={{
+                    ...inputStyle,
+                    cursor: "pointer",
+                    width: "auto",
+                    minWidth: 230,
+                    background: onlyLatestPerCode
+                      ? "rgba(22,163,74,.16)"
+                      : "rgba(255,255,255,.7)",
+                  }}
+                >
+                  {onlyLatestPerCode
+                    ? "Último estado por luminaria: ON"
+                    : "Último estado por luminaria: OFF"}
+                </button>
+
+                <div style={{ color: "#475569", fontSize: 13 }}>
+                  ON: una fila por luminaria con su estado más reciente. OFF:
+                  todas las intervenciones históricas.
+                </div>
+              </div>
+            </div>
+
             <div
               style={{
                 display: "grid",

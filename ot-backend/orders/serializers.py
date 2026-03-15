@@ -123,12 +123,69 @@ class OrdenTrabajoSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = OrdenTrabajo
-        fields = "__all__"
+        # IMPORTANTE:
+        # NO usamos "__all__" para no exponer created_by
+        fields = [
+            "id",
+            "fecha",
+            "ubicacion",
+            "tablero",
+            "zona",
+            "circuito",
+            "vehiculo",
+            "km_inicial",
+            "km_final",
+            "km_total",
+            "ramal",
+            "km_luminaria",
+            "codigo_luminaria",
+            "codigos_luminarias",
+            "tecnicos",
+            "materiales",
+            "tarea_pedida",
+            "tarea_realizada",
+            "tarea_pendiente",
+            "luminaria_equipos",
+            "creado",
+            "observaciones",
+            "firma_tecnico",
+            "firma_supervisor",
+            "fotos",
+            "firma_tecnico_path",
+            "alcance",
+            "resultado",
+            "estado_tablero",
+            "luminaria_estado",
+            "firma_tecnico_img",
+            "fotos_b64",
+            "print_mode",
+            "luminarias_por_tablero",
+        ]
+        read_only_fields = [
+            "id",
+            "creado",
+            "fotos",
+            "firma_tecnico_path",
+        ]
         extra_kwargs = {
             "ubicacion": {"required": False, "allow_blank": True},
             "ramal": {"required": False, "allow_blank": True},
             "codigo_luminaria": {"required": False, "allow_blank": True},
             "km_luminaria": {"required": False, "allow_null": True},
+            "zona": {"required": False, "allow_blank": True},
+            "circuito": {"required": False, "allow_blank": True},
+            "vehiculo": {"required": False, "allow_blank": True},
+            "tarea_pedida": {"required": False, "allow_blank": True},
+            "tarea_realizada": {"required": False, "allow_blank": True},
+            "tarea_pendiente": {"required": False, "allow_blank": True},
+            "luminaria_equipos": {"required": False, "allow_blank": True},
+            "observaciones": {"required": False, "allow_blank": True},
+            "firma_tecnico": {"required": False, "allow_blank": True},
+            "firma_supervisor": {"required": False, "allow_blank": True},
+            "alcance": {"required": False, "allow_blank": True},
+            "resultado": {"required": False, "allow_blank": True},
+            "estado_tablero": {"required": False, "allow_blank": True},
+            "luminaria_estado": {"required": False, "allow_blank": True},
         }
 
     def validate_fotos_b64(self, value):

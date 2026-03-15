@@ -36,7 +36,7 @@ async function fetchWithTimeout(url, options = {}, timeout = 10000) {
 }
 
 // ==========================================================
-//  REINTENTOS AUTOMÁTICOS
+//  REINTENTOS AUTOMÁTICOS POR ERROR DE RED
 // ==========================================================
 async function fetchRetry(url, options, retries = 3) {
   try {
@@ -51,6 +51,179 @@ async function fetchRetry(url, options, retries = 3) {
 
     return fetchRetry(url, options, retries - 1);
   }
+}
+
+// ==========================================================
+//  SESIÓN / AUTH JWT
+// ==========================================================
+const ACCESS_KEY = "ot_access_token";
+const REFRESH_KEY = "ot_refresh_token";
+const USER_KEY = "ot_user";
+
+export function getAccessToken() {
+  return localStorage.getItem(ACCESS_KEY) || "";
+}
+
+export function getRefreshToken() {
+  return localStorage.getItem(REFRESH_KEY) || "";
+}
+
+export function getCurrentUser() {
+  try {
+    return JSON.parse(localStorage.getItem(USER_KEY) || "null");
+  } catch {
+    return null;
+  }
+}
+
+export function saveSession({ access, refresh, user }) {
+  if (access) localStorage.setItem(ACCESS_KEY, access);
+  if (refresh) localStorage.setItem(REFRESH_KEY, refresh);
+  if (user) localStorage.setItem(USER_KEY, JSON.stringify(user));
+}
+
+export function clearSession() {
+  localStorage.removeItem(ACCESS_KEY);
+  localStorage.removeItem(REFRESH_KEY);
+  localStorage.removeItem(USER_KEY);
+}
+
+export function authHeaders(extra = {}) {
+  const token = getAccessToken();
+  return {
+    ...extra,
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  };
+}
+
+// ==========================================================
+//  LOGIN / ME / LOGOUT / REFRESH
+// ==========================================================
+export async function login(legajo, password) {
+  const res = await fetch(`${API}/api/auth/login/`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      username: String(legajo).trim(), // backend: username = legajo
+      password,
+    }),
+  });
+
+  const data = await res.json().catch(() => ({}));
+
+  if (!res.ok) {
+    const detail =
+      data?.detail ||
+      data?.non_field_errors?.[0] ||
+      data?.username?.[0] ||
+      `Error login (${res.status})`;
+
+    const e = new Error(detail);
+    e.status = res.status;
+    e.body = data;
+    throw e;
+  }
+
+  saveSession(data);
+  return data;
+}
+
+export async function getMe() {
+  const res = await authFetch(`${API}/api/auth/me/`, {
+    method: "GET",
+  });
+
+  const data = await res.json().catch(() => ({}));
+
+  if (!res.ok) {
+    const e = new Error(data?.detail || `Error me (${res.status})`);
+    e.status = res.status;
+    e.body = data;
+    throw e;
+  }
+
+  return data;
+}
+
+export async function logout() {
+  const refresh = getRefreshToken();
+
+  try {
+    if (refresh) {
+      await fetch(`${API}/api/auth/logout/`, {
+        method: "POST",
+        headers: authHeaders({ "Content-Type": "application/json" }),
+        body: JSON.stringify({ refresh }),
+      });
+    }
+  } finally {
+    clearSession();
+  }
+}
+
+export async function refreshAccessToken() {
+  const refresh = getRefreshToken();
+
+  if (!refresh) {
+    clearSession();
+    const e = new Error("No hay refresh token");
+    e.status = 401;
+    throw e;
+  }
+
+  const res = await fetch(`${API}/api/auth/refresh/`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ refresh }),
+  });
+
+  const data = await res.json().catch(() => ({}));
+
+  if (!res.ok || !data?.access) {
+    clearSession();
+    const e = new Error(data?.detail || `Error refresh (${res.status})`);
+    e.status = res.status || 401;
+    e.body = data;
+    throw e;
+  }
+
+  localStorage.setItem(ACCESS_KEY, data.access);
+
+  // si el backend rota refresh tokens, lo actualizamos también
+  if (data.refresh) {
+    localStorage.setItem(REFRESH_KEY, data.refresh);
+  }
+
+  return data.access;
+}
+
+// ==========================================================
+//  FETCH AUTENTICADO + REFRESH AUTOMÁTICO SI 401
+// ==========================================================
+async function authFetch(url, options = {}, timeout = 10000) {
+  const initialOptions = {
+    ...options,
+    headers: authHeaders(options.headers || {}),
+  };
+
+  let res = await fetchRetry(url, initialOptions);
+
+  // Si el access token venció, intenta refresh una sola vez
+  if (res.status === 401) {
+    const newAccess = await refreshAccessToken();
+
+    const retryOptions = {
+      ...options,
+      headers: {
+        ...(options.headers || {}),
+        Authorization: `Bearer ${newAccess}`,
+      },
+    };
+
+    res = await fetchWithTimeout(url, retryOptions, timeout);
+  }
+
+  return res;
 }
 
 // ==========================================================
@@ -83,11 +256,18 @@ export async function enviarOT(payload, silent = false) {
     throw e;
   }
 
-  const res = await fetchRetry(`${API}/api/ordenes/pdf/`, {
+  const res = await authFetch(`${API}/api/ordenes/pdf/`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
   });
+
+  if (!silent) {
+    console.log(
+      "AUTH enviarOT",
+      authHeaders({ "Content-Type": "application/json" }),
+    );
+  }
 
   if (!res.ok) {
     const bodyText = await res.text().catch(() => "");
@@ -122,7 +302,7 @@ export async function syncPendientes(lista, silent = true) {
     throw e;
   }
 
-  const res = await fetchRetry(`${API}/api/ordenes/sync/`, {
+  const res = await authFetch(`${API}/api/ordenes/sync/`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ ordenes: lista }),
@@ -151,7 +331,7 @@ export async function buscarTableros(q, { signal, limit = 20 } = {}) {
   );
 
   const url = `${API}/api/tableros/?${params.toString()}`;
-  const res = await fetch(url, { signal });
+  const res = await authFetch(url, { signal });
 
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   const data = await res.json();
@@ -168,8 +348,30 @@ export async function tableroExists(nombre, { signal } = {}) {
   const params = new URLSearchParams({ nombre: n });
   const url = `${API}/api/tableros/exists/?${params.toString()}`;
 
-  const res = await fetch(url, { signal });
+  const res = await authFetch(url, { signal });
+
+  console.log("AUTH tableroExists", authHeaders());
+
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
   return await res.json(); // {exists, nombre, zona?}
+}
+
+export async function getOrdenesAudit() {
+  const res = await authFetch(`${API}/api/ordenes/`, {
+    method: "GET",
+  });
+
+  const data = await res.json().catch(() => []);
+
+  if (!res.ok) {
+    const e = new Error(
+      data?.detail || `Error cargando órdenes (${res.status})`,
+    );
+    e.status = res.status;
+    e.body = data;
+    throw e;
+  }
+
+  return Array.isArray(data) ? data : [];
 }

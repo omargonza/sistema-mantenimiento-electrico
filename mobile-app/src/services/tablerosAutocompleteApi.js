@@ -1,94 +1,80 @@
-import { API } from "../api";
-import { obtenerTablerosCached } from "./tablerosApi";
+// src/services/tablerosAutocompleteApi.js
+import { API, authHeaders } from "../api";
 
-// Normaliza para buscar (sin acentos, lower, etc.)
-function norm(s) {
-  return String(s || "")
-    .trim()
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "");
+const KEY = "tableros_cache_v1";
+const TTL = 24 * 60 * 60 * 1000; // 24h
+
+function now() {
+  return Date.now();
 }
 
-function filterLocal(list, q, limit = 20) {
-  const nq = norm(q);
-  if (!nq) return [];
+export async function obtenerTablerosCached() {
+  try {
+    const raw = localStorage.getItem(KEY);
+    if (raw) {
+      const { ts, data } = JSON.parse(raw);
+      if (now() - ts < TTL && Array.isArray(data)) {
+        refreshTableros();
+        return data;
+      }
+    }
+  } catch {}
 
-  // soporta formatos: string o { nombre, zona, ... }
-  const rows = Array.isArray(list) ? list : [];
+  return await refreshTableros();
+}
 
-  const scored = rows
-    .map((it) => {
-      const nombre = typeof it === "string" ? it : it?.nombre;
-      const zona = typeof it === "string" ? "" : it?.zona;
-      const text = norm(`${nombre || ""} ${zona || ""}`);
+async function refreshTableros() {
+  try {
+    const res = await fetch(`${API}/api/tableros/`, {
+      headers: authHeaders(),
+    });
 
-      // score simple: prefijo > incluye
-      let score = 0;
-      if (text.startsWith(nq)) score = 3;
-      else if (text.includes(nq)) score = 1;
-      else score = 0;
+    if (!res.ok) throw new Error("Error cargando tableros");
+    const data = await res.json();
 
-      return { it, score, nombre: nombre || "" };
-    })
-    .filter((x) => x.score > 0)
-    .sort((a, b) => b.score - a.score || a.nombre.localeCompare(b.nombre));
+    try {
+      localStorage.setItem(KEY, JSON.stringify({ ts: now(), data }));
+    } catch {}
 
-  return scored.slice(0, limit).map((x) => {
-    // siempre devolvemos objeto uniforme { nombre, zona? }
-    if (typeof x.it === "string") return { nombre: x.it, zona: "" };
-    return { nombre: x.it?.nombre || "", zona: x.it?.zona || "" };
-  });
+    return data;
+  } catch (e) {
+    try {
+      const raw = localStorage.getItem(KEY);
+      if (raw) {
+        const { data } = JSON.parse(raw);
+        return Array.isArray(data) ? data : [];
+      }
+    } catch {}
+    return [];
+  }
 }
 
 export async function buscarTableros(q, { signal, limit = 20 } = {}) {
-  const query = (q ?? "").trim();
-  if (!query) return { items: [], meta: { source: "remote" } };
-
-  // 1) ONLINE autocomplete
-  try {
-    const params = new URLSearchParams({
-      q: query,
-      limit: String(limit),
-    });
-
-    const url = `${API}/api/tableros/autocomplete/?${params.toString()}`;
-    const res = await fetch(url, { signal });
-
-    if (res.ok) {
-      const data = await res.json();
-      const arr = Array.isArray(data) ? data : [];
-
-      if (arr.length > 0) {
-        return { items: arr, meta: { source: "remote" } };
-      }
-
-      // vacío -> fallback cache
-      const cached = await obtenerTablerosCached();
-      return {
-        items: filterLocal(cached, query, limit),
-        meta: { source: "cache" },
-      };
-    }
-
-    // status no ok -> fallback cache
-    const cached = await obtenerTablerosCached();
-    return {
-      items: filterLocal(cached, query, limit),
-      meta: { source: "cache" },
-    };
-  } catch (e) {
-    if (e?.name === "AbortError") throw e;
-
-    // 2) OFFLINE fallback local
-    try {
-      const cached = await obtenerTablerosCached();
-      return {
-        items: filterLocal(cached, query, limit),
-        meta: { source: "cache" },
-      };
-    } catch {
-      return { items: [], meta: { source: "cache" } };
-    }
+  const query = String(q || "").trim();
+  if (!query) {
+    return { items: [], meta: { source: "remote" } };
   }
+
+  const data = await obtenerTablerosCached();
+
+  const items = data
+    .filter((t) => {
+      const nombre = String(t?.nombre || "").toLowerCase();
+      const zona = String(t?.zona || "").toLowerCase();
+      const needle = query.toLowerCase();
+      return nombre.includes(needle) || zona.includes(needle);
+    })
+    .slice(0, limit);
+
+  if (signal?.aborted) {
+    signal.throwIfAborted?.();
+    throw signal.reason || new DOMException("Aborted", "AbortError");
+  }
+
+  return {
+    items,
+    meta: {
+      source: "cache",
+    },
+  };
 }
