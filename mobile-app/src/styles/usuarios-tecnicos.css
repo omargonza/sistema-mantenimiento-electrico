@@ -305,6 +305,37 @@
   flex-wrap: wrap;
 }
 
+.usuarios-password-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.usuarios-password-wrap input {
+  width: 100%;
+  padding-right: 46px;
+}
+
+.usuarios-password-toggle {
+  position: absolute;
+  right: 8px;
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  background: transparent;
+  color: rgba(243, 244, 246, 0.75);
+  cursor: pointer;
+  border-radius: 10px;
+}
+
+.usuarios-password-toggle:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: #f3f4f6;
+}
+
 @media (min-width: 700px) {
   .usuarios-hero__head {
     grid-template-columns: 1fr auto;

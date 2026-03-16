@@ -9,6 +9,8 @@ import {
   Wrench,
   X,
   Save,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 import {
   adminListUsers,
@@ -50,10 +52,6 @@ function normalizeError(err) {
   return err.message || "Ocurrió un error inesperado.";
 }
 
-function roleLabel(role) {
-  return role === "admin" ? "Administrador" : "Técnico";
-}
-
 export default function UsuariosTecnicos() {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -64,6 +62,7 @@ export default function UsuariosTecnicos() {
 
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [editing, setEditing] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
 
   const [errorMsg, setErrorMsg] = useState("");
@@ -114,6 +113,7 @@ export default function UsuariosTecnicos() {
 
   const openCreate = () => {
     setEditing(false);
+    setShowPassword(false);
     setForm({
       ...EMPTY_FORM,
       role: "technician",
@@ -130,6 +130,7 @@ export default function UsuariosTecnicos() {
       user?.profile?.role || (user?.is_staff ? "admin" : "technician");
 
     setEditing(true);
+    setShowPassword(false);
     setForm({
       id: user.id,
       legajo: user.legajo || "",
@@ -148,6 +149,7 @@ export default function UsuariosTecnicos() {
   const closeDrawer = () => {
     if (saving) return;
     setDrawerOpen(false);
+    setShowPassword(false);
     setForm(EMPTY_FORM);
   };
 
@@ -203,6 +205,7 @@ export default function UsuariosTecnicos() {
 
       await loadUsers();
       setDrawerOpen(false);
+      setShowPassword(false);
       setForm(EMPTY_FORM);
     } catch (err) {
       setErrorMsg(normalizeError(err));
@@ -513,14 +516,35 @@ export default function UsuariosTecnicos() {
                   <label className="usuarios-label" htmlFor="form-password">
                     {editing ? "Nueva contraseña" : "Contraseña"}
                   </label>
-                  <input
-                    id="form-password"
-                    type="password"
-                    value={form.password}
-                    onChange={(e) => updateField("password", e.target.value)}
-                    placeholder={editing ? "Dejar vacío para no cambiar" : ""}
-                    required={!editing}
-                  />
+
+                  <div className="usuarios-password-wrap">
+                    <input
+                      id="form-password"
+                      type={showPassword ? "text" : "password"}
+                      value={form.password}
+                      onChange={(e) => updateField("password", e.target.value)}
+                      placeholder={editing ? "Dejar vacío para no cambiar" : ""}
+                      required={!editing}
+                    />
+
+                    <button
+                      type="button"
+                      className="usuarios-password-toggle"
+                      onClick={() => setShowPassword((prev) => !prev)}
+                      title={
+                        showPassword ? "Ocultar contraseña" : "Ver contraseña"
+                      }
+                      aria-label={
+                        showPassword ? "Ocultar contraseña" : "Ver contraseña"
+                      }
+                    >
+                      {showPassword ? (
+                        <EyeOff size={18} strokeWidth={2.2} />
+                      ) : (
+                        <Eye size={18} strokeWidth={2.2} />
+                      )}
+                    </button>
+                  </div>
                 </div>
 
                 <label className="usuarios-check usuarios-check--full">
