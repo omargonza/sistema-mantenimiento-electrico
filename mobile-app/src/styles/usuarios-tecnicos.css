@@ -336,6 +336,127 @@
   color: #f3f4f6;
 }
 
+/* =========================================================
+   MEJORAS MOBILE PARA ALTA DE USUARIOS
+========================================================= */
+
+/* Botones del hero más visibles */
+.usuarios-hero__actions .btn-primary,
+.usuarios-hero__actions .btn-outline {
+  min-height: 46px;
+}
+
+/* Drawer: mejor comportamiento general */
+.usuarios-drawer {
+  display: flex;
+  flex-direction: column;
+}
+
+/* Header fijo dentro del drawer */
+.usuarios-drawer__head {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  padding-bottom: 10px;
+  background: inherit;
+}
+
+/* El form ocupa bien el alto */
+.usuarios-form {
+  flex: 1;
+  min-height: 0;
+}
+
+/* Acciones fijas abajo para que siempre se vea Crear usuario */
+.usuarios-form__actions {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  padding-top: 12px;
+  padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px));
+  background: linear-gradient(
+    180deg,
+    rgba(16, 16, 16, 0.72) 0%,
+    rgba(16, 16, 16, 0.96) 28%,
+    rgba(16, 16, 16, 1) 100%
+  );
+  backdrop-filter: blur(6px);
+}
+
+/* Botones de acción más táctiles */
+.usuarios-form__actions .btn-outline,
+.usuarios-form__actions .btn-primary {
+  min-height: 46px;
+}
+
+/* Input de password con mejor altura táctil */
+.usuarios-password-wrap input {
+  min-height: 46px;
+}
+
+/* =========================================================
+   MOBILE
+========================================================= */
+@media (max-width: 640px) {
+  /* Hero */
+  .usuarios-hero__actions {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .usuarios-hero__actions .btn-primary,
+  .usuarios-hero__actions .btn-outline {
+    width: 100%;
+    justify-content: center;
+  }
+
+  /* Drawer como pantalla mobile usable */
+  .usuarios-drawer-backdrop {
+    align-items: stretch;
+  }
+
+  .usuarios-drawer {
+    width: 100%;
+    height: 100dvh;
+    max-height: 100dvh;
+    min-height: 100dvh;
+    margin: 0;
+    border-radius: 0;
+    padding-bottom: 0;
+  }
+
+  .usuarios-drawer__head {
+    padding-top: calc(8px + env(safe-area-inset-top, 0px));
+  }
+
+  /* Form más respirado en celular */
+  .usuarios-form {
+    gap: 16px;
+  }
+
+  .usuarios-form__grid {
+    gap: 14px;
+  }
+
+  .usuarios-field input,
+  .usuarios-field select {
+    min-height: 46px;
+  }
+
+  /* Footer sticky en columna, super visible */
+  .usuarios-form__actions {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .usuarios-form__actions .btn-outline,
+  .usuarios-form__actions .btn-primary {
+    width: 100%;
+    justify-content: center;
+  }
+}
 @media (min-width: 700px) {
   .usuarios-hero__head {
     grid-template-columns: 1fr auto;

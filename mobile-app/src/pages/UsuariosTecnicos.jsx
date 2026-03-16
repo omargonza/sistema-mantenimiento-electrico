@@ -574,7 +574,7 @@ export default function UsuariosTecnicos() {
                       ? "Guardando..."
                       : editing
                         ? "Guardar cambios"
-                        : "Crear usuario"}
+                        : "Crear usuario ahora"}
                   </span>
                 </button>
               </div>
