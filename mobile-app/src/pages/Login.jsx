@@ -677,7 +677,7 @@ export default function Login() {
                       autoComplete="username"
                       value={legajo}
                       onChange={(e) => setLegajo(e.target.value)}
-                      placeholder="Ej: 8174"
+                      placeholder="Ej: 1234"
                       className="login-input"
                     />
                   </div>
