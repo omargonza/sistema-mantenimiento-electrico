@@ -1,5 +1,5 @@
-from django.urls import include, path
-from rest_framework.routers import DefaultRouter
+# accounts/urls.py
+from django.urls import path
 
 from .views import (
     LoginView,
@@ -7,11 +7,9 @@ from .views import (
     VerifyView,
     LogoutView,
     MeView,
-    UserViewSet,
+    UserAdminListCreateView,
+    UserAdminDetailView,
 )
-
-router = DefaultRouter()
-router.register(r"users", UserViewSet, basename="users")
 
 urlpatterns = [
     path("auth/login/", LoginView.as_view(), name="auth-login"),
@@ -19,5 +17,11 @@ urlpatterns = [
     path("auth/verify/", VerifyView.as_view(), name="auth-verify"),
     path("auth/logout/", LogoutView.as_view(), name="auth-logout"),
     path("auth/me/", MeView.as_view(), name="auth-me"),
-    path("", include(router.urls)),
+    # === USUARIOS ADMIN ===
+    path(
+        "auth/users/", UserAdminListCreateView.as_view(), name="users-admin-list-create"
+    ),
+    path(
+        "auth/users/<int:pk>/", UserAdminDetailView.as_view(), name="users-admin-detail"
+    ),
 ]

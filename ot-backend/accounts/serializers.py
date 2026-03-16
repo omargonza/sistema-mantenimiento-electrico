@@ -106,6 +106,17 @@ class UserCreateSerializer(serializers.ModelSerializer):
             "profile",
         )
 
+    def validate_legajo(self, value):
+        legajo = value.strip()
+        if not legajo:
+            raise serializers.ValidationError("El legajo es obligatorio.")
+        if User.objects.filter(username=legajo).exists():
+            raise serializers.ValidationError("Ya existe un usuario con ese legajo.")
+        return legajo
+
+    def validate_email(self, value):
+        return (value or "").strip()
+
     def validate_password(self, value):
         validate_password(value)
         return value
@@ -177,6 +188,23 @@ class UserUpdateSerializer(serializers.ModelSerializer):
             "role",
             "profile",
         )
+
+    def validate_legajo(self, value):
+        legajo = value.strip()
+        if not legajo:
+            raise serializers.ValidationError("El legajo no puede estar vacío.")
+
+        qs = User.objects.filter(username=legajo)
+        if self.instance:
+            qs = qs.exclude(pk=self.instance.pk)
+
+        if qs.exists():
+            raise serializers.ValidationError("Ya existe un usuario con ese legajo.")
+
+        return legajo
+
+    def validate_email(self, value):
+        return (value or "").strip()
 
     def validate_password(self, value):
         validate_password(value)

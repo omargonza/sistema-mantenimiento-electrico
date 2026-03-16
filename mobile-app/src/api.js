@@ -456,3 +456,107 @@ export async function getOrdenesAudit() {
 
   return Array.isArray(data) ? data : [];
 }
+
+export async function adminListUsers({
+  search = "",
+  role = "",
+  includeDeleted = false,
+} = {}) {
+  const params = new URLSearchParams();
+
+  if (search?.trim()) params.set("search", search.trim());
+  if (role?.trim()) params.set("role", role.trim());
+  if (includeDeleted) params.set("include_deleted", "1");
+
+  const qs = params.toString();
+  const url = `${API}/api/auth/users/${qs ? `?${qs}` : ""}`;
+
+  const res = await authFetch(url, { method: "GET" });
+  const data = await safeReadJson(res, []);
+
+  if (!res.ok) {
+    throw buildError(
+      data?.detail || `Error listando usuarios (${res.status})`,
+      res.status,
+      data,
+    );
+  }
+
+  return Array.isArray(data) ? data : [];
+}
+
+export async function adminGetUser(id) {
+  const res = await authFetch(`${API}/api/auth/users/${id}/`, {
+    method: "GET",
+  });
+
+  const data = await safeReadJson(res, {});
+
+  if (!res.ok) {
+    throw buildError(
+      data?.detail || `Error obteniendo usuario (${res.status})`,
+      res.status,
+      data,
+    );
+  }
+
+  return data;
+}
+
+export async function adminCreateUser(payload) {
+  const res = await authFetch(`${API}/api/auth/users/`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+
+  const data = await safeReadJson(res, {});
+
+  if (!res.ok) {
+    throw buildError(
+      data?.detail || `Error creando usuario (${res.status})`,
+      res.status,
+      data,
+    );
+  }
+
+  return data;
+}
+
+export async function adminUpdateUser(id, payload) {
+  const res = await authFetch(`${API}/api/auth/users/${id}/`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+
+  const data = await safeReadJson(res, {});
+
+  if (!res.ok) {
+    throw buildError(
+      data?.detail || `Error actualizando usuario (${res.status})`,
+      res.status,
+      data,
+    );
+  }
+
+  return data;
+}
+
+export async function adminDeleteUser(id) {
+  const res = await authFetch(`${API}/api/auth/users/${id}/`, {
+    method: "DELETE",
+  });
+
+  const data = await safeReadJson(res, {});
+
+  if (!res.ok) {
+    throw buildError(
+      data?.detail || `Error eliminando usuario (${res.status})`,
+      res.status,
+      data,
+    );
+  }
+
+  return data;
+}

@@ -21,6 +21,7 @@ import Login from "./pages/Login";
 import ProtectedRoute from "./components/ProtectedRoute";
 import AuditoriaOT from "./pages/AuditoriaOT";
 import { getAccessToken, getCurrentUser, logout } from "./api";
+import UsuariosTecnicos from "./pages/UsuariosTecnicos";
 
 function isValidToken(token) {
   if (!token || typeof token !== "string") return false;
@@ -201,6 +202,14 @@ export default function Router() {
           element={
             <ProtectedRoute roles={["admin"]}>
               <AuditoriaOT />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/usuarios-tecnicos"
+          element={
+            <ProtectedRoute roles={["admin"]}>
+              <UsuariosTecnicos />
             </ProtectedRoute>
           }
         />

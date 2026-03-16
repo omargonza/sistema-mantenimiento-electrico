@@ -14,8 +14,10 @@ import {
   RefreshCw,
   ShieldAlert,
   Star,
+  Users, // === AGREGADO: icono para acceso a usuarios técnicos ===
 } from "lucide-react";
 import "../styles/dashboard.css";
+import { getCurrentUser } from "../api"; // === AGREGADO: obtener usuario actual ===
 
 import { queryOts, migrateOtsOperationalFields } from "../storage/ot_db";
 import AdminAuditButton from "../components/AdminAuditButton";
@@ -110,6 +112,10 @@ function KpiCard({ icon: Icon, label, value, sub, tone = "neutral" }) {
 
 export default function Dashboard() {
   const navigate = useNavigate();
+
+  // === AGREGADO: obtener usuario actual dentro del componente ===
+  const user = getCurrentUser();
+  // === FIN AGREGADO ===
 
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -359,6 +365,24 @@ export default function Dashboard() {
               <small>Historial específico</small>
             </span>
           </button>
+
+          {/* === AGREGADO: acceso a gestión de usuarios solo para admin === */}
+          {user?.is_staff && (
+            <button
+              type="button"
+              className="dashboard-action-btn"
+              onClick={() => navigate("/usuarios-tecnicos")}
+            >
+              <span className="dashboard-action-btn__icon">
+                <Users size={18} strokeWidth={2.2} />
+              </span>
+              <span className="dashboard-action-btn__text">
+                <strong>Usuarios</strong>
+                <small>Alta, edición y baja</small>
+              </span>
+            </button>
+          )}
+          {/* === FIN AGREGADO === */}
         </div>
 
         <div className="dashboard-actions-foot">
