@@ -1,7 +1,11 @@
-import { API, authFetch } from "../api";
+import { API, authFetch, getAccessToken, getRefreshToken } from "../api";
 
 const KEY = "circuitos_freq_v1";
 const TTL = 24 * 60 * 60 * 1000; // 24h
+
+function hasSession() {
+  return !!(getAccessToken() || getRefreshToken());
+}
 
 function cacheKey(tablero, limit) {
   const t = String(tablero || "")
@@ -49,8 +53,11 @@ export async function obtenerCircuitosFrecuentes(
   const k = cacheKey(t, safeLimit);
 
   const cached = readCache(k);
+
   if (cached && Date.now() - cached.ts < TTL) {
-    refreshCircuitos(t, safeLimit, { signal }).catch(() => {});
+    if (hasSession()) {
+      refreshCircuitos(t, safeLimit, { signal }).catch(() => {});
+    }
     return cached.data;
   }
 

@@ -249,7 +249,8 @@ class OrdenTrabajoSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError(f"Material {i}: formato inválido.")
 
             material = str(m.get("material") or "").strip()
-            cantidad = str(m.get("cantidad") or "").strip()
+            cantidad = str(m.get("cantidad") or m.get("cant") or "").strip()
+            unidad = str(m.get("unidad") or "").strip()
 
             if not material:
                 raise serializers.ValidationError(
@@ -260,6 +261,7 @@ class OrdenTrabajoSerializer(serializers.ModelSerializer):
                 {
                     "material": material,
                     "cantidad": cantidad,
+                    "unidad": unidad,
                 }
             )
 

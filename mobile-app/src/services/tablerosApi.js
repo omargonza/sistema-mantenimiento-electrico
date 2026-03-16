@@ -1,7 +1,11 @@
-import { API, authFetch } from "../api";
+import { API, authFetch, getAccessToken, getRefreshToken } from "../api";
 
 const KEY = "tableros_cache_v1";
 const TTL = 24 * 60 * 60 * 1000; // 24h
+
+function hasSession() {
+  return !!(getAccessToken() || getRefreshToken());
+}
 
 function now() {
   return Date.now();
@@ -39,7 +43,9 @@ export async function obtenerTablerosCached({ signal } = {}) {
   const cached = readCache();
 
   if (cached && now() - cached.ts < TTL && Array.isArray(cached.data)) {
-    refreshTableros({ signal }).catch(() => {});
+    if (hasSession()) {
+      refreshTableros({ signal }).catch(() => {});
+    }
     return cached.data;
   }
 

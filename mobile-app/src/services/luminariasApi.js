@@ -1,4 +1,8 @@
-import { API, authFetch } from "../api";
+import { API, authFetch, getAccessToken, getRefreshToken } from "../api";
+
+function hasSession() {
+  return !!(getAccessToken() || getRefreshToken());
+}
 
 export async function obtenerHistorialLuminarias({
   ramal = "",
@@ -6,6 +10,10 @@ export async function obtenerHistorialLuminarias({
   to = "",
   signal,
 } = {}) {
+  if (!hasSession()) {
+    return [];
+  }
+
   const params = new URLSearchParams();
 
   if (ramal) params.set("ramal", String(ramal).trim());

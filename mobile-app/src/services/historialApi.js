@@ -1,6 +1,10 @@
-import { API, authFetch } from "../api";
+import { API, authFetch, getAccessToken, getRefreshToken } from "../api";
 
 const TTL = 7 * 24 * 60 * 60 * 1000; // 7 días
+
+function hasSession() {
+  return !!(getAccessToken() || getRefreshToken());
+}
 
 function stableParams(params = {}) {
   const clean = {};
@@ -73,7 +77,9 @@ export async function obtenerHistorial(tablero, params = {}, options = {}) {
   const cached = readCache(cacheStorageKey);
 
   if (cached && Date.now() - cached.ts < TTL) {
-    refreshHistorial(tablero, params, options).catch(() => {});
+    if (hasSession()) {
+      refreshHistorial(tablero, params, options).catch(() => {});
+    }
     return cached.data;
   }
 

@@ -923,7 +923,7 @@ def generar_pdf(data):
             rows.append(
                 [
                     P(safe(m.get("material")), VALUE),
-                    P(safe(m.get("cant")), VALUE),
+                    P(safe(m.get("cantidad")), VALUE),
                     P(safe(m.get("unidad")), VALUE),
                 ]
             )

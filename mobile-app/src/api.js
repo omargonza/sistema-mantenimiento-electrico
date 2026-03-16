@@ -58,6 +58,34 @@ function hasNetworkConnection() {
 }
 
 // ==========================================================
+// JWT HELPERS
+// ==========================================================
+function parseJwt(token) {
+  try {
+    const payload = token.split(".")[1];
+    if (!payload) return null;
+
+    const normalized = payload.replace(/-/g, "+").replace(/_/g, "/");
+    const padded = normalized + "=".repeat((4 - (normalized.length % 4)) % 4);
+
+    return JSON.parse(atob(padded));
+  } catch {
+    return null;
+  }
+}
+
+function isTokenExpiringSoon(token, skewSeconds = 30) {
+  if (!token) return true;
+
+  const payload = parseJwt(token);
+  const exp = Number(payload?.exp || 0);
+  if (!exp) return true;
+
+  const now = Math.floor(Date.now() / 1000);
+  return exp - now <= skewSeconds;
+}
+
+// ==========================================================
 // TIMEOUT REAL CON ABORTCONTROLLER
 // ==========================================================
 async function fetchWithTimeout(url, options = {}, timeout = 10000) {
@@ -86,9 +114,13 @@ async function fetchRetry(url, options = {}, retries = 2, timeout = 10000) {
     if (retries <= 0) throw err;
 
     const delay = 400 * Math.pow(2, 2 - retries);
-    devWarn(`[API] Retry en ${delay}ms`);
-    await new Promise((resolve) => setTimeout(resolve, delay));
+    devWarn(`[API] Retry en ${delay}ms`, {
+      url,
+      retriesLeft: retries,
+      reason: err?.message || String(err),
+    });
 
+    await new Promise((resolve) => setTimeout(resolve, delay));
     return fetchRetry(url, options, retries - 1, timeout);
   }
 }
@@ -127,6 +159,7 @@ export function saveSession({ access, refresh, user }) {
 }
 
 export function clearSession() {
+  devWarn("[AUTH] clearSession()");
   localStorage.removeItem(ACCESS_KEY);
   localStorage.removeItem(REFRESH_KEY);
   localStorage.removeItem(USER_KEY);
@@ -150,13 +183,19 @@ let refreshPromise = null;
 
 export async function refreshAccessToken() {
   if (refreshPromise) {
+    devLog("[AUTH] Reutilizando refresh en curso");
     return refreshPromise;
   }
 
   refreshPromise = (async () => {
     const refresh = getRefreshToken();
 
+    devLog("[AUTH] refreshAccessToken() iniciado", {
+      hasRefresh: !!refresh,
+    });
+
     if (!refresh) {
+      devWarn("[AUTH] No hay refresh token");
       clearSession();
       throw buildError("No hay refresh token", 401);
     }
@@ -173,7 +212,18 @@ export async function refreshAccessToken() {
 
     const data = await safeReadJson(res, {});
 
+    devLog("[AUTH] Respuesta refresh", {
+      status: res.status,
+      ok: res.ok,
+      hasAccess: !!data?.access,
+      hasRefresh: !!data?.refresh,
+    });
+
     if (!res.ok || !data?.access) {
+      devWarn("[AUTH] Refresh inválido o rechazado", {
+        status: res.status,
+        detail: data?.detail || null,
+      });
       clearSession();
       throw buildError(
         data?.detail || `Error refresh (${res.status})`,
@@ -188,6 +238,7 @@ export async function refreshAccessToken() {
       localStorage.setItem(REFRESH_KEY, data.refresh);
     }
 
+    devLog("[AUTH] Refresh exitoso, access actualizado");
     return data.access;
   })();
 
@@ -201,13 +252,39 @@ export async function refreshAccessToken() {
 // ==========================================================
 // FETCH AUTENTICADO
 // - agrega Bearer token
+// - refresh preventivo si el token está por vencer
 // - intenta refresh 1 vez ante 401
 // - limpia sesión si no puede renovar
 // ==========================================================
 export async function authFetch(url, options = {}, timeout = 10000) {
+  let access = getAccessToken();
+  const hasRefresh = !!getRefreshToken();
+
+  if (access && hasRefresh && isTokenExpiringSoon(access, 30)) {
+    devWarn("[AUTH] Access por vencer, refresh preventivo", {
+      url,
+      method: options?.method || "GET",
+    });
+
+    try {
+      access = await refreshAccessToken();
+    } catch (err) {
+      devWarn("[AUTH] Falló refresh preventivo", {
+        url,
+        method: options?.method || "GET",
+        error: err?.message || String(err),
+      });
+      clearSession();
+      throw err;
+    }
+  }
+
   const requestOptions = {
     ...options,
-    headers: authHeaders(options.headers || {}),
+    headers: {
+      ...(options.headers || {}),
+      ...(access ? { Authorization: `Bearer ${access}` } : {}),
+    },
   };
 
   let res = await fetchRetry(url, requestOptions, 2, timeout);
@@ -216,19 +293,52 @@ export async function authFetch(url, options = {}, timeout = 10000) {
     return res;
   }
 
+  devWarn("[AUTH] 401 detectado, intentando refresh", {
+    url,
+    method: options?.method || "GET",
+    hasAccess: !!access,
+    hasRefresh,
+  });
+
   try {
     const newAccess = await refreshAccessToken();
+
+    devLog("[AUTH] Reintentando request con nuevo access", {
+      url,
+      method: options?.method || "GET",
+      hasNewAccess: !!newAccess,
+    });
 
     const retryOptions = {
       ...options,
       headers: {
         ...(options.headers || {}),
-        Authorization: `Bearer ${newAccess}`,
+        ...(newAccess ? { Authorization: `Bearer ${newAccess}` } : {}),
       },
     };
 
-    return await fetchWithTimeout(url, retryOptions, timeout);
+    const retryRes = await fetchWithTimeout(url, retryOptions, timeout);
+
+    if (retryRes.status === 401) {
+      devWarn("[AUTH] Retry posterior al refresh también devolvió 401", {
+        url,
+        method: options?.method || "GET",
+      });
+    } else {
+      devLog("[AUTH] Retry posterior al refresh OK", {
+        url,
+        method: options?.method || "GET",
+        status: retryRes.status,
+      });
+    }
+
+    return retryRes;
   } catch (err) {
+    devWarn("[AUTH] Falló refresh o retry autenticado", {
+      url,
+      method: options?.method || "GET",
+      error: err?.message || String(err),
+    });
     clearSession();
     throw err;
   }
