@@ -217,6 +217,7 @@ export default function UsuariosTecnicos() {
   const handleDelete = async (user) => {
     const nombre =
       user?.profile?.nombre_completo || user?.legajo || "este usuario";
+
     const ok = window.confirm(
       `¿Seguro que querés desactivar a ${nombre}? Esta acción lo deja sin acceso.`,
     );
@@ -344,6 +345,7 @@ export default function UsuariosTecnicos() {
       {errorMsg ? (
         <div className="usuarios-alert usuarios-alert--error">{errorMsg}</div>
       ) : null}
+
       {successMsg ? (
         <div className="usuarios-alert usuarios-alert--ok">{successMsg}</div>
       ) : null}
@@ -368,6 +370,7 @@ export default function UsuariosTecnicos() {
                     <div className="usuario-card__name">
                       {user?.profile?.nombre_completo || "Sin nombre"}
                     </div>
+
                     <div className="usuario-card__meta">
                       <span>
                         Legajo: <strong>{user.legajo}</strong>
@@ -427,6 +430,19 @@ export default function UsuariosTecnicos() {
           })
         )}
       </div>
+
+      {!drawerOpen && (
+        <button
+          type="button"
+          className="usuarios-fab btn-primary"
+          onClick={openCreate}
+          title="Nuevo usuario"
+          aria-label="Nuevo usuario"
+        >
+          <UserPlus size={18} strokeWidth={2.2} />
+          <span>Nuevo usuario</span>
+        </button>
+      )}
 
       {drawerOpen ? (
         <div className="usuarios-drawer-backdrop" onClick={closeDrawer}>

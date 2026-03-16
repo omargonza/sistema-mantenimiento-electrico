@@ -61,6 +61,11 @@
   flex-wrap: wrap;
 }
 
+.usuarios-hero__actions .btn-primary,
+.usuarios-hero__actions .btn-outline {
+  min-height: 46px;
+}
+
 .usuarios-kpis {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -257,6 +262,8 @@
   overflow: auto;
   border-bottom-left-radius: 0;
   border-bottom-right-radius: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 .usuarios-drawer__head {
@@ -264,6 +271,11 @@
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  padding-bottom: 10px;
+  background: inherit;
 }
 
 .usuarios-drawer__copy {
@@ -286,6 +298,8 @@
   margin-top: 14px;
   display: grid;
   gap: 14px;
+  flex: 1;
+  min-height: 0;
 }
 
 .usuarios-form__grid {
@@ -303,6 +317,23 @@
   justify-content: flex-end;
   gap: 10px;
   flex-wrap: wrap;
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  padding-top: 12px;
+  padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px));
+  background: linear-gradient(
+    180deg,
+    rgba(16, 16, 16, 0.72) 0%,
+    rgba(16, 16, 16, 0.96) 28%,
+    rgba(16, 16, 16, 1) 100%
+  );
+  backdrop-filter: blur(6px);
+}
+
+.usuarios-form__actions .btn-outline,
+.usuarios-form__actions .btn-primary {
+  min-height: 46px;
 }
 
 .usuarios-password-wrap {
@@ -313,6 +344,7 @@
 
 .usuarios-password-wrap input {
   width: 100%;
+  min-height: 46px;
   padding-right: 46px;
 }
 
@@ -336,127 +368,10 @@
   color: #f3f4f6;
 }
 
-/* =========================================================
-   MEJORAS MOBILE PARA ALTA DE USUARIOS
-========================================================= */
-
-/* Botones del hero más visibles */
-.usuarios-hero__actions .btn-primary,
-.usuarios-hero__actions .btn-outline {
-  min-height: 46px;
+.usuarios-fab {
+  display: none;
 }
 
-/* Drawer: mejor comportamiento general */
-.usuarios-drawer {
-  display: flex;
-  flex-direction: column;
-}
-
-/* Header fijo dentro del drawer */
-.usuarios-drawer__head {
-  position: sticky;
-  top: 0;
-  z-index: 2;
-  padding-bottom: 10px;
-  background: inherit;
-}
-
-/* El form ocupa bien el alto */
-.usuarios-form {
-  flex: 1;
-  min-height: 0;
-}
-
-/* Acciones fijas abajo para que siempre se vea Crear usuario */
-.usuarios-form__actions {
-  position: sticky;
-  bottom: 0;
-  z-index: 2;
-  padding-top: 12px;
-  padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px));
-  background: linear-gradient(
-    180deg,
-    rgba(16, 16, 16, 0.72) 0%,
-    rgba(16, 16, 16, 0.96) 28%,
-    rgba(16, 16, 16, 1) 100%
-  );
-  backdrop-filter: blur(6px);
-}
-
-/* Botones de acción más táctiles */
-.usuarios-form__actions .btn-outline,
-.usuarios-form__actions .btn-primary {
-  min-height: 46px;
-}
-
-/* Input de password con mejor altura táctil */
-.usuarios-password-wrap input {
-  min-height: 46px;
-}
-
-/* =========================================================
-   MOBILE
-========================================================= */
-@media (max-width: 640px) {
-  /* Hero */
-  .usuarios-hero__actions {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: 10px;
-  }
-
-  .usuarios-hero__actions .btn-primary,
-  .usuarios-hero__actions .btn-outline {
-    width: 100%;
-    justify-content: center;
-  }
-
-  /* Drawer como pantalla mobile usable */
-  .usuarios-drawer-backdrop {
-    align-items: stretch;
-  }
-
-  .usuarios-drawer {
-    width: 100%;
-    height: 100dvh;
-    max-height: 100dvh;
-    min-height: 100dvh;
-    margin: 0;
-    border-radius: 0;
-    padding-bottom: 0;
-  }
-
-  .usuarios-drawer__head {
-    padding-top: calc(8px + env(safe-area-inset-top, 0px));
-  }
-
-  /* Form más respirado en celular */
-  .usuarios-form {
-    gap: 16px;
-  }
-
-  .usuarios-form__grid {
-    gap: 14px;
-  }
-
-  .usuarios-field input,
-  .usuarios-field select {
-    min-height: 46px;
-  }
-
-  /* Footer sticky en columna, super visible */
-  .usuarios-form__actions {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: 10px;
-  }
-
-  .usuarios-form__actions .btn-outline,
-  .usuarios-form__actions .btn-primary {
-    width: 100%;
-    justify-content: center;
-  }
-}
 @media (min-width: 700px) {
   .usuarios-hero__head {
     grid-template-columns: 1fr auto;
@@ -479,5 +394,84 @@
 
   .usuarios-form__grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .usuarios-hero__actions {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .usuarios-hero__actions .btn-primary,
+  .usuarios-hero__actions .btn-outline {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .usuarios-drawer-backdrop {
+    align-items: stretch;
+  }
+
+  .usuarios-drawer {
+    width: 100%;
+    height: 100dvh;
+    max-height: 100dvh;
+    min-height: 100dvh;
+    margin: 0;
+    border-radius: 0;
+    padding-bottom: 0;
+  }
+
+  .usuarios-drawer__head {
+    padding-top: calc(8px + env(safe-area-inset-top, 0px));
+  }
+
+  .usuarios-form {
+    gap: 16px;
+  }
+
+  .usuarios-form__grid {
+    gap: 14px;
+  }
+
+  .usuarios-field input,
+  .usuarios-field select {
+    min-height: 46px;
+  }
+
+  .usuarios-form__actions {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .usuarios-form__actions .btn-outline,
+  .usuarios-form__actions .btn-primary {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .usuarios-fab {
+    position: fixed;
+    right: 12px;
+    bottom: calc(84px + env(safe-area-inset-bottom, 0px));
+    z-index: 1700;
+    min-height: 48px;
+    padding: 0 14px;
+    border-radius: 999px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    box-shadow:
+      0 12px 24px rgba(0, 0, 0, 0.28),
+      0 4px 10px rgba(0, 0, 0, 0.18);
+  }
+
+  .usuarios-fab span {
+    white-space: nowrap;
+    font-weight: 800;
   }
 }
